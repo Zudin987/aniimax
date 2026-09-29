@@ -1303,7 +1303,10 @@ pub fn write_e_mode_tiebreak_lp(
     if primary_terms.is_empty() {
         return (String::new(), model.objective.len());
     }
-    let tolerance = 1e-8 * primary_objective.abs().max(1.0);
+    // Treat solver-scale numerical noise as a tie. This is one part per million of the primary
+    // result: enough room for HiGHS/microlp rounding, far too small to intentionally trade away
+    // meaningful level-up speed or income just to use electricity.
+    let tolerance = 1e-6 * primary_objective.abs().max(1.0);
     model.constrain(primary_terms, ComparisonOp::Ge, primary_objective - tolerance);
 
     let e_mode_bases: std::collections::HashSet<&str> = items
@@ -1313,25 +1316,36 @@ pub fn write_e_mode_tiebreak_lp(
         .collect();
 
     model.objective.fill(0.0);
-    let preferred: Vec<(usize, f64)> = model
-        .kinds
-        .iter()
-        .enumerate()
-        .filter_map(|(v, kind)| match kind {
+    let mut has_preference = false;
+    for (v, kind) in model.kinds.iter().enumerate() {
+        match kind {
+            // The thing we actually want to free is an Aniimo, not merely a few seconds of its
+            // workload. Prefer eliminating whole normal machines first.
+            VarKind::Units(recipe)
+                if !crate::models::is_electric_item(&recipe.name)
+                    && e_mode_bases.contains(crate::models::base_item_name(&recipe.name)) =>
+            {
+                model.objective[v] = -1.0;
+                has_preference = true;
+            }
+            // Among plans using the same number of normal machines, prefer less normal busy time.
             VarKind::Rate(recipe)
                 if !crate::models::is_electric_item(&recipe.name)
                     && e_mode_bases.contains(crate::models::base_item_name(&recipe.name)) =>
             {
-                Some((v, -recipe.production_time))
+                model.objective[v] = -1e-4 * recipe.production_time;
+                has_preference = true;
             }
-            _ => None,
-        })
-        .collect();
-    if preferred.is_empty() {
-        return (String::new(), model.objective.len());
+            // Do not let an unconstrained powered-machine variable consume grid capacity for no
+            // reason. This penalty is tiny compared with freeing one normal Aniimo-worked unit.
+            VarKind::ElectricMachines { .. } => {
+                model.objective[v] = -1e-6;
+            }
+            _ => {}
+        }
     }
-    for (v, coefficient) in preferred {
-        model.objective[v] = coefficient;
+    if !has_preference {
+        return (String::new(), model.objective.len());
     }
     model_to_lp(&model)
 }
@@ -1351,23 +1365,34 @@ pub fn plan_from_values(
     proven_optimal: bool,
     upper_bound: f64,
 ) -> Option<ExactPlan> {
-    plan_from_values_inner(
-        items,
-        currency,
-        facility_counts,
-        module_levels,
-        goal,
-        values,
-        proven_optimal,
-        upper_bound,
-        false,
-    )
+    let model = build_model(items, currency, facility_counts, module_levels, goal);
+    if values.len() != model.objective.len() {
+        return None;
+    }
+    let fixed: Vec<(f64, f64)> = model
+        .bounds
+        .iter()
+        .zip(&model.integer)
+        .zip(values)
+        .map(|((&b, &int), &v)| {
+            if int {
+                let r = v.round().max(b.0).min(b.1);
+                (r, r)
+            } else {
+                b
+            }
+        })
+        .collect();
+    let (value, solved) = model.relax(&fixed)?;
+    Some(plan_from(&model, value, upper_bound.max(value), proven_optimal, 0, &solved, value))
 }
 
-/// Like plan_from_values, but preserves the E-Mode recipe rates selected by the secondary
-/// tie-break solve. Integer machine choices are already fixed by the solver answer; keeping a tiny
-/// lower bound on electric rates also covers Bench/Kiln recipes whose shared-unit variables are
-/// continuous.
+/// Builds the original-goal plan directly from the secondary E-Mode solve's assignment. The
+/// secondary model has every original constraint plus one primary-objective floor, so re-solving
+/// the rates here would only give the optimizer a chance to drift back to the non-E-Mode tie.
+/// Integer variables are rounded/clamped for HiGHS noise; the independent check in wasm.rs still
+/// validates every facility, item and power constraint before the plan is shown.
+#[allow(clippy::too_many_arguments)]
 pub fn plan_from_values_prefer_e_mode(
     items: &[ProductionItem],
     currency: &str,
@@ -1378,58 +1403,32 @@ pub fn plan_from_values_prefer_e_mode(
     proven_optimal: bool,
     upper_bound: f64,
 ) -> Option<ExactPlan> {
-    plan_from_values_inner(
-        items,
-        currency,
-        facility_counts,
-        module_levels,
-        goal,
-        values,
-        proven_optimal,
-        upper_bound,
-        true,
-    )
-}
-
-#[allow(clippy::too_many_arguments)]
-fn plan_from_values_inner(
-    items: &[ProductionItem],
-    currency: &str,
-    facility_counts: &FacilityCounts,
-    module_levels: &ModuleLevels,
-    goal: Goal,
-    values: &[f64],
-    proven_optimal: bool,
-    upper_bound: f64,
-    preserve_e_mode: bool,
-) -> Option<ExactPlan> {
     let model = build_model(items, currency, facility_counts, module_levels, goal);
     if values.len() != model.objective.len() {
         return None;
     }
-    let fixed: Vec<(f64, f64)> = model
-        .bounds
-        .iter()
-        .zip(&model.integer)
-        .zip(&model.kinds)
-        .zip(values)
-        .map(|(((&b, &int), kind), &v)| {
-            if int {
-                let r = v.round().max(b.0).min(b.1);
-                (r, r)
-            } else if preserve_e_mode
-                && matches!(kind, VarKind::Rate(recipe) if crate::models::is_electric_item(&recipe.name))
-                && v > 1e-9
-            {
-                let slack = 1e-8 * v.abs().max(1.0);
-                ((v - slack).max(b.0), b.1)
-            } else {
-                b
-            }
-        })
-        .collect();
-    let (value, solved) = model.relax(&fixed)?;
-    Some(plan_from(&model, value, upper_bound.max(value), proven_optimal, 0, &solved, value))
+
+    let mut solved = values.to_vec();
+    for (i, value) in solved.iter_mut().enumerate() {
+        if !value.is_finite() {
+            return None;
+        }
+        if model.integer[i] {
+            *value = value.round().max(model.bounds[i].0).min(model.bounds[i].1);
+        } else if value.abs() < 1e-10 {
+            *value = 0.0;
+        }
+    }
+    let value: f64 = solved.iter().zip(&model.objective).map(|(v, c)| v * c).sum();
+    Some(plan_from(
+        &model,
+        value,
+        upper_bound.max(value),
+        proven_optimal,
+        0,
+        &solved,
+        value,
+    ))
 }
 
 /// What `exact` makes per second of `currency`, at its items' sell values: the Aniimo EXP or
