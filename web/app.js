@@ -3,7 +3,7 @@
 import {
     FACILITIES, FACILITY_CATEGORIES, FACILITY_CATEGORY_BY_NAME,
     MAX_HOME_LEVEL, ANIIMO_MAX, simpleSetup,
-    LEVEL_UP_COSTS, LEVEL_UP_CHAINS, SPECIAL_RECIPES, ANIIPOD_TIERS, personalityLetter, opposedPersonality,
+    LEVEL_UP_COSTS, LEVEL_UP_CHAINS, SPECIAL_RECIPES, HARVEST_MOON_ITEMS, ANIIPOD_TIERS, personalityLetter, opposedPersonality,
 } from './facility-config.js';
 
 let wasmReady = false;
@@ -322,8 +322,8 @@ function getPersistedFieldIds() {
         'strategy-level-up', 'strategy-priorities', 'level-up-target',
         'mode-simple', 'mode-advanced', 'home-level',
         'ecological-module-level', 'kitchen-module-level',
-        'resource-detector-level', 'crafting-module-level',
-        'rate-unit', 'has-level-four'
+        'resource-detector-level', 'crafting-module-level', 'power-module-level',
+        'rate-unit', 'has-level-four', 'harvest-moon-enabled'
     ];
 }
 
@@ -498,9 +498,10 @@ function renderSimpleSummary() {
         ['Kitchen Module', modules.kitchen_module],
         ['Resource Detector', modules.resource_detector],
         ['Crafting Module', modules.crafting_module],
+        ['Power Module', modules.power_module],
     ].map(([name, level]) => chip('', name, level > 0 ? `Lv.${level}` : 'not yet')).join('');
     const kinds = FACILITIES.filter(f => facilities[f.name][0].count > 0).length;
-    document.getElementById('simple-summary-title').textContent = `${kinds} facilities and 4 modules at RV ${homeLevel}`;
+    document.getElementById('simple-summary-title').textContent = `${kinds} facilities and 5 modules at RV ${homeLevel}`;
     document.getElementById('simple-summary').innerHTML = `
         <p class="assume-title">Facilities</p>
         <div class="chip-grid">${built}</div>
@@ -527,6 +528,7 @@ function fillAdvancedFrom(homeLevel) {
     document.getElementById('kitchen-module-level').value = modules.kitchen_module;
     document.getElementById('resource-detector-level').value = modules.resource_detector;
     document.getElementById('crafting-module-level').value = modules.crafting_module;
+    document.getElementById('power-module-level').value = modules.power_module;
     saveInputsToStorage();
 }
 
@@ -570,10 +572,11 @@ function attachSpecialHandlers() {
 // Every recipe plans may not use: the player's skips and any special recipe not unlocked.
 function excludedRecipes() {
     const locked = SPECIAL_RECIPES.map(r => r.name).filter(name => !unlockedSpecial.has(name));
+    const seasonal = document.getElementById('harvest-moon-enabled')?.checked ? [] : HARVEST_MOON_ITEMS;
     // Going for Aniipods means the best tier only; the others would be cheaper but catch worse.
     const best = wantsAniipods() ? bestAniipod() : null;
     const lesser = best ? ANIIPOD_TIERS.filter(name => name !== best) : [];
-    return [...new Set([...skippedRecipes, ...locked, ...lesser])];
+    return [...new Set([...skippedRecipes, ...locked, ...seasonal, ...lesser])];
 }
 
 // --- Recipes to skip -------------------------------------------------------------------
@@ -1122,7 +1125,8 @@ function getPlanInputValues() {
         ecological_module: numberOrDefault(document.getElementById('ecological-module-level').value, 0),
         kitchen_module: numberOrDefault(document.getElementById('kitchen-module-level').value, 0),
         resource_detector: numberOrDefault(document.getElementById('resource-detector-level').value, 0),
-        crafting_module: numberOrDefault(document.getElementById('crafting-module-level').value, 0)
+        crafting_module: numberOrDefault(document.getElementById('crafting-module-level').value, 0),
+        power_module: numberOrDefault(document.getElementById('power-module-level').value, 0)
     };
 
     return {
@@ -1140,8 +1144,18 @@ function getPlanInputValues() {
 // at all (blank/invalid); unlike `value || fallback`, these correctly keep a legitimate 0 (e.g.
 // "I own zero of this facility"), which `||` would silently discard since 0 is falsy in JS.
 // "quick_aromathyst" -> "Quick Aromathyst": the data uses snake_case names.
+function basePlanItem(name) {
+    if (!name) return name;
+    return name.replace(/__electric$/, '').replace(/__uncovered$/, '');
+}
+
+function isElectricItem(name) {
+    return !!name && name.endsWith('__electric');
+}
+
 function prettyItem(name) {
     if (!name) return name;
+    name = basePlanItem(name);
     if (ITEM_NAMES[name]) return ITEM_NAMES[name];
     return name.split('_').map(w => w ? w[0].toUpperCase() + w.slice(1) : w).join(' ');
 }
