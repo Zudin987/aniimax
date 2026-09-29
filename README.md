@@ -8,7 +8,7 @@ Updated for the full release, with a joint LP-based facility-allocation engine f
 
 ## Try It Online
 
-**[Launch Aniimax Web App](https://ae-bii.github.io/aniimax/)** - No installation required!
+**[Launch Aniimax Web App](https://zudin987.github.io/aniimax/)** - No installation required!
 
 ## Features
 
@@ -43,7 +43,7 @@ Updated for the full release, with a joint LP-based facility-allocation engine f
 ### Building from Source
 
 ```bash
-git clone https://github.com/ae-bii/aniimax.git
+git clone https://github.com/Zudin987/aniimax.git
 cd aniimax
 cargo build --release
 ```
@@ -148,7 +148,7 @@ Options:
   -V, --version                      Print version
 ```
 
-> **CLI coverage:** the CLI exposes the 10 facilities listed above; any facility without a flag counts as not owned. The CLI also doesn't model environment coverage, so it can recommend a crop that needs a Heat Furnace, Cooling Unit or Sunlamp you don't own. For full coverage, use the [web app](https://ae-bii.github.io/aniimax/) instead.
+> **CLI coverage:** the CLI exposes the 10 facilities listed above; any facility without a flag counts as not owned. The CLI also doesn't model environment coverage, so it can recommend a crop that needs a Heat Furnace, Cooling Unit or Sunlamp you don't own. For full coverage, use the [web app](https://zudin987.github.io/aniimax/) instead.
 
 ## Example Output
 
@@ -599,7 +599,7 @@ cargo doc --open
 
 ### Deploying to GitHub Pages
 
-Deployment (`.github/workflows/deploy.yml`) runs on pushing a version tag (`v*`) or via manual workflow dispatch, not on every push to main. Tag a release (`git tag v0.14.1 && git push --tags`) or trigger the workflow manually to deploy. You can also deploy by hand by copying the contents of the `web/` directory (including a freshly built `web/pkg/`) to your gh-pages branch.
+This fork deploys its web app to `https://zudin987.github.io/aniimax/` through `.github/workflows/deploy.yml`. Deployments run only inside `Zudin987/aniimax` and are guarded so the workflow cannot deploy the upstream `ae-bii/aniimax` repository. GitHub Pages must be enabled once in Settings → Pages with Source set to **GitHub Actions**.
 
 ## Data Format
 
