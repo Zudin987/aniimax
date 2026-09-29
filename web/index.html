@@ -98,6 +98,14 @@
                                 <input type="number" id="crafting-module-level" value="0" min="0" max="10">
                             </div>
                         </div>
+
+                        <div class="module-card">
+                            <h4>Power Module <span class="info-icon" data-tooltip="Unlocks E-Mode at RV 12.&#10;Lv.1: 600 power/generator&#10;Lv.2: 800&#10;Lv.3: 1000&#10;Lv.4: 1200&#10;Lv.5: 1500">?</span></h4>
+                            <div class="input-field">
+                                <label for="power-module-level">Level</label>
+                                <input type="number" id="power-module-level" value="0" min="0" max="5">
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -135,6 +143,18 @@
                     <p class="assume-title">Special recipes</p>
                     <p class="hint small">These take a rare currency to unlock. Plans only use the ones you tick.</p>
                     <div class="special-grid" id="special-grid"></div>
+                    <p class="assume-title">Seasonal recipes</p>
+                    <label class="aniimo-cap" title="Adds the Harvest Moon crops and quest recipes to the optimizer">
+                        <input type="checkbox" id="harvest-moon-enabled"> Harvest Moon Festival
+                    </label>
+                    <p class="hint small">Requires RV 10 in Simple mode. Enabling assumes you completed the event intro and have the Moondew Radish, Waxing Moon Pepper, Roasted Waxing Moon Pepper and Moondew Radish Slices recipe notes.</p>
+                    <div class="special-grid" id="harvest-special-grid">
+                        <label class="special-option"><input type="checkbox" id="harvest-umbral-hot-pot"> <span>Umbral Hot Pot note (80 Moonray Wheat)</span></label>
+                        <label class="special-option"><input type="checkbox" id="harvest-umbral-pickle"> <span>Umbral Pickle note (80 Moonray Wheat)</span></label>
+                        <label class="special-option"><input type="checkbox" id="harvest-umbral-sauce"> <span>Umbral Sweet Spicy Sauce note (80 Moonray Wheat)</span></label>
+                        <label class="special-option"><input type="checkbox" id="harvest-platter"> <span>Harvest Platter note (120 Moonray Wheat)</span></label>
+                    </div>
+                    <p class="hint small">The four shop recipes stay locked until you tick the notes you bought. The entire seasonal set is off by default so it never changes normal plans after the event.</p>
                     <p class="assume-title">Recipes to skip</p>
                     <p class="hint small">Plans won't use these, e.g. recipes behind unlocks you don't have yet. You can also skip one straight from a plan with its ✕.</p>
                     <div class="skip-add">
@@ -211,6 +231,12 @@
                         <p class="plan-skipped" id="plan-skipped" style="display: none;"></p>
                     </div>
 
+                    <div class="card production-steps" id="power-card" style="display: none;">
+                        <h2>E-Mode grid</h2>
+                        <p class="hint">The optimizer only uses E-Mode at full power; it does not guess partial-supply speed.</p>
+                        <div id="power-summary"></div>
+                    </div>
+
                     <div class="card production-steps" id="seed-card" style="display: none;">
                         <h2>Seeds to plant</h2>
                         <p class="hint" id="seed-card-unit"></p>
@@ -228,7 +254,7 @@
                         <details class="explain">
                             <summary>How to read this</summary>
                             <p>Each row is one product; a facility split between several products gets a row for each. Crops that need a growing environment are grouped by the Heat Furnace, Cooling Unit or Sunlamp setting that covers them, with its layout. Everything else is grouped like the facility list.</p>
-                            <p>In the Aniimo column, each circle is an ability in its game color with the Aniimo level inside; a ring means the plan counts on the facility's personality bonus. Hover a circle for details.</p>
+                            <p>In the Aniimo column, each circle is an ability in its game color with the Aniimo level inside; a ring means the plan counts on the facility's personality bonus. Hover a circle for details. A powered row is tagged <strong>E-Mode</strong> instead and does not need its normal production Aniimo.</p>
                         </details>
                         <!-- Populated by app.js's renderFacilityPlan(): one section per
                              environment mode in use (Cool/Warm/Freeze/Scorching/Adequate) first,
@@ -312,7 +338,7 @@
         </main>
 
         <footer>
-            <p>aniimax v<span id="version">-</span> | <a href="https://github.com/ae-bii/aniimax" target="_blank">github</a></p>
+            <p>aniimax v<span id="version">-</span> | <a href="https://github.com/Zudin987/aniimax" target="_blank">github</a></p>
         </footer>
     </div>
 

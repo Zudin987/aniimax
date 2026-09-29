@@ -3,7 +3,7 @@
 import {
     FACILITIES, FACILITY_CATEGORIES, FACILITY_CATEGORY_BY_NAME,
     MAX_HOME_LEVEL, ANIIMO_MAX, simpleSetup,
-    LEVEL_UP_COSTS, LEVEL_UP_CHAINS, SPECIAL_RECIPES, ANIIPOD_TIERS, personalityLetter, opposedPersonality,
+    LEVEL_UP_COSTS, LEVEL_UP_CHAINS, SPECIAL_RECIPES, HARVEST_MOON_ITEMS, ANIIPOD_TIERS, personalityLetter, opposedPersonality,
 } from './facility-config.js';
 
 let wasmReady = false;
@@ -322,8 +322,9 @@ function getPersistedFieldIds() {
         'strategy-level-up', 'strategy-priorities', 'level-up-target',
         'mode-simple', 'mode-advanced', 'home-level',
         'ecological-module-level', 'kitchen-module-level',
-        'resource-detector-level', 'crafting-module-level',
-        'rate-unit', 'has-level-four'
+        'resource-detector-level', 'crafting-module-level', 'power-module-level',
+        'rate-unit', 'has-level-four', 'harvest-moon-enabled',
+        'harvest-umbral-hot-pot', 'harvest-umbral-pickle', 'harvest-umbral-sauce', 'harvest-platter'
     ];
 }
 
@@ -498,9 +499,10 @@ function renderSimpleSummary() {
         ['Kitchen Module', modules.kitchen_module],
         ['Resource Detector', modules.resource_detector],
         ['Crafting Module', modules.crafting_module],
+        ['Power Module', modules.power_module],
     ].map(([name, level]) => chip('', name, level > 0 ? `Lv.${level}` : 'not yet')).join('');
     const kinds = FACILITIES.filter(f => facilities[f.name][0].count > 0).length;
-    document.getElementById('simple-summary-title').textContent = `${kinds} facilities and 4 modules at RV ${homeLevel}`;
+    document.getElementById('simple-summary-title').textContent = `${kinds} facilities and 5 modules at RV ${homeLevel}`;
     document.getElementById('simple-summary').innerHTML = `
         <p class="assume-title">Facilities</p>
         <div class="chip-grid">${built}</div>
@@ -527,6 +529,7 @@ function fillAdvancedFrom(homeLevel) {
     document.getElementById('kitchen-module-level').value = modules.kitchen_module;
     document.getElementById('resource-detector-level').value = modules.resource_detector;
     document.getElementById('crafting-module-level').value = modules.crafting_module;
+    document.getElementById('power-module-level').value = modules.power_module;
     saveInputsToStorage();
 }
 
@@ -536,6 +539,8 @@ function attachModeHandlers() {
     document.getElementById('home-level').addEventListener('change', () => {
         renderSimpleSummary();
         renderStrategy();
+        updateHarvestMoonControls();
+        renderRecipeCount();
     });
     document.getElementById('fill-btn').addEventListener('click', () => {
         fillAdvancedFrom(numberOrDefault(document.getElementById('fill-level').value, MAX_HOME_LEVEL));
@@ -570,10 +575,48 @@ function attachSpecialHandlers() {
 // Every recipe plans may not use: the player's skips and any special recipe not unlocked.
 function excludedRecipes() {
     const locked = SPECIAL_RECIPES.map(r => r.name).filter(name => !unlockedSpecial.has(name));
+    const harvestEnabled = !!document.getElementById('harvest-moon-enabled')?.checked
+        && (!isSimpleMode() || selectedHomeLevel() >= 10);
+    let seasonal;
+    if (!harvestEnabled) {
+        seasonal = HARVEST_MOON_ITEMS;
+    } else {
+        const shopNotes = [
+            ['umbral_hot_pot', 'harvest-umbral-hot-pot'],
+            ['umbral_pickle', 'harvest-umbral-pickle'],
+            ['umbral_sweet_spicy_sauce', 'harvest-umbral-sauce'],
+            ['harvest_platter', 'harvest-platter'],
+        ];
+        seasonal = shopNotes.filter(([, id]) => !document.getElementById(id)?.checked).map(([name]) => name);
+    }
     // Going for Aniipods means the best tier only; the others would be cheaper but catch worse.
     const best = wantsAniipods() ? bestAniipod() : null;
     const lesser = best ? ANIIPOD_TIERS.filter(name => name !== best) : [];
-    return [...new Set([...skippedRecipes, ...locked, ...lesser])];
+    return [...new Set([...skippedRecipes, ...locked, ...seasonal, ...lesser])];
+}
+
+// Harvest Moon's four intro recipe notes come from the event quest; the later recipes are shop
+// notes. Keep those checkboxes disabled until the seasonal set itself is enabled (and, in Simple
+// mode, until the event's RV 10 requirement is met).
+function updateHarvestMoonControls() {
+    const master = document.getElementById('harvest-moon-enabled');
+    const allowed = !!master?.checked && (!isSimpleMode() || selectedHomeLevel() >= 10);
+    ['harvest-umbral-hot-pot', 'harvest-umbral-pickle', 'harvest-umbral-sauce', 'harvest-platter']
+        .forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.disabled = !allowed;
+        });
+}
+
+function attachHarvestMoonHandlers() {
+    const master = document.getElementById('harvest-moon-enabled');
+    master?.addEventListener('change', () => {
+        updateHarvestMoonControls();
+        renderRecipeCount();
+    });
+    ['harvest-umbral-hot-pot', 'harvest-umbral-pickle', 'harvest-umbral-sauce', 'harvest-platter']
+        .forEach(id => document.getElementById(id)?.addEventListener('change', renderRecipeCount));
+    updateHarvestMoonControls();
 }
 
 // --- Recipes to skip -------------------------------------------------------------------
@@ -1032,7 +1075,8 @@ function renderSeedTable(plan) {
             const cost = recipeIndex.find(r => r.name === s.item_name)?.cost || 0;
             // Whole seeds when counting to the level-up.
             const seeds = levelUp ? Math.ceil(perSecond * multiplier) : perSecond * multiplier;
-            return { name: s.item_name, facility: s.facility, plots: s.facility_count, seeds, cost: seeds * cost };
+            return { name: s.item_name, facility: s.facility, plots: s.facility_count, seeds, cost: seeds * cost,
+                seasonal: s.item_name === 'moondew_radish' || s.item_name === 'waxing_moon_pepper' };
         })
         .sort((a, b) => b.seeds - a.seeds);
     if (rows.length === 0) {
@@ -1053,12 +1097,32 @@ function renderSeedTable(plan) {
                 <td>${prettyItem(r.name)}</td>
                 <td>${r.plots}</td>
                 <td>${amount(r.seeds)}</td>
-                <td>${r.cost > 0 ? `${amount(r.cost)} coins` : 'free'}</td>
+                <td>${r.seasonal ? `${amount(r.seeds * 4)} Moonray Wheat` : (r.cost > 0 ? `${amount(r.cost)} coins` : 'free')}</td>
             </tr>`).join('')}</tbody>
             ${rows.length > 1 && totalCost > 0 ? `<tfoot><tr><td colspan="3">Total</td><td>${amount(totalCost)} coins</td></tr></tfoot>` : ''}
         </table>`;
 }
 
+// E-Mode grid summary. The backend only permits powered rows when the full-power draw fits.
+function renderPowerSummary(plan) {
+    const card = document.getElementById('power-card');
+    const el = document.getElementById('power-summary');
+    const capacity = plan.power_capacity || 0;
+    if (capacity <= 0) {
+        card.style.display = 'none';
+        return;
+    }
+    card.style.display = 'block';
+    const used = plan.power_used || 0;
+    const generators = plan.generators_used || 0;
+    const spare = Math.max(0, capacity - used);
+    el.innerHTML = `
+        <div class="summary-grid">
+            <div class="summary-item"><span class="summary-label">Power used</span><span class="summary-value">${formatNumber(used)} / ${formatNumber(capacity)}</span></div>
+            <div class="summary-item"><span class="summary-label">Spare power</span><span class="summary-value">${formatNumber(spare)}</span></div>
+            <div class="summary-item"><span class="summary-label">Generators needed</span><span class="summary-value">${generators}</span></div>
+        </div>`;
+}
 // What each product sold earns in a level-up plan, per hour and by the time the level-up is
 // ready. (Priorities plans show this in the goal card instead.)
 function renderProfitBreakdown(plan) {
@@ -1122,7 +1186,8 @@ function getPlanInputValues() {
         ecological_module: numberOrDefault(document.getElementById('ecological-module-level').value, 0),
         kitchen_module: numberOrDefault(document.getElementById('kitchen-module-level').value, 0),
         resource_detector: numberOrDefault(document.getElementById('resource-detector-level').value, 0),
-        crafting_module: numberOrDefault(document.getElementById('crafting-module-level').value, 0)
+        crafting_module: numberOrDefault(document.getElementById('crafting-module-level').value, 0),
+        power_module: numberOrDefault(document.getElementById('power-module-level').value, 0)
     };
 
     return {
@@ -1140,8 +1205,18 @@ function getPlanInputValues() {
 // at all (blank/invalid); unlike `value || fallback`, these correctly keep a legitimate 0 (e.g.
 // "I own zero of this facility"), which `||` would silently discard since 0 is falsy in JS.
 // "quick_aromathyst" -> "Quick Aromathyst": the data uses snake_case names.
+function basePlanItem(name) {
+    if (!name) return name;
+    return name.replace(/__electric$/, '').replace(/__uncovered$/, '');
+}
+
+function isElectricItem(name) {
+    return !!name && name.endsWith('__electric');
+}
+
 function prettyItem(name) {
     if (!name) return name;
+    name = basePlanItem(name);
     if (ITEM_NAMES[name]) return ITEM_NAMES[name];
     return name.split('_').map(w => w ? w[0].toUpperCase() + w.slice(1) : w).join(' ');
 }
@@ -1324,6 +1399,7 @@ const ENVIRONMENT_BUILDING_ABILITY = {
     'Heat Furnace': 'Fire',
     'Cooling Unit': 'Ice',
     'Sunlamp': 'Light',
+    'Crackle Generator': 'Lightning',
 };
 
 // A colored ability tag, like the game's.
@@ -1343,6 +1419,7 @@ function abilityDot(name, level, note) {
 }
 
 function aniimoLabel(step) {
+    if (isElectricItem(step.item_name)) return '<span class="tag">E-Mode</span>';
     const a = step.aniimo;
     if (!a) {
         // Crops and trees: the abilities their planting and harvesting jobs need.
@@ -1404,7 +1481,7 @@ function planRows(rows) {
                     <tr class="status-${step.status}">
                         <td data-label="Facility">${step.facility}</td>
                         <td data-label="Count">${step.facility_count}</td>
-                        <td data-label="Producing">${step.item_name ? prettyItem(step.item_name) : '-'}${unverifiedRowKeys.has(`${step.facility}|${step.item_name}`) ? '<span class="tag unverified" title="Not yet checked in game">unverified</span>' : ''}${step.item_name && step.status === 'producing' ? `<button type="button" class="skip-row" data-skip="${step.item_name}" title="Can't make this? Skip it and plan again" aria-label="Skip ${prettyItem(step.item_name)} and plan again">✕</button>` : ''}</td>
+                        <td data-label="Producing">${step.item_name ? prettyItem(step.item_name) : '-'}${isElectricItem(step.item_name) ? '<span class="tag">E-Mode</span>' : ''}${unverifiedRowKeys.has(`${step.facility}|${basePlanItem(step.item_name)}`) ? '<span class="tag unverified" title="Not yet checked in game">unverified</span>' : ''}${step.item_name && step.status === 'producing' ? `<button type="button" class="skip-row" data-skip="${basePlanItem(step.item_name)}" title="Can't make this? Skip it and plan again" aria-label="Skip ${prettyItem(step.item_name)} and plan again">✕</button>` : ''}</td>
                         <td data-label="Aniimo">${aniimoLabel(step)}</td>
                         <td data-label="Why">${prettyReason(step.reason)}</td>
                     </tr>
@@ -1518,6 +1595,9 @@ function renderAniimoSummary(plan) {
         needsAniimo(building, units, `${building} (${modes[0]})`);
         needsAniimo(partner, units, `${partner} (${modes[1]})`);
     });
+    if ((plan.generators_used || 0) > 0) {
+        needsAniimo('Crackle Generator', plan.generators_used, 'Crackle Generator (E-Mode grid)');
+    }
     const collapsedSummary = document.getElementById('aniimo-collapsed-summary');
     if (groups.size === 0) {
         container.innerHTML = '<p class="hint">Nothing in this plan needs an Aniimo.</p>';
@@ -2226,6 +2306,7 @@ function displayPlan(plan, scroll = true) {
     skippedEl.textContent = skipped.length ? `Skipping ${skipped.map(prettyItem).join(', ')}.` : '';
 
     renderSeedTable(plan);
+    renderPowerSummary(plan);
     renderLevelUp(plan);
     renderProfitBreakdown(plan);
     renderFacilityPlan(plan);
@@ -2593,6 +2674,7 @@ document.addEventListener('DOMContentLoaded', () => {
     renderSkippedRecipes();
     attachSpecialHandlers();
     renderSpecialRecipes();
+    attachHarvestMoonHandlers();
     attachPriorityHandlers();
     applyConfigMode();
     initWasm();

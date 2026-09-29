@@ -91,6 +91,14 @@ export const FACILITIES = [
         counts: [0, 0, 0, 0, 0, 0, 0, 0, 1],
         tooltip: "Provides Adequate growing conditions for crops that need one&#10;Covers a 9x9 area around itself; how many plots fit depends on what shares it."
     },
+
+    {
+        name: 'Crackle Generator', slug: 'crackle-generator', defaultCount: 0, category: 'Power',
+        hasWorker: true, ability: 'Lightning',
+        unlocks: { 1: 12, 2: 14, 3: 16, 4: 18, 5: 20 },
+        counts: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3],
+        tooltip: "Powers E-Mode from RV 12.&#10;Lv.1: 600 power&#10;Lv.2: 800 power&#10;Lv.3: 1000 power&#10;Lv.4: 1200 power&#10;Lv.5: 1500 power&#10;Each generator needs a Lightning Aniimo."
+    },
     {
         name: 'Carousel Mill', slug: 'carousel-mill', defaultCount: 1, category: 'Materials Processing', hasWorker: true, ability: 'Wind', personality: 'Tenacious',
         unlocks: { 1: 2, 2: 5, 3: 9, 4: 13, 5: 16, 6: 18 },
@@ -192,6 +200,19 @@ export const SPECIAL_RECIPES = [
     { name: 'lotion', facility: 'Phonolfactory Table' },
 ];
 
+// Seasonal production is opt-in so an expired Harvest Moon Festival never silently changes a
+// normal plan. Excluding these base names also excludes their internal E-Mode variants.
+export const HARVEST_MOON_ITEMS = [
+    'moondew_radish',
+    'waxing_moon_pepper',
+    'roasted_waxing_moon_pepper',
+    'moondew_radish_slices',
+    'umbral_hot_pot',
+    'umbral_pickle',
+    'umbral_sweet_spicy_sauce',
+    'harvest_platter',
+];
+
 // What reaching each RV level costs: coins, plus raw Wood Blocks and Mineral Sand up to RV 6 and
 // one Woodworking Bench item and one Chimney Kiln item from RV 7.
 export const LEVEL_UP_COSTS = {
@@ -247,7 +268,7 @@ export function opposedPersonality(name) {
 
 // Display order for facility categories. Auxiliary facilities (Storage Unit, power/climate
 // buildings) are deliberately excluded here: they don't produce items.
-export const FACILITY_CATEGORIES = ['Materials', 'Environment', 'Aniimo Materials', 'Materials Processing'];
+export const FACILITY_CATEGORIES = ['Materials', 'Environment', 'Power', 'Aniimo Materials', 'Materials Processing'];
 
 // Facility name -> category, so other pages can group by the same categories as the facility
 // input cards (Materials/Aniimo Materials are grower facilities, Materials Processing is processor
@@ -263,6 +284,7 @@ export const MODULE_MAX_LEVELS = {
     kitchen_module: [0, 1, 1, 2, 2, 2, 2, 3, 3, 4, 4, 4, 5, 5, 5, 6, 6, 6, 7, 7],
     resource_detector: [0, 0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 4, 5, 5, 6, 6, 7, 7, 8, 8],
     crafting_module: [0, 0, 0, 0, 1, 1, 2, 2, 2, 3, 3, 4, 4, 4, 4, 4, 5, 6, 7, 7],
+    power_module: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5],
 };
 
 // The value for RV level `homeLevel` in a per-RV list, keeping the last value past its end.

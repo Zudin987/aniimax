@@ -207,6 +207,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         kitchen_module: args.kitchen_module,
         resource_detector: args.resource_detector,
         crafting_module: args.crafting_module,
+        power_module: 0,
     };
 
     println!("Aniimax - Aniimo Production Optimizer");

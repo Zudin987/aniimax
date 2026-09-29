@@ -4302,6 +4302,9 @@ pub fn find_production_plan_with_progress(
         environment_assignments,
         candidates_evaluated: effs.len() as u32,
         trial_solves: trial_count,
+        power_used: 0,
+        power_capacity: 0,
+        generators_used: 0,
     })
 }
 
