@@ -1097,7 +1097,7 @@ function renderSeedTable(plan) {
                 <td>${prettyItem(r.name)}</td>
                 <td>${r.plots}</td>
                 <td>${amount(r.seeds)}</td>
-                <td>${r.seasonal ? 'event seed' : (r.cost > 0 ? `${amount(r.cost)} coins` : 'free')}</td>
+                <td>${r.seasonal ? `${amount(r.seeds * 4)} Moonray Wheat` : (r.cost > 0 ? `${amount(r.cost)} coins` : 'free')}</td>
             </tr>`).join('')}</tbody>
             ${rows.length > 1 && totalCost > 0 ? `<tfoot><tr><td colspan="3">Total</td><td>${amount(totalCost)} coins</td></tr></tfoot>` : ''}
         </table>`;
