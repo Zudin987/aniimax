@@ -214,6 +214,9 @@ fn made_item<'a>(name: &'a str, all: &HashMap<&str, &ProductionItem>) -> &'a str
 enum VarKind<'a> {
     Rate(&'a ProductionItem),
     Units(&'a ProductionItem),
+    /// One E-Mode recipe assigned to an owned facility tier. E-Mode power draw depends on the
+    /// machine's actual level, not merely the recipe's minimum level.
+    ElectricUnits { recipe: &'a ProductionItem, tier_level: u32 },
     Sold(&'a str),
     Pace,
     /// Made beyond what the level-up needs, of one of its costs.
@@ -254,6 +257,7 @@ impl<'a> Model<'a> {
         self.priority.push(match &kind {
             VarKind::Environment { .. } | VarKind::EnvironmentPair { .. } => 0,
             VarKind::Units(recipe) if recipe.raw_materials.is_none() => 1,
+            VarKind::ElectricUnits { recipe, .. } if recipe.raw_materials.is_none() => 1,
             _ => 2,
         });
         self.kinds.push(kind);
@@ -316,16 +320,38 @@ fn build_model<'a>(
     // Seeds are paid in coins, so they only come off a coin total.
     let seed_cost = |recipe: &ProductionItem| if currency == "coins" { recipe.cost.unwrap_or(0.0) } else { 0.0 };
 
-    // Recipe rates and units.
+    // Recipe rates and units. Normal recipes keep one flexible whole-unit variable. Electric
+    // variants allocate whole units to the exact owned facility tier because their power draw is
+    // based on that machine's actual level.
     let mut rate_of: Vec<(&ProductionItem, usize)> = Vec::new();
     let mut units_of: Vec<(&ProductionItem, usize)> = Vec::new();
+    let mut electric_units_of: Vec<(&ProductionItem, u32, usize)> = Vec::new();
     for &recipe in &recipes {
         let rate = model.add(-seed_cost(recipe), (0.0, f64::INFINITY), false, VarKind::Rate(recipe));
-        let max = facility_counts.get_count(&recipe.facility) as f64;
-        let units = model.add(0.0, (0.0, max), !takes_turns(recipe), VarKind::Units(recipe));
-        model.constrain(vec![(rate, recipe.production_time), (units, -1.0)], ComparisonOp::Le, 0.0);
+        if crate::models::is_electric_item(&recipe.name) {
+            let mut capacity = vec![(rate, recipe.production_time)];
+            for (count, tier_level) in facility_counts.tiers(&recipe.facility) {
+                if count == 0 || tier_level < recipe.facility_level {
+                    continue;
+                }
+                let units = model.add(
+                    0.0,
+                    (0.0, count as f64),
+                    true,
+                    VarKind::ElectricUnits { recipe, tier_level },
+                );
+                capacity.push((units, -1.0));
+                electric_units_of.push((recipe, tier_level, units));
+            }
+            // The variant is only present when at least one eligible tier exists.
+            model.constrain(capacity, ComparisonOp::Le, 0.0);
+        } else {
+            let max = facility_counts.get_count(&recipe.facility) as f64;
+            let units = model.add(0.0, (0.0, max), !takes_turns(recipe), VarKind::Units(recipe));
+            model.constrain(vec![(rate, recipe.production_time), (units, -1.0)], ComparisonOp::Le, 0.0);
+            units_of.push((recipe, units));
+        }
         rate_of.push((recipe, rate));
-        units_of.push((recipe, units));
     }
 
     // Item balances: made >= used + sold.
@@ -422,20 +448,62 @@ fn build_model<'a>(
         model.constrain(terms, ComparisonOp::Ge, 0.0);
     }
 
-    // Owned units per facility, by level: a recipe needing level L can only use units at L or
-    // above, and higher-level units can run lower-level recipes too.
+    // Owned units per facility and level. Normal recipes can use any tier high enough for their
+    // requirement. Electric recipes are tied to an exact tier (for power accounting), so first
+    // keep each exact tier within its owned count, then include those occupied machines in the
+    // same cumulative level-capacity constraints as normal recipes.
     let mut by_facility: BTreeMap<&str, Vec<(u32, usize)>> = BTreeMap::new();
     for &(recipe, units) in &units_of {
         by_facility.entry(recipe.facility.as_str()).or_default().push((recipe.facility_level, units));
     }
-    for (&facility, entries) in &by_facility {
-        let mut levels: Vec<u32> = entries.iter().map(|(l, _)| *l).collect();
+    let mut electric_by_facility: BTreeMap<&str, Vec<(u32, usize)>> = BTreeMap::new();
+    for &(recipe, tier_level, units) in &electric_units_of {
+        electric_by_facility.entry(recipe.facility.as_str()).or_default().push((tier_level, units));
+    }
+    let mut facilities: Vec<&str> = by_facility.keys().chain(electric_by_facility.keys()).copied().collect();
+    facilities.sort_unstable();
+    facilities.dedup();
+    for facility in facilities {
+        let normal = by_facility.get(facility).map(Vec::as_slice).unwrap_or(&[]);
+        let electric = electric_by_facility.get(facility).map(Vec::as_slice).unwrap_or(&[]);
+
+        // Several electric recipes may all be eligible for the same exact tier; together they
+        // cannot occupy more physical machines of that tier than exist.
+        let mut tier_counts: BTreeMap<u32, u32> = BTreeMap::new();
+        for (count, level) in facility_counts.tiers(facility) {
+            *tier_counts.entry(level).or_default() += count;
+        }
+        for (&level, &count) in &tier_counts {
+            let terms: Vec<(usize, f64)> =
+                electric.iter().filter(|(l, _)| *l == level).map(|(_, v)| (*v, 1.0)).collect();
+            if !terms.is_empty() {
+                model.constrain(terms, ComparisonOp::Le, count as f64);
+            }
+        }
+
+        let mut levels: Vec<u32> = normal.iter().map(|(l, _)| *l).chain(electric.iter().map(|(l, _)| *l)).collect();
         levels.sort_unstable();
         levels.dedup();
         for level in levels {
-            let terms: Vec<(usize, f64)> = entries.iter().filter(|(l, _)| *l >= level).map(|(_, v)| (*v, 1.0)).collect();
+            let mut terms: Vec<(usize, f64)> =
+                normal.iter().filter(|(l, _)| *l >= level).map(|(_, v)| (*v, 1.0)).collect();
+            terms.extend(electric.iter().filter(|(l, _)| *l >= level).map(|(_, v)| (*v, 1.0)));
             model.constrain(terms, ComparisonOp::Le, facility_counts.capacity_at_level(facility, level) as f64);
         }
+    }
+
+    // E-Mode runs only at full supply in this model. We deliberately do not guess the game's
+    // partial-supply speed formula: the solver may use powered machines only while their combined
+    // draw stays within the staffed Crackle Generators' full capacity.
+    let power_capacity = crate::models::grid_power_capacity(facility_counts, module_levels);
+    if !electric_units_of.is_empty() {
+        let terms: Vec<(usize, f64)> = electric_units_of
+            .iter()
+            .map(|(recipe, tier_level, units)| {
+                (*units, crate::models::e_mode_power_per_unit(&recipe.facility, *tier_level) as f64)
+            })
+            .collect();
+        model.constrain(terms, ComparisonOp::Le, power_capacity as f64);
     }
 
     // Growing environments: plots of a crop needing environment E at facility F must be covered.
