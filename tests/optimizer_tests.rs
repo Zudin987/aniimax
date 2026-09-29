@@ -38,7 +38,7 @@ fn load_normal_data(data_dir: &Path) -> Result<Vec<aniimax::models::ProductionIt
         "umbral_sweet_spicy_sauce",
         "harvest_platter",
     ];
-    Ok(load_normal_data(data_dir)?
+    Ok(load_all_data(data_dir)?
         .into_iter()
         .filter(|item| !HARVEST_MOON.contains(&item.name.as_str()))
         .collect())
