@@ -508,6 +508,21 @@ function renderSimpleSummary() {
         <div class="chip-grid">${built}</div>
         <p class="assume-title">Modules</p>
         <div class="chip-grid">${moduleChips}</div>`;
+
+    const eModeNote = document.getElementById('simple-emode-note');
+    const eModeTitle = document.getElementById('simple-emode-title');
+    const eModeCopy = document.getElementById('simple-emode-copy');
+    const generatorCount = facilities['Crackle Generator']?.reduce((sum, tier) => sum + (tier.count || 0), 0) || 0;
+    const eModeActive = modules.power_module > 0 && generatorCount > 0;
+    eModeNote?.classList.toggle('is-active', eModeActive);
+    if (eModeTitle) {
+        eModeTitle.textContent = eModeActive ? 'E-Mode is active automatically' : 'E-Mode unlocks at RV 12';
+    }
+    if (eModeCopy) {
+        eModeCopy.textContent = eModeActive
+            ? `Power Module Lv.${modules.power_module} + ${generatorCount} Crackle Generator${generatorCount === 1 ? '' : 's'}. The optimizer compares E-Mode with Aniimo production and prefers E-Mode when the main result is tied.`
+            : 'Powered production becomes available after the Power Module and Crackle Generator unlock.';
+    }
 }
 
 function applyConfigMode() {
@@ -1158,10 +1173,16 @@ function renderPowerSummary(plan) {
     const spare = Math.max(0, capacity - used);
     el.innerHTML = `
         <div class="summary-grid">
-            <div class="summary-item"><span class="summary-label">Power used</span><span class="summary-value">${formatNumber(used)} / ${formatNumber(capacity)}</span></div>
-            <div class="summary-item"><span class="summary-label">Spare power</span><span class="summary-value">${formatNumber(spare)}</span></div>
-            <div class="summary-item"><span class="summary-label">Generators needed</span><span class="summary-value">${generators}</span></div>
+            <div class="summary-item"><span class="summary-label">Power in use</span><span class="summary-value">${formatNumber(used)} / ${formatNumber(capacity)}</span></div>
+            <div class="summary-item"><span class="summary-label">Available headroom</span><span class="summary-value">${formatNumber(spare)}</span></div>
+            <div class="summary-item"><span class="summary-label">Generators active</span><span class="summary-value">${generators}</span></div>
         </div>`;
+    const note = document.getElementById('power-spare-note');
+    if (note) {
+        note.textContent = spare > 0
+            ? `${formatNumber(spare)} power remains available. The optimizer does not switch on extra E-Mode just to fill the grid; it uses it when it improves the goal or frees Aniimo without reducing the main result.`
+            : 'The current plan uses all available full-power capacity.';
+    }
 }
 // What each product sold earns in a level-up plan, per hour and by the time the level-up is
 // ready. (Priorities plans show this in the goal card instead.)
@@ -1459,7 +1480,7 @@ function abilityDot(name, level, note) {
 }
 
 function aniimoLabel(step) {
-    if (isElectricItem(step.item_name)) return '<span class="tag">E-Mode</span>';
+    if (isElectricItem(step.item_name)) return '<span class="tag emode" title="Powered by E-Mode; no production Aniimo needed">⚡ E-Mode</span>';
     const a = step.aniimo;
     if (!a) {
         // Crops and trees: the abilities their planting and harvesting jobs need.
@@ -1521,7 +1542,7 @@ function planRows(rows) {
                     <tr class="status-${step.status}">
                         <td data-label="Facility">${step.facility}</td>
                         <td data-label="Count">${step.facility_count}</td>
-                        <td data-label="Producing">${step.item_name ? prettyItem(step.item_name) : '-'}${isElectricItem(step.item_name) ? '<span class="tag">E-Mode</span>' : ''}${unverifiedRowKeys.has(`${step.facility}|${basePlanItem(step.item_name)}`) ? '<span class="tag unverified" title="Not yet checked in game">unverified</span>' : ''}${step.item_name && step.status === 'producing' ? `<button type="button" class="skip-row" data-skip="${basePlanItem(step.item_name)}" title="Can't make this? Skip it and plan again" aria-label="Skip ${prettyItem(step.item_name)} and plan again">✕</button>` : ''}</td>
+                        <td data-label="Producing">${step.item_name ? prettyItem(step.item_name) : '-'}${isElectricItem(step.item_name) ? '<span class="tag emode" title="Powered by E-Mode; no production Aniimo needed">⚡ E-Mode</span>' : ''}${unverifiedRowKeys.has(`${step.facility}|${basePlanItem(step.item_name)}`) ? '<span class="tag unverified" title="Not yet checked in game">unverified</span>' : ''}${step.item_name && step.status === 'producing' ? `<button type="button" class="skip-row" data-skip="${basePlanItem(step.item_name)}" title="Can't make this? Skip it and plan again" aria-label="Skip ${prettyItem(step.item_name)} and plan again">✕</button>` : ''}</td>
                         <td data-label="Aniimo">${aniimoLabel(step)}</td>
                         <td data-label="Why">${prettyReason(step.reason)}</td>
                     </tr>
