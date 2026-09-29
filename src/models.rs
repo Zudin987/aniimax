@@ -181,9 +181,61 @@ pub fn no_personality_efficiency(level: u32, required: u32) -> f64 {
 /// [`add_uncovered_variants`]).
 pub const UNCOVERED_SUFFIX: &str = "__uncovered";
 
-/// The crop behind an item name, which is the name itself unless it's an uncovered variant.
-pub fn base_item_name(name: &str) -> &str {
-    name.strip_suffix(UNCOVERED_SUFFIX).unwrap_or(name)
+/// Marks a fixed-timer electric (E-Mode) variant. The suffix stays internal: both normal and
+/// electric recipes make the same base item and recipe locks/skips apply to both.
+pub const ELECTRIC_SUFFIX: &str = "__electric";
+
+/// Whether an internal recipe name is its E-Mode variant.
+pub fn is_electric_item(name: &str) -> bool {
+    name.ends_with(ELECTRIC_SUFFIX)
+}
+
+/// The real item behind an internal recipe variant. Variant suffixes may be stacked, so strip
+/// both rather than assuming an order.
+pub fn base_item_name(mut name: &str) -> &str {
+    loop {
+        let before = name;
+        name = name.strip_suffix(ELECTRIC_SUFFIX).unwrap_or(name);
+        name = name.strip_suffix(UNCOVERED_SUFFIX).unwrap_or(name);
+        if name == before {
+            return name;
+        }
+    }
+}
+
+/// Full-power E-Mode draw for one facility at its ACTUAL facility level. Most powered processors
+/// use 15 power per level; gathering/resource facilities and the two Lightning machines use 30.
+pub fn e_mode_power_per_unit(facility: &str, facility_level: u32) -> u32 {
+    let per_level = match facility {
+        "Mine" | "Well" | "Aniipod Maker" | "Dance Pad Polisher" => 30,
+        _ => 15,
+    };
+    per_level * facility_level.max(1)
+}
+
+/// Crackle Generator output at a Power Module / generator level.
+pub fn generator_power(level: u32) -> u32 {
+    match level {
+        1 => 600,
+        2 => 800,
+        3 => 1000,
+        4 => 1200,
+        5.. => 1500,
+        _ => 0,
+    }
+}
+
+/// Total full-power grid capacity from the generators the player says are built. A generator
+/// cannot operate above the unlocked Power Module level.
+pub fn grid_power_capacity(facilities: &FacilityCounts, modules: &ModuleLevels) -> u32 {
+    if modules.power_module == 0 {
+        return 0;
+    }
+    facilities
+        .tiers("Crackle Generator")
+        .into_iter()
+        .map(|(count, level)| count * generator_power(level.min(modules.power_module)))
+        .sum()
 }
 
 /// How fast a crop needing `environment` grows with no environment building over it. Environments
@@ -1115,6 +1167,8 @@ pub struct ModuleLevels {
     pub resource_detector: u32,
     /// Level of Crafting Module (unlocks advanced wood carving at 1)
     pub crafting_module: u32,
+    /// Level of the Power Module. E-Mode unlocks at level 1 / RV 12.
+    pub power_module: u32,
 }
 
 impl ModuleLevels {
@@ -1139,6 +1193,7 @@ impl ModuleLevels {
             "kitchen_module" => self.kitchen_module,
             "resource_detector" => self.resource_detector,
             "crafting_module" => self.crafting_module,
+            "power_module" => self.power_module,
             _ => 0,
         }
     }
