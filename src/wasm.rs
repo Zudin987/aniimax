@@ -1103,6 +1103,13 @@ pub struct JsProductionPlan {
     /// What the plan makes of each priority it was asked for, in order.
     #[serde(default)]
     pub priorities: Vec<JsPriority>,
+    /// E-Mode grid draw and capacity. Zero for a normal/fallback plan.
+    #[serde(default)]
+    pub power_used: u32,
+    #[serde(default)]
+    pub power_capacity: u32,
+    #[serde(default)]
+    pub generators_used: u32,
 }
 
 /// What a plan makes of one priority.
@@ -1159,6 +1166,9 @@ fn empty_production_plan(success: bool, error: Option<String>) -> JsProductionPl
         unverified: vec![],
         level_up: None,
         priorities: vec![],
+        power_used: 0,
+        power_capacity: 0,
+        generators_used: 0,
     }
 }
 
@@ -1175,6 +1185,9 @@ impl JsProductionPlan {
             environment_assignments: self.environment_assignments.into_iter().map(Into::into).collect(),
             candidates_evaluated: self.candidates_evaluated,
             trial_solves: self.trial_solves,
+            power_used: self.power_used,
+            power_capacity: self.power_capacity,
+            generators_used: self.generators_used,
         }
     }
 }
@@ -1560,6 +1573,9 @@ impl PreparedInput {
             unverified,
             level_up: None,
             priorities: vec![],
+            power_used: plan.power_used,
+            power_capacity: plan.power_capacity,
+            generators_used: plan.generators_used,
         }
     }
 }
