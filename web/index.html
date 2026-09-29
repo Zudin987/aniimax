@@ -46,6 +46,13 @@
                         <summary id="simple-summary-title">Facilities and modules</summary>
                         <div id="simple-summary"></div>
                     </details>
+                    <div class="emode-auto-note" id="simple-emode-note">
+                        <span class="emode-bolt" aria-hidden="true">⚡</span>
+                        <div>
+                            <strong id="simple-emode-title">E-Mode unlocks at RV 12</strong>
+                            <span id="simple-emode-copy">Powered production becomes available after the Power Module and Crackle Generator unlock.</span>
+                        </div>
+                    </div>
                 </div>
 
                 <div id="advanced-config">
@@ -105,6 +112,13 @@
                                 <label for="power-module-level">Level</label>
                                 <input type="number" id="power-module-level" value="0" min="0" max="5">
                             </div>
+                        </div>
+                    </div>
+                    <div class="emode-auto-note">
+                        <span class="emode-bolt" aria-hidden="true">⚡</span>
+                        <div>
+                            <strong>E-Mode is automatic</strong>
+                            <span>With a Power Module and Crackle Generator configured, the optimizer compares powered and Aniimo production automatically. Equal-output plans prefer E-Mode to free production Aniimo.</span>
                         </div>
                     </div>
                 </div>
@@ -272,9 +286,10 @@
                     </div>
 
                     <div class="card production-steps" id="power-card" style="display: none;">
-                        <h2>E-Mode grid</h2>
-                        <p class="hint">The optimizer only uses E-Mode at full power; it does not guess partial-supply speed.</p>
+                        <h2 class="emode-card-title"><span aria-hidden="true">⚡</span> E-Mode <span class="emode-auto-badge">Automatic</span></h2>
+                        <p class="hint">Rows marked <strong>E-Mode</strong> are powered and do not need a production Aniimo. The optimizer first maximizes your selected goal, then prefers E-Mode when output is tied. Spare power is not a target to fill.</p>
                         <div id="power-summary"></div>
+                        <p class="power-spare-note" id="power-spare-note"></p>
                     </div>
 
                     <div class="card production-steps" id="seed-card" style="display: none;">
