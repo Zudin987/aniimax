@@ -323,7 +323,8 @@ function getPersistedFieldIds() {
         'mode-simple', 'mode-advanced', 'home-level',
         'ecological-module-level', 'kitchen-module-level',
         'resource-detector-level', 'crafting-module-level', 'power-module-level',
-        'rate-unit', 'has-level-four', 'harvest-moon-enabled'
+        'rate-unit', 'has-level-four', 'harvest-moon-enabled',
+        'harvest-umbral-hot-pot', 'harvest-umbral-pickle', 'harvest-umbral-sauce', 'harvest-platter'
     ];
 }
 
@@ -538,6 +539,8 @@ function attachModeHandlers() {
     document.getElementById('home-level').addEventListener('change', () => {
         renderSimpleSummary();
         renderStrategy();
+        updateHarvestMoonControls();
+        renderRecipeCount();
     });
     document.getElementById('fill-btn').addEventListener('click', () => {
         fillAdvancedFrom(numberOrDefault(document.getElementById('fill-level').value, MAX_HOME_LEVEL));
@@ -572,11 +575,48 @@ function attachSpecialHandlers() {
 // Every recipe plans may not use: the player's skips and any special recipe not unlocked.
 function excludedRecipes() {
     const locked = SPECIAL_RECIPES.map(r => r.name).filter(name => !unlockedSpecial.has(name));
-    const seasonal = document.getElementById('harvest-moon-enabled')?.checked ? [] : HARVEST_MOON_ITEMS;
+    const harvestEnabled = !!document.getElementById('harvest-moon-enabled')?.checked
+        && (!isSimpleMode() || selectedHomeLevel() >= 10);
+    let seasonal;
+    if (!harvestEnabled) {
+        seasonal = HARVEST_MOON_ITEMS;
+    } else {
+        const shopNotes = [
+            ['umbral_hot_pot', 'harvest-umbral-hot-pot'],
+            ['umbral_pickle', 'harvest-umbral-pickle'],
+            ['umbral_sweet_spicy_sauce', 'harvest-umbral-sauce'],
+            ['harvest_platter', 'harvest-platter'],
+        ];
+        seasonal = shopNotes.filter(([, id]) => !document.getElementById(id)?.checked).map(([name]) => name);
+    }
     // Going for Aniipods means the best tier only; the others would be cheaper but catch worse.
     const best = wantsAniipods() ? bestAniipod() : null;
     const lesser = best ? ANIIPOD_TIERS.filter(name => name !== best) : [];
     return [...new Set([...skippedRecipes, ...locked, ...seasonal, ...lesser])];
+}
+
+// Harvest Moon's four intro recipe notes come from the event quest; the later recipes are shop
+// notes. Keep those checkboxes disabled until the seasonal set itself is enabled (and, in Simple
+// mode, until the event's RV 10 requirement is met).
+function updateHarvestMoonControls() {
+    const master = document.getElementById('harvest-moon-enabled');
+    const allowed = !!master?.checked && (!isSimpleMode() || selectedHomeLevel() >= 10);
+    ['harvest-umbral-hot-pot', 'harvest-umbral-pickle', 'harvest-umbral-sauce', 'harvest-platter']
+        .forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.disabled = !allowed;
+        });
+}
+
+function attachHarvestMoonHandlers() {
+    const master = document.getElementById('harvest-moon-enabled');
+    master?.addEventListener('change', () => {
+        updateHarvestMoonControls();
+        renderRecipeCount();
+    });
+    ['harvest-umbral-hot-pot', 'harvest-umbral-pickle', 'harvest-umbral-sauce', 'harvest-platter']
+        .forEach(id => document.getElementById(id)?.addEventListener('change', renderRecipeCount));
+    updateHarvestMoonControls();
 }
 
 // --- Recipes to skip -------------------------------------------------------------------
@@ -2634,6 +2674,7 @@ document.addEventListener('DOMContentLoaded', () => {
     renderSkippedRecipes();
     attachSpecialHandlers();
     renderSpecialRecipes();
+    attachHarvestMoonHandlers();
     attachPriorityHandlers();
     applyConfigMode();
     initWasm();
