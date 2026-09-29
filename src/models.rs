@@ -864,6 +864,12 @@ pub struct ProductionPlan {
     /// across every exclusion and refinement pass in `find_production_plan`; a rough measure of
     /// how much alternative-plan comparison went into settling on this one.
     pub trial_solves: u32,
+    /// Grid power currently drawn by E-Mode rows (0 for a normal/fallback plan).
+    pub power_used: u32,
+    /// Full-power capacity supplied by the configured Crackle Generators.
+    pub power_capacity: u32,
+    /// Minimum number of configured generators needed for `power_used`.
+    pub generators_used: u32,
 }
 
 /// Result of turning a [`ProductionPlan`] plus a goal amount into a concrete time-to-target; the
