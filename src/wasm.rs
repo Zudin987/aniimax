@@ -55,6 +55,8 @@ pub struct JsModuleLevels {
     pub resource_detector: u32,
     #[serde(default)]
     pub crafting_module: u32,
+    #[serde(default)]
+    pub power_module: u32,
 }
 
 /// JavaScript-friendly input for optimization.
@@ -519,6 +521,7 @@ pub fn optimize(input_json: &str) -> String {
         kitchen_module: input.modules.kitchen_module,
         resource_detector: input.modules.resource_detector,
         crafting_module: input.modules.crafting_module,
+        power_module: input.modules.power_module,
     };
 
     let mut items = get_embedded_items();
@@ -1190,10 +1193,11 @@ impl JsProductionPlan {
 /// doesn't block anything else from rendering.
 #[wasm_bindgen]
 pub fn find_plan(input_json: &str, on_progress: Option<js_sys::Function>) -> String {
-    let prepared = match PreparedInput::from_json(input_json) {
+    let mut prepared = match PreparedInput::from_json(input_json) {
         Ok(p) => p,
         Err(error) => return error,
     };
+    prepared.items.retain(|item| !crate::models::is_electric_item(&item.name));
 
     // `js_sys::Function::call1` takes `&JsValue` for both the `this` receiver and the argument;
     // errors (e.g. the JS callback itself throwing) are deliberately swallowed with `let _ =`,
@@ -1481,8 +1485,13 @@ impl PreparedInput {
             kitchen_module: input.modules.kitchen_module,
             resource_detector: input.modules.resource_detector,
             crafting_module: input.modules.crafting_module,
+            power_module: input.modules.power_module,
         };
         let mut items = get_embedded_items();
+        if module_levels.power_module > 0 && facility_counts.get_count("Crackle Generator") > 0 {
+            crate::data::add_e_mode_variants(&mut items, include_str!("../data/e_mode.csv"))
+                .map_err(|e| serde_json::to_string(&empty_production_plan(false, Some(format!("Invalid E-Mode data: {e}")))).unwrap_or_default())?;
+        }
         items.retain(|item| !input.exclude.iter().any(|name| name == crate::models::base_item_name(&item.name)));
         let setup = input.aniimo.as_deref().and_then(aniimo_setup_from);
         let requirements = embedded_aniimo_requirements();
