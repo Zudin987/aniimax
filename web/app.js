@@ -1035,7 +1035,8 @@ function renderSeedTable(plan) {
             const cost = recipeIndex.find(r => r.name === s.item_name)?.cost || 0;
             // Whole seeds when counting to the level-up.
             const seeds = levelUp ? Math.ceil(perSecond * multiplier) : perSecond * multiplier;
-            return { name: s.item_name, facility: s.facility, plots: s.facility_count, seeds, cost: seeds * cost };
+            return { name: s.item_name, facility: s.facility, plots: s.facility_count, seeds, cost: seeds * cost,
+                seasonal: s.item_name === 'moondew_radish' || s.item_name === 'waxing_moon_pepper' };
         })
         .sort((a, b) => b.seeds - a.seeds);
     if (rows.length === 0) {
@@ -1056,12 +1057,32 @@ function renderSeedTable(plan) {
                 <td>${prettyItem(r.name)}</td>
                 <td>${r.plots}</td>
                 <td>${amount(r.seeds)}</td>
-                <td>${r.cost > 0 ? `${amount(r.cost)} coins` : 'free'}</td>
+                <td>${r.seasonal ? 'event seed' : (r.cost > 0 ? `${amount(r.cost)} coins` : 'free')}</td>
             </tr>`).join('')}</tbody>
             ${rows.length > 1 && totalCost > 0 ? `<tfoot><tr><td colspan="3">Total</td><td>${amount(totalCost)} coins</td></tr></tfoot>` : ''}
         </table>`;
 }
 
+// E-Mode grid summary. The backend only permits powered rows when the full-power draw fits.
+function renderPowerSummary(plan) {
+    const card = document.getElementById('power-card');
+    const el = document.getElementById('power-summary');
+    const capacity = plan.power_capacity || 0;
+    if (capacity <= 0) {
+        card.style.display = 'none';
+        return;
+    }
+    card.style.display = 'block';
+    const used = plan.power_used || 0;
+    const generators = plan.generators_used || 0;
+    const spare = Math.max(0, capacity - used);
+    el.innerHTML = `
+        <div class="summary-grid">
+            <div class="summary-item"><span class="summary-label">Power used</span><span class="summary-value">${formatNumber(used)} / ${formatNumber(capacity)}</span></div>
+            <div class="summary-item"><span class="summary-label">Spare power</span><span class="summary-value">${formatNumber(spare)}</span></div>
+            <div class="summary-item"><span class="summary-label">Generators needed</span><span class="summary-value">${generators}</span></div>
+        </div>`;
+}
 // What each product sold earns in a level-up plan, per hour and by the time the level-up is
 // ready. (Priorities plans show this in the goal card instead.)
 function renderProfitBreakdown(plan) {
@@ -2240,6 +2261,7 @@ function displayPlan(plan, scroll = true) {
     skippedEl.textContent = skipped.length ? `Skipping ${skipped.map(prettyItem).join(', ')}.` : '';
 
     renderSeedTable(plan);
+    renderPowerSummary(plan);
     renderLevelUp(plan);
     renderProfitBreakdown(plan);
     renderFacilityPlan(plan);
