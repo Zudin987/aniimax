@@ -1015,8 +1015,11 @@ pub fn check_plan(
     let mut earned = 0.0;
     let mut made: HashMap<&str, f64> = HashMap::new();
     let mut plots_needing: HashMap<(&str, &str), u32> = HashMap::new();
-    // Units in use per facility and level; a recipe taking turns counts only its share of time.
-    let mut units_at: HashMap<&str, Vec<(u32, f64)>> = HashMap::new();
+    // Normal recipes are flexible across every owned tier high enough for the recipe. E-Mode
+    // recipes are tied to an actual facility tier because power draw depends on that level.
+    let mut normal_units_at: HashMap<&str, Vec<(u32, f64)>> = HashMap::new();
+    let mut electric_units_at: HashMap<&str, Vec<(u32, f64)>> = HashMap::new();
+    let mut power_used = 0.0f64;
     for (name, &rate) in &plan.recipe_rates {
         let recipe = all.get(name.as_str()).ok_or(format!("unknown recipe {name}"))?;
         if !facility_counts.can_produce(&recipe.facility, recipe.facility_level) {
@@ -1031,8 +1034,23 @@ pub fn check_plan(
         if rate * recipe.production_time > units as f64 + TOLERANCE {
             return Err(format!("{name} runs {rate}/s but has {units} units at {}s each", recipe.production_time));
         }
-        let in_use = if takes_turns(recipe) { rate * recipe.production_time } else { units as f64 };
-        units_at.entry(recipe.facility.as_str()).or_default().push((recipe.facility_level, in_use));
+        if crate::models::is_electric_item(&recipe.name) {
+            let allocations = plan.electric_units.get(name).map(Vec::as_slice).unwrap_or(&[]);
+            let allocated: u32 = allocations.iter().map(|(_, count)| *count).sum();
+            if allocated != units {
+                return Err(format!("{name} says {units} electric units but its tier allocation adds to {allocated}"));
+            }
+            for &(tier_level, count) in allocations {
+                if tier_level < recipe.facility_level {
+                    return Err(format!("{name} needs {} level {} but is assigned to level {tier_level}", recipe.facility, recipe.facility_level));
+                }
+                electric_units_at.entry(recipe.facility.as_str()).or_default().push((tier_level, count as f64));
+                power_used += count as f64 * crate::models::e_mode_power_per_unit(&recipe.facility, tier_level) as f64;
+            }
+        } else {
+            let in_use = if takes_turns(recipe) { rate * recipe.production_time } else { units as f64 };
+            normal_units_at.entry(recipe.facility.as_str()).or_default().push((recipe.facility_level, in_use));
+        }
         if let Some(environment) = recipe.environment.as_deref() {
             *plots_needing.entry((recipe.facility.as_str(), environment)).or_default() += units;
         }
@@ -1078,14 +1096,36 @@ pub fn check_plan(
             return Err(format!("{item} is used or sold faster than it's made (short {:.6}/s)", -left));
         }
     }
-    for (facility, entries) in &units_at {
-        for &(level, _) in entries {
-            let needed: f64 = entries.iter().filter(|(l, _)| *l >= level).map(|(_, u)| u).sum();
+    let mut facilities: Vec<&str> = normal_units_at.keys().chain(electric_units_at.keys()).copied().collect();
+    facilities.sort_unstable();
+    facilities.dedup();
+    for facility in facilities {
+        let normal = normal_units_at.get(facility).map(Vec::as_slice).unwrap_or(&[]);
+        let electric = electric_units_at.get(facility).map(Vec::as_slice).unwrap_or(&[]);
+        let mut levels: Vec<u32> = normal.iter().map(|(l, _)| *l).chain(electric.iter().map(|(l, _)| *l)).collect();
+        levels.sort_unstable();
+        levels.dedup();
+
+        // Electric assignments name an exact tier, so check that exact tier before the cumulative
+        // flexible-level check below.
+        for &level in &levels {
+            let exact_used: f64 = electric.iter().filter(|(l, _)| *l == level).map(|(_, u)| u).sum();
+            let exact_owned: u32 = facility_counts.tiers(facility).iter().filter(|(_, l)| *l == level).map(|(c, _)| *c).sum();
+            if exact_used > exact_owned as f64 + TOLERANCE {
+                return Err(format!("{facility}: {exact_used} E-Mode units assigned to level {level} but {exact_owned} owned"));
+            }
+            let needed: f64 =
+                normal.iter().filter(|(l, _)| *l >= level).map(|(_, u)| u).sum::<f64>()
+                + electric.iter().filter(|(l, _)| *l >= level).map(|(_, u)| u).sum::<f64>();
             let owned = facility_counts.capacity_at_level(facility, level);
             if needed > owned as f64 + TOLERANCE {
                 return Err(format!("{facility}: {needed} units at level {level}+ but {owned} owned"));
             }
         }
+    }
+    let power_capacity = crate::models::grid_power_capacity(facility_counts, module_levels) as f64;
+    if power_used > power_capacity + TOLERANCE {
+        return Err(format!("E-Mode draws {power_used} power but the grid supplies {power_capacity}"));
     }
     let mut buildings_used: HashMap<&str, u32> = HashMap::new();
     let mut covered: HashMap<(&str, &str), u32> = HashMap::new();
