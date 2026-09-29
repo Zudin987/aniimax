@@ -144,10 +144,17 @@
                     <p class="hint small">These take a rare currency to unlock. Plans only use the ones you tick.</p>
                     <div class="special-grid" id="special-grid"></div>
                     <p class="assume-title">Seasonal recipes</p>
-                    <label class="aniimo-cap" title="Adds the Harvest Moon crops and seasonal processing chain to the optimizer">
+                    <label class="aniimo-cap" title="Adds the Harvest Moon crops and quest recipes to the optimizer">
                         <input type="checkbox" id="harvest-moon-enabled"> Harvest Moon Festival
                     </label>
-                    <p class="hint small">Enable while the Harvest Moon season is active. Off by default so seasonal crops never change normal plans after the event.</p>
+                    <p class="hint small">Requires RV 10 in Simple mode. Enabling assumes you completed the event intro and have the Moondew Radish, Waxing Moon Pepper, Roasted Waxing Moon Pepper and Moondew Radish Slices recipe notes.</p>
+                    <div class="special-grid" id="harvest-special-grid">
+                        <label class="special-option"><input type="checkbox" id="harvest-umbral-hot-pot"> <span>Umbral Hot Pot note (80 Moonray Wheat)</span></label>
+                        <label class="special-option"><input type="checkbox" id="harvest-umbral-pickle"> <span>Umbral Pickle note (80 Moonray Wheat)</span></label>
+                        <label class="special-option"><input type="checkbox" id="harvest-umbral-sauce"> <span>Umbral Sweet Spicy Sauce note (80 Moonray Wheat)</span></label>
+                        <label class="special-option"><input type="checkbox" id="harvest-platter"> <span>Harvest Platter note (120 Moonray Wheat)</span></label>
+                    </div>
+                    <p class="hint small">The four shop recipes stay locked until you tick the notes you bought. The entire seasonal set is off by default so it never changes normal plans after the event.</p>
                     <p class="assume-title">Recipes to skip</p>
                     <p class="hint small">Plans won't use these, e.g. recipes behind unlocks you don't have yet. You can also skip one straight from a plan with its ✕.</p>
                     <div class="skip-add">
