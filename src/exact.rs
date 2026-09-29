@@ -122,6 +122,9 @@ pub struct ExactPlan {
     pub recipe_rates: BTreeMap<String, f64>,
     /// Whole units set to each recipe that runs.
     pub units: BTreeMap<String, u32>,
+    /// For E-Mode recipes, the same units split by actual owned facility level. This is what
+    /// makes the power check use 15/30 power per ACTUAL level rather than the recipe minimum.
+    pub electric_units: BTreeMap<String, Vec<(u32, u32)>>,
     /// Units/sec sold of each item.
     pub sold: BTreeMap<String, f64>,
     pub environment: Vec<ExactEnvironment>,
@@ -916,6 +919,7 @@ pub fn solve_relaxed(
 fn plan_from(model: &Model, value: f64, upper_bound: f64, proven_optimal: bool, nodes: u32, values: &[f64], _root: f64) -> ExactPlan {
     let mut recipe_rates = BTreeMap::new();
     let mut units = BTreeMap::new();
+    let mut electric_units: BTreeMap<String, Vec<(u32, u32)>> = BTreeMap::new();
     let mut sold = BTreeMap::new();
     let mut environment = Vec::new();
     let mut pairs: Vec<ExactPair> = Vec::new();
@@ -932,6 +936,11 @@ fn plan_from(model: &Model, value: f64, upper_bound: f64, proven_optimal: bool, 
             }
             VarKind::Units(recipe) if v > 0.5 => {
                 units.insert(recipe.name.clone(), v.round() as u32);
+            }
+            VarKind::ElectricUnits { recipe, tier_level } if v > 0.5 => {
+                let count = v.round() as u32;
+                *units.entry(recipe.name.clone()).or_default() += count;
+                electric_units.entry(recipe.name.clone()).or_default().push((*tier_level, count));
             }
             VarKind::Sold(name) if v > 1e-9 => {
                 sold.insert(name.to_string(), v);
@@ -982,6 +991,7 @@ fn plan_from(model: &Model, value: f64, upper_bound: f64, proven_optimal: bool, 
         nodes,
         recipe_rates,
         units,
+        electric_units,
         sold,
         environment,
         pairs,
