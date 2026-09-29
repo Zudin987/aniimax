@@ -1227,16 +1227,7 @@ pub fn check_plan(
     Ok(earned)
 }
 
-/// The model in CPLEX LP format, for solving with an external solver, and how many variables it
-/// has (`x0` up to `x<count - 1>`; a solver may leave out any that no constraint mentions).
-pub fn write_lp(
-    items: &[ProductionItem],
-    currency: &str,
-    facility_counts: &FacilityCounts,
-    module_levels: &ModuleLevels,
-    goal: Goal,
-) -> (String, usize) {
-    let model = build_model(items, currency, facility_counts, module_levels, goal);
+fn model_to_lp(model: &Model<'_>) -> (String, usize) {
     let term = |c: f64, v: usize| format!("{} {} x{v}", if c < 0.0 { "-" } else { "+" }, c.abs());
     let mut out = String::from("Maximize\n obj:");
     for (v, &c) in model.objective.iter().enumerate() {
@@ -1273,6 +1264,78 @@ pub fn write_lp(
     (out, model.objective.len())
 }
 
+/// The model in CPLEX LP format, for solving with an external solver, and how many variables it
+/// has (x0 up to x<count - 1>; a solver may leave out any that no constraint mentions).
+pub fn write_lp(
+    items: &[ProductionItem],
+    currency: &str,
+    facility_counts: &FacilityCounts,
+    module_levels: &ModuleLevels,
+    goal: Goal,
+) -> (String, usize) {
+    let model = build_model(items, currency, facility_counts, module_levels, goal);
+    model_to_lp(&model)
+}
+
+/// A second, lexicographic solve used only after the main goal is already known. It keeps the
+/// main objective at its solved value (within solver noise), then minimizes Aniimo work on recipes
+/// that have an E-Mode counterpart. This makes an equally-good plan prefer powered production
+/// without wasting spare power just to fill the grid.
+pub fn write_e_mode_tiebreak_lp(
+    items: &[ProductionItem],
+    currency: &str,
+    facility_counts: &FacilityCounts,
+    module_levels: &ModuleLevels,
+    goal: Goal,
+    primary_objective: f64,
+) -> (String, usize) {
+    let mut model = build_model(items, currency, facility_counts, module_levels, goal);
+    if model.power_capacity == 0 {
+        return (String::new(), model.objective.len());
+    }
+
+    let primary_terms: Vec<(usize, f64)> = model
+        .objective
+        .iter()
+        .enumerate()
+        .filter_map(|(v, &coefficient)| (coefficient != 0.0).then_some((v, coefficient)))
+        .collect();
+    if primary_terms.is_empty() {
+        return (String::new(), model.objective.len());
+    }
+    let tolerance = 1e-8 * primary_objective.abs().max(1.0);
+    model.constrain(primary_terms, ComparisonOp::Ge, primary_objective - tolerance);
+
+    let e_mode_bases: std::collections::HashSet<&str> = items
+        .iter()
+        .filter(|item| crate::models::is_electric_item(&item.name))
+        .map(|item| crate::models::base_item_name(&item.name))
+        .collect();
+
+    model.objective.fill(0.0);
+    let preferred: Vec<(usize, f64)> = model
+        .kinds
+        .iter()
+        .enumerate()
+        .filter_map(|(v, kind)| match kind {
+            VarKind::Rate(recipe)
+                if !crate::models::is_electric_item(&recipe.name)
+                    && e_mode_bases.contains(crate::models::base_item_name(&recipe.name)) =>
+            {
+                Some((v, -recipe.production_time))
+            }
+            _ => None,
+        })
+        .collect();
+    if preferred.is_empty() {
+        return (String::new(), model.objective.len());
+    }
+    for (v, coefficient) in preferred {
+        model.objective[v] = coefficient;
+    }
+    model_to_lp(&model)
+}
+
 /// Builds an [`ExactPlan`] from an external solver's variable values (in [`write_lp`]'s `x0`,
 /// `x1`, ... order): rounds every whole-unit variable, then re-solves the rates for exactly those
 /// units, so the plan is consistent even if the solver's own values carry rounding noise.
@@ -1288,6 +1351,58 @@ pub fn plan_from_values(
     proven_optimal: bool,
     upper_bound: f64,
 ) -> Option<ExactPlan> {
+    plan_from_values_inner(
+        items,
+        currency,
+        facility_counts,
+        module_levels,
+        goal,
+        values,
+        proven_optimal,
+        upper_bound,
+        false,
+    )
+}
+
+/// Like plan_from_values, but preserves the E-Mode recipe rates selected by the secondary
+/// tie-break solve. Integer machine choices are already fixed by the solver answer; keeping a tiny
+/// lower bound on electric rates also covers Bench/Kiln recipes whose shared-unit variables are
+/// continuous.
+pub fn plan_from_values_prefer_e_mode(
+    items: &[ProductionItem],
+    currency: &str,
+    facility_counts: &FacilityCounts,
+    module_levels: &ModuleLevels,
+    goal: Goal,
+    values: &[f64],
+    proven_optimal: bool,
+    upper_bound: f64,
+) -> Option<ExactPlan> {
+    plan_from_values_inner(
+        items,
+        currency,
+        facility_counts,
+        module_levels,
+        goal,
+        values,
+        proven_optimal,
+        upper_bound,
+        true,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn plan_from_values_inner(
+    items: &[ProductionItem],
+    currency: &str,
+    facility_counts: &FacilityCounts,
+    module_levels: &ModuleLevels,
+    goal: Goal,
+    values: &[f64],
+    proven_optimal: bool,
+    upper_bound: f64,
+    preserve_e_mode: bool,
+) -> Option<ExactPlan> {
     let model = build_model(items, currency, facility_counts, module_levels, goal);
     if values.len() != model.objective.len() {
         return None;
@@ -1296,11 +1411,18 @@ pub fn plan_from_values(
         .bounds
         .iter()
         .zip(&model.integer)
+        .zip(&model.kinds)
         .zip(values)
-        .map(|((&b, &int), &v)| {
+        .map(|(((&b, &int), kind), &v)| {
             if int {
                 let r = v.round().max(b.0).min(b.1);
                 (r, r)
+            } else if preserve_e_mode
+                && matches!(kind, VarKind::Rate(recipe) if crate::models::is_electric_item(&recipe.name))
+                && v > 1e-9
+            {
+                let slack = 1e-8 * v.abs().max(1.0);
+                ((v - slack).max(b.0), b.1)
             } else {
                 b
             }

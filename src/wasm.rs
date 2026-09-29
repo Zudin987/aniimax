@@ -1353,6 +1353,26 @@ pub fn exact_problem(input_json: &str, stage_json: &str) -> String {
     serde_json::json!({ "lp": lp.0, "variables": lp.1 }).to_string()
 }
 
+/// A second exact model that preserves the already-solved main objective and, among equally good
+/// plans, minimizes normal Aniimo work for recipes that can run in E-Mode. The variable order is
+/// identical to exact_problem so its answer can be handed to exact_plan.
+#[wasm_bindgen]
+pub fn exact_e_mode_tiebreak_problem(input_json: &str, stage_json: &str, primary_objective: f64) -> String {
+    let stage: JsStage = serde_json::from_str(stage_json).unwrap_or_default();
+    let lp = match PreparedInput::from_json(input_json) {
+        Ok(prepared) if !prepared.input.currency.is_empty() => crate::exact::write_e_mode_tiebreak_lp(
+            &prepared.items,
+            &prepared.input.currency,
+            &prepared.facility_counts,
+            &prepared.module_levels,
+            stage.goal(&prepared.input),
+            primary_objective,
+        ),
+        _ => (String::new(), 0),
+    };
+    serde_json::json!({ "lp": lp.0, "variables": lp.1 }).to_string()
+}
+
 /// The solver's answer to [`exact_problem`]'s model.
 #[derive(Debug, Clone, Deserialize)]
 struct JsSolverResult {
@@ -1362,6 +1382,10 @@ struct JsSolverResult {
     proven: bool,
     /// The solver's best bound on what any plan could earn.
     bound: f64,
+    /// The values came from the E-Mode tie-break solve, so preserve its powered recipe rates while
+    /// rebuilding the original primary objective.
+    #[serde(default)]
+    prefer_e_mode: bool,
 }
 
 /// Turns HiGHS's solution of [`exact_problem`]'s model into the same result [`find_plan`]
@@ -1380,16 +1404,30 @@ pub fn exact_plan(input_json: &str, stage_json: &str, solution_json: &str) -> St
         crate::exact::Goal::EarnWhileLevelingUp(level_up, _) | crate::exact::Goal::StockUp(level_up, ..) => Some(level_up),
         _ => None,
     };
-    let Some(exact) = crate::exact::plan_from_values(
-        &prepared.items,
-        &currency,
-        &prepared.facility_counts,
-        &prepared.module_levels,
-        goal,
-        &result.values,
-        result.proven,
-        result.bound,
-    ) else {
+    let exact = if result.prefer_e_mode {
+        crate::exact::plan_from_values_prefer_e_mode(
+            &prepared.items,
+            &currency,
+            &prepared.facility_counts,
+            &prepared.module_levels,
+            goal,
+            &result.values,
+            result.proven,
+            result.bound,
+        )
+    } else {
+        crate::exact::plan_from_values(
+            &prepared.items,
+            &currency,
+            &prepared.facility_counts,
+            &prepared.module_levels,
+            goal,
+            &result.values,
+            result.proven,
+            result.bound,
+        )
+    };
+    let Some(exact) = exact else {
         return no_plan();
     };
     if exact.rate_per_second <= 0.0 && level_up.is_none() {

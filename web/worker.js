@@ -35,6 +35,9 @@ async function newHighs() {
 
 // Seconds HiGHS may search before settling for the best plan found so far.
 const EXACT_TIME_LIMIT = 30;
+// The optional lexicographic E-Mode pass runs only after the main goal is solved, so keep it short:
+// it should improve worker usage without doubling the wait for a complex homeland.
+const EMODE_TIE_TIME_LIMIT = 5;
 
 // HiGHS options for every solve.
 const SOLVE_OPTIONS = { mip_rel_gap: 0, time_limit: EXACT_TIME_LIMIT };
@@ -60,6 +63,26 @@ async function solveModel(problem, options = SOLVE_OPTIONS) {
     if (!proven && result.Status !== 'Time limit reached') return null;
     const values = Array.from({ length: problem.variables }, (_, i) => result.Columns['x' + i]?.Primal ?? 0);
     return { values, proven, objective: result.ObjectiveValue };
+}
+
+// After a primary solve, keep its objective and ask a second model to minimize normal Aniimo work
+// on recipes that have E-Mode variants. This is a true tie-break: the Rust model adds a floor for
+// the primary objective, so it cannot trade meaningful output/level-up speed just to consume power.
+// The returned object deliberately keeps primary.objective/proven; only the variable assignment is
+// replaced with the more E-Mode-friendly one.
+async function preferEModeOnTie(pkg, payload, stageJson, primary) {
+    if (!primary) return primary;
+    const tieProblem = JSON.parse(pkg.exact_e_mode_tiebreak_problem(payload, stageJson, primary.objective));
+    if (!tieProblem.lp) return { ...primary, prefer_e_mode: false };
+
+    const tied = await solveModel(tieProblem, { ...SOLVE_OPTIONS, time_limit: EMODE_TIE_TIME_LIMIT });
+    if (!tied) return { ...primary, prefer_e_mode: false };
+
+    return {
+        ...primary,
+        values: tied.values,
+        prefer_e_mode: true,
+    };
 }
 
 // The exact planner (see `exact_problem` in wasm.rs): builds the model in wasm, solves it with
@@ -109,6 +132,7 @@ async function exactPlanJson(pkg, payload) {
     if (!solved) throw new Error('the solver found no plan');
     let proven = solved.proven && allProven;
     let bound = solved.objective;
+    solved = await preferEModeOnTie(pkg, payload, stageJson, solved);
     if (!proven) {
         // The same model without whole units: the most any plan could earn.
         const relaxed = (await newHighs()).solve(problem.lp.replace(/\nGeneral\n[\s\S]*\nEnd/, '\nEnd'), {});
@@ -119,23 +143,40 @@ async function exactPlanJson(pkg, payload) {
         // that solve fails, the plan above already has the pace and coins, so it stands.
         const stockStage = { ...stage, coins: solved.objective };
         const stockJson = JSON.stringify(stockStage);
-        const stocked = await solveModel(JSON.parse(exact_problem(payload, stockJson)));
+        let stocked = await solveModel(JSON.parse(exact_problem(payload, stockJson)));
+        if (stocked) stocked = await preferEModeOnTie(pkg, payload, stockJson, stocked);
         const stockedPlan = stocked
-            && JSON.parse(exact_plan(payload, stockJson, JSON.stringify({ values: stocked.values, proven: proven && stocked.proven, bound })));
+            && JSON.parse(exact_plan(payload, stockJson, JSON.stringify({
+                values: stocked.values,
+                proven: proven && stocked.proven,
+                bound,
+                prefer_e_mode: !!stocked.prefer_e_mode,
+            })));
         if (stockedPlan && stockedPlan.success) {
             stockedPlan.level_up_note = levelUpNote;
             return JSON.stringify(stockedPlan);
         }
         console.warn('Level-up stock solve found no usable plan; keeping the plan without it.');
     }
-    let json = exact_plan(payload, stageJson, JSON.stringify({ values: solved.values, proven, bound }));
+    let json = exact_plan(payload, stageJson, JSON.stringify({
+        values: solved.values,
+        proven,
+        bound,
+        prefer_e_mode: !!solved.prefer_e_mode,
+    }));
     let plan = JSON.parse(json);
     if (!plan.success) {
         // The answer didn't survive being rebuilt exactly; solve again, this time refusing the
         // rounding noise it may have leaned on.
-        const strict = await solveModel(problem, STRICT_OPTIONS);
+        let strict = await solveModel(problem, STRICT_OPTIONS);
         if (strict) {
-            json = exact_plan(payload, stageJson, JSON.stringify({ values: strict.values, proven: strict.proven && allProven, bound }));
+            strict = await preferEModeOnTie(pkg, payload, stageJson, strict);
+            json = exact_plan(payload, stageJson, JSON.stringify({
+                values: strict.values,
+                proven: strict.proven && allProven,
+                bound,
+                prefer_e_mode: !!strict.prefer_e_mode,
+            }));
             plan = JSON.parse(json);
         }
     }
