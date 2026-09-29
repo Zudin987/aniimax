@@ -27,6 +27,23 @@ fn default_module_levels() -> ModuleLevels {
     ModuleLevels::default()
 }
 
+fn load_normal_data(data_dir: &Path) -> Result<Vec<aniimax::models::ProductionItem>, Box<dyn std::error::Error>> {
+    const HARVEST_MOON: &[&str] = &[
+        "moondew_radish",
+        "waxing_moon_pepper",
+        "roasted_waxing_moon_pepper",
+        "moondew_radish_slices",
+        "umbral_hot_pot",
+        "umbral_pickle",
+        "umbral_sweet_spicy_sauce",
+        "harvest_platter",
+    ];
+    Ok(load_normal_data(data_dir)?
+        .into_iter()
+        .filter(|item| !HARVEST_MOON.contains(&item.name.as_str()))
+        .collect())
+}
+
 fn steps_at<'a>(plan: &'a ProductionPlan, facility: &str) -> Vec<&'a PlanStep> {
     plan.coin_items.iter().filter(|s| s.facility == facility).collect()
 }
@@ -65,7 +82,7 @@ fn test_calculate_efficiencies_coins() {
         return;
     }
 
-    let items = load_all_data(data_dir).expect("Failed to load data");
+    let items = load_normal_data(data_dir).expect("Failed to load data");
     let counts = default_facility_counts();
     let modules = default_module_levels();
 
@@ -87,7 +104,7 @@ fn test_calculate_efficiencies_filters_by_level() {
         return;
     }
 
-    let items = load_all_data(data_dir).expect("Failed to load data");
+    let items = load_normal_data(data_dir).expect("Failed to load data");
     let modules = default_module_levels();
 
     // Level 1 only
@@ -128,7 +145,7 @@ fn test_find_best_production_path() {
         return;
     }
 
-    let items = load_all_data(data_dir).expect("Failed to load data");
+    let items = load_normal_data(data_dir).expect("Failed to load data");
     let counts = default_facility_counts();
     let modules = default_module_levels();
 
@@ -151,7 +168,7 @@ fn test_find_best_production_path_energy_optimization() {
         return;
     }
 
-    let items = load_all_data(data_dir).expect("Failed to load data");
+    let items = load_normal_data(data_dir).expect("Failed to load data");
     let counts = default_facility_counts();
     let modules = default_module_levels();
 
@@ -188,7 +205,7 @@ fn test_parallel_production_increases_efficiency() {
         return;
     }
 
-    let items = load_all_data(data_dir).expect("Failed to load data");
+    let items = load_normal_data(data_dir).expect("Failed to load data");
     let modules = default_module_levels();
 
     // Single facility
@@ -235,7 +252,7 @@ fn test_find_coin_plan_shares_grower_capacity_across_branches() {
     if !data_dir.exists() {
         return;
     }
-    let items = load_all_data(data_dir).expect("Failed to load data");
+    let items = load_normal_data(data_dir).expect("Failed to load data");
     let counts = FacilityCounts::only(&[
         ("Farmland", 20, 5),
         ("Cooling Unit", 1, 1),
@@ -265,7 +282,7 @@ fn test_multi_ingredient_chain_shows_every_grower_item_it_needs() {
     if !data_dir.exists() {
         return;
     }
-    let items = load_all_data(data_dir).expect("Failed to load data");
+    let items = load_normal_data(data_dir).expect("Failed to load data");
     let counts = FacilityCounts::only(&[
         ("Woodland", 12, 4),
         ("Heat Furnace", 1, 1),
@@ -303,7 +320,7 @@ fn test_grower_reason_names_the_intermediate_it_feeds() {
     if !data_dir.exists() {
         return;
     }
-    let items = load_all_data(data_dir).expect("Failed to load data");
+    let items = load_normal_data(data_dir).expect("Failed to load data");
     let counts = FacilityCounts::only(&[
         ("Farmland", 6, 2),
         ("Well", 1, 1),
@@ -336,7 +353,7 @@ fn test_two_chains_sharing_a_grower_facility_settle_on_the_more_profitable_split
     if !data_dir.exists() {
         return;
     }
-    let items = load_all_data(data_dir).expect("Failed to load data");
+    let items = load_normal_data(data_dir).expect("Failed to load data");
     let counts = FacilityCounts::only(&[
         ("Farmland", 12, 6),
         ("Cooling Unit", 1, 1),
@@ -373,7 +390,7 @@ fn test_single_chain_using_multiple_grower_items_settles_on_the_more_profitable_
     if !data_dir.exists() {
         return;
     }
-    let items = load_all_data(data_dir).expect("Failed to load data");
+    let items = load_normal_data(data_dir).expect("Failed to load data");
     let counts = FacilityCounts::only(&[
         ("Woodland", 4, 4),
         ("Heat Furnace", 1, 1),
@@ -415,7 +432,7 @@ fn test_find_coin_plan_processor_contention_dedicates_to_one_recipe_not_both() {
     if !data_dir.exists() {
         return;
     }
-    let items = load_all_data(data_dir).expect("Failed to load data");
+    let items = load_normal_data(data_dir).expect("Failed to load data");
     let counts = FacilityCounts::only(&[
         ("Farmland", 20, 5),
         ("Woodland", 10, 3),
@@ -454,7 +471,7 @@ fn test_find_coin_plan_solo_processor_contributor_reports_true_need_not_full_own
     if !data_dir.exists() {
         return;
     }
-    let items = load_all_data(data_dir).expect("Failed to load data");
+    let items = load_normal_data(data_dir).expect("Failed to load data");
     let counts = FacilityCounts::only(&[("Woodland", 2, 2), ("Crafting Table", 2, 2)]);
     let plan = find_production_plan(&items, "coins", &counts, &ModuleLevels::default(), false)
         .expect("plan should be feasible");
@@ -483,7 +500,7 @@ fn test_seed_requirements_match_ceil_of_total_time_over_cycle_time() {
     if !data_dir.exists() {
         return;
     }
-    let items = load_all_data(data_dir).expect("Failed to load data");
+    let items = load_normal_data(data_dir).expect("Failed to load data");
     let counts = default_facility_counts();
     let modules = default_module_levels();
 
@@ -550,7 +567,7 @@ fn test_find_coin_plan_infeasible_with_no_facilities() {
     if !data_dir.exists() {
         return;
     }
-    let items = load_all_data(data_dir).expect("Failed to load data");
+    let items = load_normal_data(data_dir).expect("Failed to load data");
     let counts = FacilityCounts::only(&[]);
     let plan = find_production_plan(&items, "coins", &counts, &ModuleLevels::default(), false);
     assert!(plan.is_none(), "no owned facilities should be infeasible");
@@ -567,7 +584,7 @@ fn test_find_coin_plan_never_produces_via_unowned_intermediate_facility() {
     if !data_dir.exists() {
         return;
     }
-    let items = load_all_data(data_dir).expect("Failed to load data");
+    let items = load_normal_data(data_dir).expect("Failed to load data");
     let modules = ModuleLevels::default();
 
     let with_mill = FacilityCounts::only(&[("Farmland", 4, 3), ("Carousel Mill", 1, 3), ("Jukebox Dryer", 1, 3)]);
@@ -594,7 +611,7 @@ fn test_find_coin_plan_target_already_met() {
     if !data_dir.exists() {
         return;
     }
-    let items = load_all_data(data_dir).expect("Failed to load data");
+    let items = load_normal_data(data_dir).expect("Failed to load data");
     let counts = default_facility_counts();
     let modules = default_module_levels();
 
@@ -612,7 +629,7 @@ fn test_production_plan_reports_candidates_evaluated_and_trial_solves() {
     if !data_dir.exists() {
         return;
     }
-    let items = load_all_data(data_dir).expect("Failed to load data");
+    let items = load_normal_data(data_dir).expect("Failed to load data");
     let counts = FacilityCounts::only(&[("Farmland", 5, 1), ("Mine", 1, 1)]);
     let plan = find_production_plan(&items, "coins", &counts, &ModuleLevels::default(), false)
         .expect("plan should be feasible");
@@ -638,7 +655,7 @@ fn test_environment_gated_item_unavailable_with_zero_matching_buildings() {
     if !data_dir.exists() {
         return;
     }
-    let items = load_all_data(data_dir).expect("Failed to load data");
+    let items = load_normal_data(data_dir).expect("Failed to load data");
     let counts = FacilityCounts::only(&[("Woodland", 14, 4)]);
     let plan = find_production_plan(&items, "coins", &counts, &ModuleLevels::default(), false)
         .expect("plan should be feasible");
@@ -666,7 +683,7 @@ fn test_environment_gated_item_capped_by_single_building_coverage() {
     if !data_dir.exists() {
         return;
     }
-    let items = load_all_data(data_dir).expect("Failed to load data");
+    let items = load_normal_data(data_dir).expect("Failed to load data");
     let counts = FacilityCounts::only(&[("Woodland", 14, 4), ("Sunlamp", 1, 1)]);
     let plan = find_production_plan(&items, "coins", &counts, &ModuleLevels::default(), false)
         .expect("plan should be feasible");
@@ -691,7 +708,7 @@ fn test_environment_coverage_is_a_no_op_when_no_gated_item_is_unlocked() {
     if !data_dir.exists() {
         return;
     }
-    let items = load_all_data(data_dir).expect("Failed to load data");
+    let items = load_normal_data(data_dir).expect("Failed to load data");
     let counts = FacilityCounts::only(&[
         ("Woodland", 4, 2),
         ("Heat Furnace", 1, 1),
@@ -720,7 +737,7 @@ fn test_wood_blocks_target_picks_the_best_byproduct_item() {
     if !data_dir.exists() {
         return;
     }
-    let items = load_all_data(data_dir).expect("Failed to load data");
+    let items = load_normal_data(data_dir).expect("Failed to load data");
     let counts = FacilityCounts::only(&[("Woodland", 10, 3), ("Farmland", 1, 3), ("Mine", 1, 3)]);
     let modules = ModuleLevels { ecological_module: 2, ..ModuleLevels::default() };
     let plan =
@@ -758,7 +775,7 @@ fn test_wood_blocks_target_respects_environment_coverage() {
     if !data_dir.exists() {
         return;
     }
-    let items = load_all_data(data_dir).expect("Failed to load data");
+    let items = load_normal_data(data_dir).expect("Failed to load data");
     let counts = FacilityCounts::only(&[("Woodland", 14, 4), ("Sunlamp", 1, 1), ("Mine", 1, 1)]);
     let plan = find_production_plan(&items, "wood_blocks", &counts, &ModuleLevels::default(), false)
         .expect("plan should be feasible");
@@ -785,7 +802,7 @@ fn test_mineral_sand_target_picks_the_best_byproduct_item() {
     if !data_dir.exists() {
         return;
     }
-    let items = load_all_data(data_dir).expect("Failed to load data");
+    let items = load_normal_data(data_dir).expect("Failed to load data");
     let counts = FacilityCounts::only(&[("Mine", 5, 4), ("Farmland", 1, 3), ("Woodland", 1, 3)]);
     let plan = find_production_plan(&items, "mineral_sand", &counts, &ModuleLevels::default(), false)
         .expect("plan should be feasible");
@@ -821,7 +838,7 @@ fn test_aniimo_level_and_personality_bonus_speed_up_worked_facilities() {
     if !data_dir.exists() {
         return;
     }
-    let mut items = load_all_data(data_dir).expect("Failed to load data");
+    let mut items = load_normal_data(data_dir).expect("Failed to load data");
     let counts = FacilityCounts::only(&[("Mine", 5, 4)]);
     let modules = ModuleLevels::default();
 
@@ -845,7 +862,7 @@ fn test_faster_aniimo_needs_fewer_processor_units() {
     if !data_dir.exists() {
         return;
     }
-    let mut items = load_all_data(data_dir).expect("Failed to load data");
+    let mut items = load_normal_data(data_dir).expect("Failed to load data");
     let counts = FacilityCounts::only(&[("Woodland", 400, 2), ("Crafting Table", 5, 2)]);
     let modules = ModuleLevels::default();
 
@@ -867,7 +884,7 @@ fn test_byproduct_target_goal_result_has_no_double_counted_byproducts() {
     if !data_dir.exists() {
         return;
     }
-    let items = load_all_data(data_dir).expect("Failed to load data");
+    let items = load_normal_data(data_dir).expect("Failed to load data");
     let counts = FacilityCounts::only(&[("Woodland", 10, 3), ("Farmland", 1, 3), ("Mine", 1, 3)]);
     let modules = ModuleLevels { ecological_module: 2, ..ModuleLevels::default() };
     let plan =
@@ -893,7 +910,7 @@ fn test_environment_coverage_uses_multiple_owned_buildings_when_one_is_not_enoug
     if !data_dir.exists() {
         return;
     }
-    let items = load_all_data(data_dir).expect("Failed to load data");
+    let items = load_normal_data(data_dir).expect("Failed to load data");
     let counts = FacilityCounts::only(&[("Farmland", 40, 6), ("Cooling Unit", 3, 1)]);
     let plan = find_production_plan(&items, "coins", &counts, &ModuleLevels::default(), false)
         .expect("plan should be feasible");
@@ -928,7 +945,7 @@ fn test_processor_facility_dedicates_a_separate_unit_to_its_own_intermediate_ste
     if !data_dir.exists() {
         return;
     }
-    let items = load_all_data(data_dir).expect("Failed to load data");
+    let items = load_normal_data(data_dir).expect("Failed to load data");
     let counts = FacilityCounts::only(&[("Farmland", 3, 3), ("Well", 4, 2), ("Carousel Mill", 2, 4)]);
     let plan = find_production_plan(&items, "coins", &counts, &ModuleLevels::default(), false)
         .expect("plan should be feasible");
@@ -963,7 +980,7 @@ fn test_two_hop_chain_is_infeasible_with_only_one_unit_of_its_shared_facility() 
     if !data_dir.exists() {
         return;
     }
-    let items = load_all_data(data_dir).expect("Failed to load data");
+    let items = load_normal_data(data_dir).expect("Failed to load data");
     let counts = FacilityCounts::only(&[("Farmland", 3, 3), ("Well", 4, 2), ("Carousel Mill", 1, 4)]);
     let plan = find_production_plan(&items, "coins", &counts, &ModuleLevels::default(), false)
         .expect("plan should be feasible");
@@ -993,7 +1010,7 @@ fn test_mixed_level_tiers_split_capacity_by_what_each_tier_can_actually_run() {
     if !data_dir.exists() {
         return;
     }
-    let items = load_all_data(data_dir).expect("Failed to load data");
+    let items = load_normal_data(data_dir).expect("Failed to load data");
     let mut counts = FacilityCounts::only(&[("Cooling Unit", 3, 1)]);
     counts.add_tier("Farmland", 5, 3);
     counts.add_tier("Farmland", 4, 6);
@@ -1025,7 +1042,7 @@ fn test_prioritize_byproducts_forces_max_wood_blocks_rate_at_a_real_coin_cost() 
     if !data_dir.exists() {
         return;
     }
-    let items = load_all_data(data_dir).expect("Failed to load data");
+    let items = load_normal_data(data_dir).expect("Failed to load data");
     let counts = FacilityCounts::only(&[
         ("Woodland", 12, 4),
         ("Heat Furnace", 1, 1),
@@ -1068,7 +1085,7 @@ fn test_prioritize_byproducts_remains_feasible_and_does_not_reduce_byproduct_out
     if !data_dir.exists() {
         return;
     }
-    let items = load_all_data(data_dir).expect("Failed to load data");
+    let items = load_normal_data(data_dir).expect("Failed to load data");
     let counts = FacilityCounts::only(&[
         ("Farmland", 28, 5),
         ("Woodland", 14, 4),
@@ -1116,7 +1133,7 @@ fn test_prioritize_byproducts_is_a_no_op_when_targeting_a_byproduct_directly() {
     if !data_dir.exists() {
         return;
     }
-    let items = load_all_data(data_dir).expect("Failed to load data");
+    let items = load_normal_data(data_dir).expect("Failed to load data");
     let counts = FacilityCounts::only(&[("Woodland", 12, 4)]);
     let modules = ModuleLevels::default();
 
@@ -1138,7 +1155,7 @@ fn test_large_multi_facility_config_stays_fast() {
 
     let (tx, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
-        let items = load_all_data(data_dir).expect("Failed to load data");
+        let items = load_normal_data(data_dir).expect("Failed to load data");
         let counts = FacilityCounts::only(&[
             ("Farmland", 5, 4),
             ("Woodland", 2, 4),
@@ -1179,7 +1196,7 @@ fn test_single_dominant_processor_item_claims_every_owned_unit() {
     if !data_dir.exists() {
         return;
     }
-    let items = load_all_data(data_dir).expect("Failed to load data");
+    let items = load_normal_data(data_dir).expect("Failed to load data");
     let counts = FacilityCounts::only(&[("Woodland", 400, 2), ("Crafting Table", 5, 2)]);
     let plan = find_production_plan(&items, "coins", &counts, &ModuleLevels::default(), false)
         .expect("plan should be feasible");
@@ -1201,7 +1218,7 @@ fn test_environment_coverage_choice_does_not_settle_for_a_worse_joint_split() {
     if !data_dir.exists() {
         return;
     }
-    let items = load_all_data(data_dir).expect("Failed to load data");
+    let items = load_normal_data(data_dir).expect("Failed to load data");
     let counts = FacilityCounts::only(&[
         ("Farmland", 12, 6),
         ("Woodland", 6, 4),
@@ -1235,7 +1252,7 @@ fn test_more_farmland_never_lowers_the_rate_with_contested_coverage() {
     if !data_dir.exists() {
         return;
     }
-    let items = load_all_data(data_dir).expect("Failed to load data");
+    let items = load_normal_data(data_dir).expect("Failed to load data");
     let modules = ModuleLevels::default();
     let mut previous = 0.0;
     for farmland in 12..=14 {
@@ -1268,7 +1285,7 @@ fn test_prioritize_byproducts_with_best_aniimo_still_finds_a_plan() {
     if !data_dir.exists() {
         return;
     }
-    let mut items = load_all_data(data_dir).expect("Failed to load data");
+    let mut items = load_normal_data(data_dir).expect("Failed to load data");
     let reqs = aniimax::data::load_aniimo_requirements(data_dir).expect("Failed to load requirements");
     reqs.apply(aniimax::models::AniimoSetup::Best(aniimax::models::MAX_ANIIMO_LEVEL), &mut items);
     let counts = FacilityCounts::only(&[
