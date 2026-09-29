@@ -553,6 +553,13 @@ function attachModeHandlers() {
 
 let unlockedSpecial = new Set();
 const SPECIAL_NAMES = new Set(SPECIAL_RECIPES.map(r => r.name));
+const HARVEST_SHOP_NOTES = [
+    ['umbral_hot_pot', 'harvest-umbral-hot-pot'],
+    ['umbral_pickle', 'harvest-umbral-pickle'],
+    ['umbral_sweet_spicy_sauce', 'harvest-umbral-sauce'],
+    ['harvest_platter', 'harvest-platter'],
+];
+const HARVEST_BASE_COUNT = HARVEST_MOON_ITEMS.length - HARVEST_SHOP_NOTES.length;
 
 function renderSpecialRecipes() {
     document.getElementById('special-grid').innerHTML = SPECIAL_RECIPES.map(r => `
@@ -581,13 +588,11 @@ function excludedRecipes() {
     if (!harvestEnabled) {
         seasonal = HARVEST_MOON_ITEMS;
     } else {
-        const shopNotes = [
-            ['umbral_hot_pot', 'harvest-umbral-hot-pot'],
-            ['umbral_pickle', 'harvest-umbral-pickle'],
-            ['umbral_sweet_spicy_sauce', 'harvest-umbral-sauce'],
-            ['harvest_platter', 'harvest-platter'],
-        ];
-        seasonal = shopNotes.filter(([, id]) => !document.getElementById(id)?.checked).map(([name]) => name);
+        // The event toggle makes the four quest/base items available immediately. Shop recipes
+        // remain excluded until the player confirms they own the matching recipe note.
+        seasonal = HARVEST_SHOP_NOTES
+            .filter(([, id]) => !document.getElementById(id)?.checked)
+            .map(([name]) => name);
     }
     // Going for Aniipods means the best tier only; the others would be cheaper but catch worse.
     const best = wantsAniipods() ? bestAniipod() : null;
@@ -600,12 +605,43 @@ function excludedRecipes() {
 // mode, until the event's RV 10 requirement is met).
 function updateHarvestMoonControls() {
     const master = document.getElementById('harvest-moon-enabled');
-    const allowed = !!master?.checked && (!isSimpleMode() || selectedHomeLevel() >= 10);
-    ['harvest-umbral-hot-pot', 'harvest-umbral-pickle', 'harvest-umbral-sauce', 'harvest-platter']
-        .forEach(id => {
-            const el = document.getElementById(id);
-            if (el) el.disabled = !allowed;
-        });
+    const details = document.getElementById('harvest-moon-details');
+    const status = document.getElementById('harvest-moon-status');
+    const availability = document.getElementById('harvest-moon-availability');
+    const card = document.getElementById('harvest-moon-card');
+
+    const enabled = !!master?.checked;
+    const rvAllowed = !isSimpleMode() || selectedHomeLevel() >= 10;
+    const allowed = enabled && rvAllowed;
+
+    if (details) details.hidden = !enabled;
+
+    let ownedShopNotes = 0;
+    HARVEST_SHOP_NOTES.forEach(([, id]) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.disabled = !allowed;
+        if (el.checked) ownedShopNotes += 1;
+    });
+
+    card?.classList.toggle('is-enabled', allowed);
+    card?.classList.toggle('is-unavailable', enabled && !rvAllowed);
+
+    if (status) {
+        if (!enabled) {
+            status.textContent = 'Off';
+        } else if (!rvAllowed) {
+            status.textContent = 'Needs RV 10';
+        } else {
+            status.textContent = `On · ${HARVEST_BASE_COUNT + ownedShopNotes}/${HARVEST_MOON_ITEMS.length} included`;
+        }
+    }
+
+    if (availability && enabled) {
+        availability.textContent = rvAllowed
+            ? 'Harvest Moon production is available to the optimizer now. It may use any included recipe when its ingredients and facilities are available and it improves the selected goal.'
+            : 'Harvest Moon unlocks at RV 10. The recipes stay excluded from the plan at your current RV level.';
+    }
 }
 
 function attachHarvestMoonHandlers() {
@@ -614,8 +650,12 @@ function attachHarvestMoonHandlers() {
         updateHarvestMoonControls();
         renderRecipeCount();
     });
-    ['harvest-umbral-hot-pot', 'harvest-umbral-pickle', 'harvest-umbral-sauce', 'harvest-platter']
-        .forEach(id => document.getElementById(id)?.addEventListener('change', renderRecipeCount));
+    HARVEST_SHOP_NOTES.forEach(([, id]) => {
+        document.getElementById(id)?.addEventListener('change', () => {
+            updateHarvestMoonControls();
+            renderRecipeCount();
+        });
+    });
     updateHarvestMoonControls();
 }
 
