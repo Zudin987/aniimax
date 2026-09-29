@@ -128,58 +128,75 @@ async function exactPlanJson(pkg, payload) {
     let stageJson = JSON.stringify(stage);
     let problem = JSON.parse(exact_problem(payload, stageJson));
     if (!problem.lp) throw new Error('this setup isn\'t covered by the exact planner');
-    let solved = await solveModel(problem);
-    if (!solved) throw new Error('the solver found no plan');
-    let proven = solved.proven && allProven;
-    let bound = solved.objective;
-    solved = await preferEModeOnTie(pkg, payload, stageJson, solved);
+    const primarySolved = await solveModel(problem);
+    if (!primarySolved) throw new Error('the solver found no plan');
+    let proven = primarySolved.proven && allProven;
+    let bound = primarySolved.objective;
+    const solved = await preferEModeOnTie(pkg, payload, stageJson, primarySolved);
     if (!proven) {
         // The same model without whole units: the most any plan could earn.
         const relaxed = (await newHighs()).solve(problem.lp.replace(/\nGeneral\n[\s\S]*\nEnd/, '\nEnd'), {});
         bound = relaxed.ObjectiveValue;
     }
+
+    const exactFrom = (stageForPlan, solution, proof = proven) => JSON.parse(exact_plan(
+        payload,
+        stageForPlan,
+        JSON.stringify({
+            values: solution.values,
+            proven: proof,
+            bound,
+            prefer_e_mode: !!solution.prefer_e_mode,
+        }),
+    ));
+
     if (stage.pace) {
         // Keeping that pace and those coins, spare Bench and Kiln time goes to the level-up. If
-        // that solve fails, the plan above already has the pace and coins, so it stands.
-        const stockStage = { ...stage, coins: solved.objective };
+        // the E-Mode-preferred stock assignment does not survive the independent verifier, keep
+        // the original exact stock assignment instead of falling all the way back to the
+        // non-E-Mode heuristic planner.
+        const stockStage = { ...stage, coins: primarySolved.objective };
         const stockJson = JSON.stringify(stockStage);
-        let stocked = await solveModel(JSON.parse(exact_problem(payload, stockJson)));
-        if (stocked) stocked = await preferEModeOnTie(pkg, payload, stockJson, stocked);
-        const stockedPlan = stocked
-            && JSON.parse(exact_plan(payload, stockJson, JSON.stringify({
-                values: stocked.values,
-                proven: proven && stocked.proven,
-                bound,
-                prefer_e_mode: !!stocked.prefer_e_mode,
-            })));
-        if (stockedPlan && stockedPlan.success) {
-            stockedPlan.level_up_note = levelUpNote;
-            return JSON.stringify(stockedPlan);
+        const stockedPrimary = await solveModel(JSON.parse(exact_problem(payload, stockJson)));
+        if (stockedPrimary) {
+            const stockedPreferred = await preferEModeOnTie(pkg, payload, stockJson, stockedPrimary);
+            let stockedPlan = exactFrom(stockJson, stockedPreferred, proven && stockedPrimary.proven);
+            if (!stockedPlan.success && stockedPreferred.prefer_e_mode) {
+                console.warn('E-Mode stock tie-break failed verification; keeping the primary exact stock plan.');
+                stockedPlan = exactFrom(stockJson, { ...stockedPrimary, prefer_e_mode: false }, proven && stockedPrimary.proven);
+            }
+            if (stockedPlan.success) {
+                stockedPlan.level_up_note = levelUpNote;
+                return JSON.stringify(stockedPlan);
+            }
         }
         console.warn('Level-up stock solve found no usable plan; keeping the plan without it.');
     }
-    let json = exact_plan(payload, stageJson, JSON.stringify({
-        values: solved.values,
-        proven,
-        bound,
-        prefer_e_mode: !!solved.prefer_e_mode,
-    }));
-    let plan = JSON.parse(json);
+
+    let plan = exactFrom(stageJson, solved);
+    if (!plan.success && solved.prefer_e_mode) {
+        // A secondary preference must never make the whole exact planner disappear. If its
+        // assignment is numerically awkward, use the already-validated primary optimum.
+        console.warn('E-Mode tie-break failed verification; keeping the primary exact plan.');
+        plan = exactFrom(stageJson, { ...primarySolved, prefer_e_mode: false });
+    }
     if (!plan.success) {
-        // The answer didn't survive being rebuilt exactly; solve again, this time refusing the
-        // rounding noise it may have leaned on.
-        let strict = await solveModel(problem, STRICT_OPTIONS);
-        if (strict) {
-            strict = await preferEModeOnTie(pkg, payload, stageJson, strict);
-            json = exact_plan(payload, stageJson, JSON.stringify({
-                values: strict.values,
-                proven: strict.proven && allProven,
-                bound,
-                prefer_e_mode: !!strict.prefer_e_mode,
-            }));
-            plan = JSON.parse(json);
+        // The primary answer didn't survive being rebuilt exactly; solve again, this time refusing
+        // the rounding noise it may have leaned on.
+        const strictPrimary = await solveModel(problem, STRICT_OPTIONS);
+        if (strictPrimary) {
+            const strictPreferred = await preferEModeOnTie(pkg, payload, stageJson, strictPrimary);
+            plan = exactFrom(stageJson, strictPreferred, strictPrimary.proven && allProven);
+            if (!plan.success && strictPreferred.prefer_e_mode) {
+                plan = exactFrom(
+                    stageJson,
+                    { ...strictPrimary, prefer_e_mode: false },
+                    strictPrimary.proven && allProven,
+                );
+            }
         }
     }
+    let json = JSON.stringify(plan);
     if (!plan.success) throw new Error(plan.error || 'the plan failed its check');
     if (!levelUpNote) return json;
     plan.level_up_note = levelUpNote;
