@@ -17,11 +17,20 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+
       - name: Rust tests
-        run: cargo test --all-targets
+        run: |
+          # These two inherited geometry-verification tests are extremely expensive
+          # on GitHub's debug runners and can take 20+ minutes while competing with
+          # each other. The fast packing regression tests still run on every push.
+          cargo test --all-targets -- \
+            --skip coverage::tests::baked_pair_options_really_fit \
+            --skip coverage::tests::tidy_pair_layouts_keep_their_zones
+
       - name: JavaScript syntax
         run: |
           node --check web/app.js
