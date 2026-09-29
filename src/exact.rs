@@ -1496,6 +1496,9 @@ pub fn to_production_plan(
                     reason = format!("{reason}; takes turns with {}", others.join(", "));
                 }
             }
+            if crate::models::is_electric_item(&recipe.name) {
+                reason = format!("{reason}; E-Mode at full grid supply");
+            }
             if recipe.name.ends_with(crate::models::UNCOVERED_SUFFIX) {
                 let base = all.get(crate::models::base_item_name(&recipe.name)).and_then(|i| i.environment.as_deref());
                 let speed = base.and_then(crate::models::uncovered_efficiency).unwrap_or(1.0) * 100.0;
@@ -1503,7 +1506,14 @@ pub fn to_production_plan(
                 reason = format!("{reason}; grown without {wants} at {speed:.0}% speed");
             }
             coin_items.push(PlanStep {
-                item_name: Some(crate::models::base_item_name(&recipe.name).to_string()),
+                // Keep the internal electric suffix on plan rows so the frontend can show E-Mode
+                // and, crucially, not assign an Aniimo to a powered machine. Sales/item balances
+                // still use the base item through `made_item`.
+                item_name: Some(if crate::models::is_electric_item(&recipe.name) {
+                    recipe.name.clone()
+                } else {
+                    crate::models::base_item_name(&recipe.name).to_string()
+                }),
                 facility: facility.to_string(),
                 facility_count: units,
                 status: PlanStepStatus::Producing,
@@ -1780,5 +1790,8 @@ pub fn to_production_plan(
         environment_assignments,
         candidates_evaluated: exact.recipe_rates.len() as u32,
         trial_solves: exact.nodes,
+        power_used: exact.power_used,
+        power_capacity: exact.power_capacity,
+        generators_used: exact.generators_used,
     }
 }
