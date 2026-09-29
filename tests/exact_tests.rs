@@ -11,7 +11,25 @@ use std::time::Duration;
 
 fn load_items() -> Option<Vec<ProductionItem>> {
     let data_dir = Path::new("data");
-    data_dir.exists().then(|| load_all_data(data_dir).expect("Failed to load data"))
+    data_dir.exists().then(|| {
+        // Keep the long-standing exact-planner scenarios on the normal, non-seasonal economy.
+        // Harvest Moon is opt-in in the web app and has its own coverage in e_mode_tests.rs.
+        const HARVEST_MOON: &[&str] = &[
+            "moondew_radish",
+            "waxing_moon_pepper",
+            "roasted_waxing_moon_pepper",
+            "moondew_radish_slices",
+            "umbral_hot_pot",
+            "umbral_pickle",
+            "umbral_sweet_spicy_sauce",
+            "harvest_platter",
+        ];
+        load_all_data(data_dir)
+            .expect("Failed to load data")
+            .into_iter()
+            .filter(|item| !HARVEST_MOON.contains(&item.name.as_str()))
+            .collect()
+    })
 }
 
 /// Solves `counts`/`modules` exactly and checks what every scenario should hold.
