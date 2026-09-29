@@ -1155,6 +1155,7 @@ fn test_large_multi_facility_config_stays_fast() {
             kitchen_module: 2,
             resource_detector: 1,
             crafting_module: 1,
+            power_module: 0,
         };
         let start = std::time::Instant::now();
         let plan = find_production_plan(&items, "coins", &counts, &modules, false);
@@ -1276,7 +1277,7 @@ fn test_prioritize_byproducts_with_best_aniimo_still_finds_a_plan() {
         ("Crafting Table", 1, 4),
         ("Joy Wheel Loom", 1, 1),
     ]);
-    let modules = ModuleLevels { ecological_module: 8, kitchen_module: 7, resource_detector: 8, crafting_module: 7 };
+    let modules = ModuleLevels { ecological_module: 8, kitchen_module: 7, resource_detector: 8, crafting_module: 7, power_module: 0 };
 
     let normal = find_production_plan(&items, "coins", &counts, &modules, false).expect("plan should be feasible");
     let prioritized = find_production_plan(&items, "coins", &counts, &modules, true)
