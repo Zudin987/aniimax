@@ -144,17 +144,57 @@
                     <p class="hint small">These take a rare currency to unlock. Plans only use the ones you tick.</p>
                     <div class="special-grid" id="special-grid"></div>
                     <p class="assume-title">Seasonal recipes</p>
-                    <label class="aniimo-cap" title="Adds the Harvest Moon crops and quest recipes to the optimizer">
-                        <input type="checkbox" id="harvest-moon-enabled"> Harvest Moon Festival
-                    </label>
-                    <p class="hint small">Requires RV 10 in Simple mode. Enabling assumes you completed the event intro and have the Moondew Radish, Waxing Moon Pepper, Roasted Waxing Moon Pepper and Moondew Radish Slices recipe notes.</p>
-                    <div class="special-grid" id="harvest-special-grid">
-                        <label class="special-option"><input type="checkbox" id="harvest-umbral-hot-pot"> <span>Umbral Hot Pot note (80 Moonray Wheat)</span></label>
-                        <label class="special-option"><input type="checkbox" id="harvest-umbral-pickle"> <span>Umbral Pickle note (80 Moonray Wheat)</span></label>
-                        <label class="special-option"><input type="checkbox" id="harvest-umbral-sauce"> <span>Umbral Sweet Spicy Sauce note (80 Moonray Wheat)</span></label>
-                        <label class="special-option"><input type="checkbox" id="harvest-platter"> <span>Harvest Platter note (120 Moonray Wheat)</span></label>
+                    <div class="seasonal-card" id="harvest-moon-card">
+                        <div class="seasonal-card-head">
+                            <label class="seasonal-master" title="Let the optimizer consider Harvest Moon crops and recipes">
+                                <input type="checkbox" id="harvest-moon-enabled">
+                                <span class="seasonal-master-copy">
+                                    <strong>Harvest Moon Festival</strong>
+                                    <span>Include seasonal production when it helps the selected goal.</span>
+                                </span>
+                            </label>
+                            <span class="seasonal-status" id="harvest-moon-status">Off</span>
+                        </div>
+
+                        <div class="seasonal-details" id="harvest-moon-details" hidden>
+                            <div class="seasonal-block">
+                                <div class="seasonal-block-title">Included automatically</div>
+                                <div class="seasonal-chip-list" aria-label="Harvest Moon recipes included automatically">
+                                    <span class="seasonal-chip">Moondew Radish</span>
+                                    <span class="seasonal-chip">Waxing Moon Pepper</span>
+                                    <span class="seasonal-chip">Roasted Waxing Moon Pepper</span>
+                                    <span class="seasonal-chip">Moondew Radish Slices</span>
+                                </div>
+                            </div>
+
+                            <div class="seasonal-block seasonal-unlocks">
+                                <div class="seasonal-block-title">Extra recipe notes you own</div>
+                                <p class="hint small">Tick only the notes you bought from the event shop.</p>
+                                <div class="harvest-note-grid" id="harvest-special-grid">
+                                    <label class="seasonal-note-option">
+                                        <input type="checkbox" id="harvest-umbral-hot-pot">
+                                        <span><strong>Umbral Hot Pot</strong><small>80 Moonray Wheat</small></span>
+                                    </label>
+                                    <label class="seasonal-note-option">
+                                        <input type="checkbox" id="harvest-umbral-pickle">
+                                        <span><strong>Umbral Pickle</strong><small>80 Moonray Wheat</small></span>
+                                    </label>
+                                    <label class="seasonal-note-option">
+                                        <input type="checkbox" id="harvest-umbral-sauce">
+                                        <span><strong>Umbral Sweet Spicy Sauce</strong><small>80 Moonray Wheat</small></span>
+                                    </label>
+                                    <label class="seasonal-note-option">
+                                        <input type="checkbox" id="harvest-platter">
+                                        <span><strong>Harvest Platter</strong><small>120 Moonray Wheat</small></span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <p class="seasonal-footnote" id="harvest-moon-availability">
+                                Requires RV 10 in Simple mode. The optimizer considers enabled Harvest Moon recipes, but only uses them when their requirements can be met and they improve the plan.
+                            </p>
+                        </div>
                     </div>
-                    <p class="hint small">The four shop recipes stay locked until you tick the notes you bought. The entire seasonal set is off by default so it never changes normal plans after the event.</p>
                     <p class="assume-title">Recipes to skip</p>
                     <p class="hint small">Plans won't use these, e.g. recipes behind unlocks you don't have yet. You can also skip one straight from a plan with its ✕.</p>
                     <div class="skip-add">
