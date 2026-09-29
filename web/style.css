@@ -2034,6 +2034,184 @@ tr:hover .skip-row,
     cursor: pointer;
 }
 
+/* Harvest Moon is a separate opt-in card so the seasonal controls do not crowd the generic
+   special-recipe list. The details collapse completely while the event is off. */
+.seasonal-card {
+    margin-top: 0.6rem;
+    padding: 0.85rem 0.9rem;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--surface-2) 72%, transparent);
+}
+
+.seasonal-card.is-enabled {
+    border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+
+.seasonal-card.is-unavailable {
+    border-color: color-mix(in srgb, var(--warning) 45%, var(--border));
+}
+
+.seasonal-card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.seasonal-master {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    min-width: 0;
+    cursor: pointer;
+}
+
+.seasonal-master > input {
+    flex: 0 0 auto;
+}
+
+.seasonal-master-copy {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.seasonal-master-copy strong {
+    font-size: 0.9rem;
+    color: var(--text);
+}
+
+.seasonal-master-copy > span {
+    margin-top: 0.05rem;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+
+.seasonal-status {
+    flex: 0 0 auto;
+    padding: 0.2rem 0.5rem;
+    border-radius: 999px;
+    background: var(--surface);
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.seasonal-card.is-enabled .seasonal-status {
+    color: var(--accent);
+}
+
+.seasonal-card.is-unavailable .seasonal-status {
+    color: var(--warning);
+}
+
+.seasonal-details {
+    margin-top: 0.85rem;
+    padding-top: 0.8rem;
+    border-top: 1px solid var(--border);
+}
+
+.seasonal-block + .seasonal-block {
+    margin-top: 0.9rem;
+}
+
+.seasonal-block-title {
+    margin-bottom: 0.45rem;
+    font-size: 0.76rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.seasonal-chip-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+}
+
+.seasonal-chip {
+    padding: 0.25rem 0.5rem;
+    border-radius: 7px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    font-size: 0.78rem;
+}
+
+.harvest-note-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+    margin-top: 0.55rem;
+}
+
+.seasonal-note-option {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.55rem;
+    min-width: 0;
+    padding: 0.55rem 0.65rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+    cursor: pointer;
+}
+
+.seasonal-note-option > input {
+    flex: 0 0 auto;
+    margin-top: 0.18rem;
+}
+
+.seasonal-note-option > span {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.seasonal-note-option strong {
+    font-size: 0.82rem;
+    font-weight: 500;
+    line-height: 1.3;
+}
+
+.seasonal-note-option small {
+    margin-top: 0.15rem;
+    color: var(--text-muted);
+    font-size: 0.72rem;
+}
+
+.seasonal-note-option:has(input:checked) {
+    border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+
+.seasonal-note-option:has(input:disabled) {
+    opacity: 0.55;
+    cursor: default;
+}
+
+.seasonal-footnote {
+    margin: 0.85rem 0 0;
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    line-height: 1.45;
+}
+
+.recipes-section > .assume-title {
+    margin-top: 1.2rem;
+}
+
+@media (max-width: 600px) {
+    .seasonal-card-head {
+        align-items: flex-start;
+    }
+
+    .harvest-note-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
 .tag.special {
     color: var(--accent);
     background: color-mix(in srgb, var(--accent) 14%, transparent);
