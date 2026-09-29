@@ -132,6 +132,12 @@ pub struct ExactPlan {
     pub pairs: Vec<ExactPair>,
     /// Level-ups per day, for a level-up goal (see [`PACE_UNIT`]).
     pub pace: Option<f64>,
+    /// Grid power drawn by E-Mode facilities in this plan.
+    pub power_used: u32,
+    /// Full-power grid capacity available from the configured generators.
+    pub power_capacity: u32,
+    /// Minimum number of those generators needed to cover `power_used`.
+    pub generators_used: u32,
 }
 
 /// What a plan optimizes.
@@ -250,6 +256,11 @@ struct Model<'a> {
     priority: Vec<u8>,
     kinds: Vec<VarKind<'a>>,
     constraints: Vec<Constraint>,
+    /// Full-power E-Mode grid capacity available to this solve.
+    power_capacity: u32,
+    /// Per-generator capacity, largest/selection worked out after solving to report the minimum
+    /// number of staffed generators the chosen E-Mode load actually needs.
+    generator_powers: Vec<u32>,
 }
 
 impl<'a> Model<'a> {
@@ -310,6 +321,15 @@ fn build_model<'a>(
                 && item.production_time > 0.0
         })
         .collect();
+    let power_capacity = crate::models::grid_power_capacity(facility_counts, module_levels);
+    let mut generator_powers = Vec::new();
+    if module_levels.power_module > 0 {
+        for (count, level) in facility_counts.tiers("Crackle Generator") {
+            let power = crate::models::generator_power(level.min(module_levels.power_module));
+            generator_powers.extend(std::iter::repeat(power).take(count as usize));
+        }
+    }
+    generator_powers.sort_unstable_by(|a, b| b.cmp(a));
     let mut model = Model {
         objective: Vec::new(),
         earnings: Vec::new(),
@@ -318,6 +338,8 @@ fn build_model<'a>(
         priority: Vec::new(),
         kinds: Vec::new(),
         constraints: Vec::new(),
+        power_capacity,
+        generator_powers,
     };
 
     // Seeds are paid in coins, so they only come off a coin total.
@@ -498,7 +520,6 @@ fn build_model<'a>(
     // E-Mode runs only at full supply in this model. We deliberately do not guess the game's
     // partial-supply speed formula: the solver may use powered machines only while their combined
     // draw stays within the staffed Crackle Generators' full capacity.
-    let power_capacity = crate::models::grid_power_capacity(facility_counts, module_levels);
     if !electric_units_of.is_empty() {
         let terms: Vec<(usize, f64)> = electric_units_of
             .iter()
@@ -506,7 +527,7 @@ fn build_model<'a>(
                 (*units, crate::models::e_mode_power_per_unit(&recipe.facility, *tier_level) as f64)
             })
             .collect();
-        model.constrain(terms, ComparisonOp::Le, power_capacity as f64);
+        model.constrain(terms, ComparisonOp::Le, model.power_capacity as f64);
     }
 
     // Growing environments: plots of a crop needing environment E at facility F must be covered.
@@ -982,6 +1003,17 @@ fn plan_from(model: &Model, value: f64, upper_bound: f64, proven_optimal: bool, 
     }
     // Units set to a recipe that doesn't run are just idle.
     units.retain(|name, _| recipe_rates.contains_key(name));
+    electric_units.retain(|name, _| recipe_rates.contains_key(name));
+    let power_used: u32 = model.kinds.iter().zip(values).filter_map(|(kind, &v)| match kind {
+        VarKind::ElectricUnits { recipe, tier_level } if v > 0.5 => Some(
+            v.round() as u32 * crate::models::e_mode_power_per_unit(&recipe.facility, *tier_level)
+        ),
+        _ => None,
+    }).sum();
+    let mut covered = 0u32;
+    let generators_used = model.generator_powers.iter().take_while(|&&p| {
+        if covered >= power_used { false } else { covered = covered.saturating_add(p); true }
+    }).count() as u32;
     let rate_per_second = model.earnings.iter().zip(values).map(|(c, v)| c * v).sum();
     ExactPlan {
         rate_per_second,
@@ -996,6 +1028,9 @@ fn plan_from(model: &Model, value: f64, upper_bound: f64, proven_optimal: bool, 
         environment,
         pairs,
         pace,
+        power_used,
+        power_capacity: model.power_capacity,
+        generators_used,
     }
 }
 
