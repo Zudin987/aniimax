@@ -654,7 +654,7 @@ function updateHarvestMoonControls() {
 
     if (availability && enabled) {
         availability.textContent = rvAllowed
-            ? 'Harvest Moon production is available to the optimizer now. It may use any included recipe when its ingredients and facilities are available and it improves the selected goal.'
+            ? 'Harvest Moon is active. The optimizer always reserves 2 Farmland for Moondew Radish and 2 for Waxing Moon Pepper for mutation rolls, then uses any remaining seasonal production only when it helps the selected goal.'
             : 'Harvest Moon unlocks at RV 10. The recipes stay excluded from the plan at your current RV level.';
     }
 }

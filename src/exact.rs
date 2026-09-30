@@ -384,6 +384,27 @@ fn build_model<'a>(
         rate_of.push((recipe, rate));
     }
 
+    // Harvest Moon mutation farming is a gameplay requirement rather than a profitability choice:
+    // while the seasonal set is enabled, keep at least 2 Farmland plots on each of the two event
+    // crops so mutated crops can continue to roll. The seasonal set is considered enabled here
+    // only when both base crop recipes survived the frontend's exclusion list.
+    //
+    // Force two plot-equivalents of throughput as well as two assigned plots. Without the rate
+    // floor, an optimizer could reserve two plots but leave them effectively idle, which would not
+    // trigger the intended mutation farming in game.
+    const HARVEST_MUTATION_CROPS: [&str; 2] = ["moondew_radish", "waxing_moon_pepper"];
+    let harvest_enabled = HARVEST_MUTATION_CROPS
+        .iter()
+        .all(|name| recipes.iter().any(|recipe| recipe.name == *name));
+    if harvest_enabled {
+        for name in HARVEST_MUTATION_CROPS {
+            let Some((recipe, rate)) = rate_of.iter().find(|(recipe, _)| recipe.name == name).copied() else { continue };
+            let Some((_, units)) = units_of.iter().find(|(recipe, _)| recipe.name == name).copied() else { continue };
+            model.constrain(vec![(units, 1.0)], ComparisonOp::Ge, 2.0);
+            model.constrain(vec![(rate, recipe.production_time)], ComparisonOp::Ge, 2.0);
+        }
+    }
+
     // Item balances: made >= used + sold.
     let mut balance: BTreeMap<&str, Vec<(usize, f64)>> = BTreeMap::new();
     for &(recipe, rate) in &rate_of {
@@ -1631,6 +1652,9 @@ pub fn to_production_plan(
         let used = used.min(owned);
         for (recipe, units, rate) in rows {
             let mut reason = uses_of(recipe);
+            if matches!(crate::models::base_item_name(&recipe.name), "moondew_radish" | "waxing_moon_pepper") {
+                reason = format!("{reason}; keep at least 2 plots planted for Harvest Moon mutation rolls");
+            }
             if takes_turns(recipe) {
                 let others: Vec<&str> = shared.iter().copied().filter(|n| *n != recipe.name).collect();
                 if !others.is_empty() {
