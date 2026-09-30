@@ -24,6 +24,26 @@ fn item(name: &str, seconds: f64) -> ProductionItem {
     }
 }
 
+fn crop(name: &str, cost: f64, sell_value: f64) -> ProductionItem {
+    ProductionItem {
+        name: name.to_string(),
+        facility: "Farmland".to_string(),
+        raw_materials: None,
+        required_amount: None,
+        cost: Some(cost),
+        sell_currency: "coins".to_string(),
+        sell_value,
+        production_time: 100.0,
+        yield_amount: 1,
+        energy: None,
+        facility_level: 1,
+        module_requirement: None,
+        workload: None,
+        byproduct: None,
+        environment: None,
+    }
+}
+
 fn solve(items: &[ProductionItem], counts: &FacilityCounts, modules: &ModuleLevels) -> aniimax::exact::ExactPlan {
     let plan = solve_exact(
         items,
@@ -122,4 +142,26 @@ fn harvest_moon_chain_is_present_in_release_data() {
         "roasted_waxing_moon_pepper".to_string(),
         "moondew_radish_slices".to_string(),
     ]);
+}
+
+
+#[test]
+fn harvest_moon_keeps_two_plots_of_each_mutation_crop_even_when_unprofitable() {
+    let items = vec![
+        crop("moondew_radish", 100.0, 0.0),
+        crop("waxing_moon_pepper", 100.0, 0.0),
+        crop("profitable_crop", 0.0, 1_000.0),
+    ];
+    let counts = FacilityCounts::only(&[("Farmland", 6, 1)]);
+    let modules = ModuleLevels::default();
+    let plan = solve(&items, &counts, &modules);
+
+    assert_eq!(plan.units.get("moondew_radish"), Some(&2));
+    assert_eq!(plan.units.get("waxing_moon_pepper"), Some(&2));
+    assert_eq!(plan.units.get("profitable_crop"), Some(&2));
+
+    let radish_rate = plan.recipe_rates["moondew_radish"];
+    let pepper_rate = plan.recipe_rates["waxing_moon_pepper"];
+    assert!(radish_rate * 100.0 >= 2.0 - 1e-9);
+    assert!(pepper_rate * 100.0 >= 2.0 - 1e-9);
 }
