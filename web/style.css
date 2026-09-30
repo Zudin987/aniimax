@@ -2209,6 +2209,20 @@ tr:hover .skip-row,
     font-size: 0.78rem;
 }
 
+.harvest-mutation-note {
+    margin: 0.65rem 0 0;
+    padding: 0.55rem 0.65rem;
+    border-left: 2px solid var(--accent);
+    background: color-mix(in srgb, var(--accent) 7%, transparent);
+    color: var(--text-muted);
+    font-size: 0.77rem;
+    line-height: 1.45;
+}
+
+.harvest-mutation-note strong {
+    color: var(--text);
+}
+
 .harvest-note-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
