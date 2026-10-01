@@ -230,14 +230,64 @@ pub fn no_personality_efficiency(level: u32, required: u32) -> f64 {
 /// [`add_uncovered_variants`]).
 pub const UNCOVERED_SUFFIX: &str = "__uncovered";
 
-/// The recipe or crop behind an item name: the name without a roster copy's `__by<member>` (see
-/// [`crew_variants`]) or an uncovered variant's suffix.
-pub fn base_item_name(name: &str) -> &str {
-    let name = match name.rsplit_once(CREW_SUFFIX) {
-        Some((base, member)) if !member.is_empty() && member.bytes().all(|b| b.is_ascii_digit()) => base,
-        _ => name,
+/// Marks a fixed-timer electric (E-Mode) variant. This stays internal to the planner.
+pub const ELECTRIC_SUFFIX: &str = "__electric";
+
+/// Whether an internal recipe name is its powered E-Mode variant.
+pub fn is_electric_item(name: &str) -> bool {
+    name.ends_with(ELECTRIC_SUFFIX)
+}
+
+/// The recipe or crop behind an internal variant: strips roster-copy, E-Mode and uncovered
+/// suffixes. Variants may be stacked, so keep peeling until nothing changes.
+pub fn base_item_name(mut name: &str) -> &str {
+    loop {
+        let before = name;
+        name = match name.rsplit_once(CREW_SUFFIX) {
+            Some((base, member)) if !member.is_empty() && member.bytes().all(|b| b.is_ascii_digit()) => base,
+            _ => name,
+        };
+        name = name.strip_suffix(ELECTRIC_SUFFIX).unwrap_or(name);
+        name = name.strip_suffix(UNCOVERED_SUFFIX).unwrap_or(name);
+        if name == before {
+            return name;
+        }
+    }
+}
+
+/// Full-power E-Mode draw for one facility at its ACTUAL facility level. Most powered processors
+/// use 15 power per level; gathering/resource facilities and the two Lightning machines use 30.
+pub fn e_mode_power_per_unit(facility: &str, facility_level: u32) -> u32 {
+    let per_level = match facility {
+        "Mine" | "Well" | "Aniipod Maker" | "Dance Pad Polisher" => 30,
+        _ => 15,
     };
-    name.strip_suffix(UNCOVERED_SUFFIX).unwrap_or(name)
+    per_level * facility_level.max(1)
+}
+
+/// Crackle Generator output at a Power Module / generator level.
+pub fn generator_power(level: u32) -> u32 {
+    match level {
+        1 => 600,
+        2 => 800,
+        3 => 1000,
+        4 => 1200,
+        5.. => 1500,
+        _ => 0,
+    }
+}
+
+/// Total full-power grid capacity from the generators the player has built. A generator cannot
+/// operate above the unlocked Power Module level.
+pub fn grid_power_capacity(facilities: &FacilityCounts, modules: &ModuleLevels) -> u32 {
+    if modules.power_module == 0 {
+        return 0;
+    }
+    facilities
+        .tiers("Crackle Generator")
+        .into_iter()
+        .map(|(count, level)| count * generator_power(level.min(modules.power_module)))
+        .sum()
 }
 
 /// Marks a recipe worked by one Aniimo on the player's roster, e.g. `milled_rice__by2` for the
@@ -1346,6 +1396,7 @@ impl FacilityCounts {
 ///     kitchen_module: 2,     // Unlocks super wheat flour
 ///     resource_detector: 1,   // Unlocks high-speed rock
 ///     crafting_module: 1,    // Unlocks advanced wood carving
+///     power_module: 0,       // E-Mode still locked in this example
 /// };
 ///
 /// assert!(modules.can_use("ecological_module", 1));
@@ -1360,6 +1411,8 @@ pub struct ModuleLevels {
     pub resource_detector: u32,
     /// Level of Crafting Module (unlocks advanced wood carving at 1)
     pub crafting_module: u32,
+    /// Level of Power Module. From level 1, Crackle Generators can run E-Mode.
+    pub power_module: u32,
 }
 
 impl ModuleLevels {
@@ -1384,6 +1437,7 @@ impl ModuleLevels {
             "kitchen_module" => self.kitchen_module,
             "resource_detector" => self.resource_detector,
             "crafting_module" => self.crafting_module,
+            "power_module" => self.power_module,
             _ => 0,
         }
     }
