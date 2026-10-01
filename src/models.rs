@@ -231,10 +231,17 @@ pub const UNCOVERED_SUFFIX: &str = "__uncovered";
 
 /// Marks a fixed-timer electric (E-Mode) variant. This stays internal to the planner.
 pub const ELECTRIC_SUFFIX: &str = "__electric";
+/// Marks the verified 120%-efficiency E-Mode band. The plain electric suffix is the 100% band.
+pub const ELECTRIC_BOOST_SUFFIX: &str = "__electric_boost";
 
-/// Whether an internal recipe name is its powered E-Mode variant.
+/// Whether an internal recipe name is either powered E-Mode operating band.
 pub fn is_electric_item(name: &str) -> bool {
-    name.ends_with(ELECTRIC_SUFFIX)
+    name.ends_with(ELECTRIC_SUFFIX) || name.ends_with(ELECTRIC_BOOST_SUFFIX)
+}
+
+/// Whether an internal recipe is the verified 120%-efficiency E-Mode variant.
+pub fn is_boosted_electric_item(name: &str) -> bool {
+    name.ends_with(ELECTRIC_BOOST_SUFFIX)
 }
 
 /// The recipe or crop behind an internal variant: strips roster-copy, E-Mode and uncovered
@@ -246,6 +253,7 @@ pub fn base_item_name(mut name: &str) -> &str {
             Some((base, member)) if !member.is_empty() && member.bytes().all(|b| b.is_ascii_digit()) => base,
             _ => name,
         };
+        name = name.strip_suffix(ELECTRIC_BOOST_SUFFIX).unwrap_or(name);
         name = name.strip_suffix(ELECTRIC_SUFFIX).unwrap_or(name);
         name = name.strip_suffix(UNCOVERED_SUFFIX).unwrap_or(name);
         if name == before {
@@ -284,6 +292,22 @@ pub fn generator_power(level: u32) -> u32 {
         3 => 1000,
         4 => 1200,
         5.. => 1500,
+        _ => 0,
+    }
+}
+
+/// Maximum total draw that keeps the whole grid in the verified 120% E-Mode efficiency band.
+/// These are the post-release thresholds for Generator Lv.1..5. Above this threshold, but no
+/// higher than the rated generator output, the calculator uses the verified 100% E-Mode band.
+/// The game can continue below 100% when overloaded, but Aniimax deliberately does not model
+/// that region until its exact scaling is reliably known.
+pub fn generator_boost_power(level: u32) -> u32 {
+    match level {
+        1 => 500,
+        2 => 660,
+        3 => 800,
+        4 => 1000,
+        5.. => 1200,
         _ => 0,
     }
 }
@@ -1250,6 +1274,9 @@ pub struct FacilityCounts {
     /// Growing jobs used by custom-roster planning so reclaiming/sowing/watering/harvesting
     /// consume real Aniimo time instead of merely checking that an ability exists somewhere.
     grower_steps: Option<GrowerSteps>,
+    /// When planning a generic Best/per-facility setup, the Lightning level available for the
+    /// Crackle Generator. None means the Minimum setup may assume the generator-tier minimum.
+    generator_lightning_level: Option<u32>,
 }
 
 impl Default for FacilityCounts {
@@ -1261,6 +1288,7 @@ impl Default for FacilityCounts {
             season_currency_per_day: None,
             harvest_mutation_plots: 2,
             grower_steps: None,
+            generator_lightning_level: None,
         }
     }
 }
@@ -1275,6 +1303,17 @@ impl FacilityCounts {
     /// The Aniimo the player has, if planning with them.
     pub fn crew(&self) -> Option<&Crew> {
         self.crew.as_ref()
+    }
+
+    /// Sets the Lightning level available to a generic (non-roster) Crackle Generator plan.
+    /// Rated generator output is only available when this reaches the tier requirement.
+    pub fn set_generator_lightning_level(&mut self, level: Option<u32>) -> &mut Self {
+        self.generator_lightning_level = level;
+        self
+    }
+
+    pub fn generator_lightning_level(&self) -> Option<u32> {
+        self.generator_lightning_level
     }
 
     /// Supplies Farmland/Woodland job data for roster-aware capacity planning.
@@ -1342,6 +1381,7 @@ impl FacilityCounts {
             season_currency_per_day: None,
             harvest_mutation_plots: 2,
             grower_steps: None,
+            generator_lightning_level: None,
         };
         for (name, count, level) in pairs {
             fc.set(name, *count, *level);
@@ -1359,6 +1399,7 @@ impl FacilityCounts {
             season_currency_per_day: None,
             harvest_mutation_plots: 2,
             grower_steps: None,
+            generator_lightning_level: None,
         }
     }
 
