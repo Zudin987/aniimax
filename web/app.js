@@ -1306,7 +1306,7 @@ function renderHomelandLayout(plan) {
             layout.needsPowerPole ? `${layout.needsPowerPole} E-Mode machine(s) sit outside direct 11×11 generator coverage; connect them with Crackle Power Poles in game.` : '',
         ].filter(Boolean).join(' ');
         document.getElementById('layout-summary').textContent = `${trips > 0
-            ? `${formatNumber(Math.round(trips))} trips/hour to ${storages.length} Storage Unit${storages.length === 1 ? '' : 's'}, ${(walked / trips).toFixed(1)} tiles each on average, in the ${cells.length} plot${cells.length === 1 ? '' : 's'} open at RV ${homeLevel}.`
+            ? `${formatNumber(Math.round(trips))} batch deliveries/hour before Hauling batching, to ${storages.length} Storage Unit${storages.length === 1 ? '' : 's'}, ${(walked / trips).toFixed(1)} tiles each on average, in the ${cells.length} plot${cells.length === 1 ? '' : 's'} open at RV ${homeLevel}.`
             : 'Nothing in this plan needs hauling to storage.'}${notes ? ` ${notes}` : ''}`;
         lastLayout = { layout, homeLevel };
         drawLayout(lastLayout);
@@ -1381,7 +1381,7 @@ function homelandSvg(layout, homeLevel) {
         const detail = m.jobs ? m.jobs.map(j => prettyItem(j.item)).join(', ') : m.crop ? prettyItem(m.crop) : m.building && m.mode ? m.mode : 'Idle';
         const tip = tipAttrs(m.facility, {
             detail: `${detail}${m.electric ? directPower ? ' · E-Mode · direct generator coverage' : ' · E-Mode · needs Power Pole coverage' : ''}`,
-            stats: m.weight > 0 ? `${formatRate(m.weight)} trips/hour · ${away.toFixed(1)} tiles from storage` : '',
+            stats: m.weight > 0 ? `${formatRate(m.weight)} batch deliveries/hour · ${away.toFixed(1)} tiles from storage` : '',
             color,
         });
         const label = Math.min(m.w, m.h) >= 1.5 ? `<text x="${m.x + m.w / 2}" y="${m.y + m.h / 2}" font-size="${Math.min(0.8, m.w / 3)}">${initialsOf(m.facility)}</text>` : '';
