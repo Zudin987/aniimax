@@ -1,6 +1,6 @@
 use aniimax::data::add_e_mode_variants;
 use aniimax::exact::{check_plan, solve_exact, Goal};
-use aniimax::models::{FacilityCounts, ModuleLevels, ProductionItem};
+use aniimax::models::{FacilityCounts, ModuleLevels, ProductionItem, SeasonTerms};
 use std::time::Duration;
 
 fn item(name: &str, facility: &str, seconds: f64, sell_value: f64) -> ProductionItem {
@@ -105,4 +105,44 @@ fn harvest_moon_keeps_two_plots_of_each_mutation_crop_when_unprofitable() {
     assert_eq!(plan.units.get("profitable_crop"), Some(&2));
     assert!(plan.recipe_rates["moondew_radish"] * 100.0 >= 2.0 - 1e-9);
     assert!(plan.recipe_rates["waxing_moon_pepper"] * 100.0 >= 2.0 - 1e-9);
+}
+
+
+#[test]
+fn harvest_mutation_minimum_is_configurable() {
+    let items = vec![
+        item("moondew_radish", "Farmland", 100.0, 0.0),
+        item("waxing_moon_pepper", "Farmland", 100.0, 0.0),
+        item("profitable_crop", "Farmland", 100.0, 1_000.0),
+    ];
+    let mut counts = FacilityCounts::only(&[("Farmland", 7, 1)]);
+    counts.set_season_limits(None, 1);
+    let plan = solve(&items, &counts, &ModuleLevels::default());
+
+    assert_eq!(plan.units.get("moondew_radish"), Some(&1));
+    assert_eq!(plan.units.get("waxing_moon_pepper"), Some(&1));
+    assert_eq!(plan.units.get("profitable_crop"), Some(&5));
+}
+
+#[test]
+fn harvest_moon_wheat_budget_caps_planting_rate() {
+    let mut radish = item("moondew_radish", "Farmland", 100.0, 1_000.0);
+    radish.season = Some(SeasonTerms { points: 1.0, seed_cost: 4.0 });
+    let mut pepper = item("waxing_moon_pepper", "Farmland", 100.0, 900.0);
+    pepper.season = Some(SeasonTerms { points: 1.0, seed_cost: 4.0 });
+    let items = vec![radish, pepper];
+
+    let mut counts = FacilityCounts::only(&[("Farmland", 10, 1)]);
+    // 3,456 Wheat/day permits 0.01 combined batches/sec at 4 Wheat per planting.
+    counts.set_season_limits(Some(3_456.0), 0);
+    let plan = solve(&items, &counts, &ModuleLevels::default());
+
+    let spend_per_day: f64 = plan
+        .recipe_rates
+        .iter()
+        .filter_map(|(name, rate)| items.iter().find(|i| i.name == *name).map(|i| rate * i.season.unwrap().seed_cost))
+        .sum::<f64>()
+        * 86_400.0;
+    assert!(spend_per_day <= 3_456.0 + 1e-5, "spent {spend_per_day}");
+    assert!(spend_per_day >= 3_455.0, "optimizer should use almost all profitable Wheat budget");
 }
