@@ -1594,6 +1594,8 @@ function startLayoutSim(svg, flows, stock) {
         flow,
         jobs: flow.jobs.map(job => ({ ...job, terms: recipeTerms(job.item) })),
         line: lines[k], ring: rings[k], fill: rings[k]?.querySelector('.ring-fill'),
+        held: new Map(),
+        heldCount: 0,
     }));
     // Something no piece here makes, and no stock covers, is taken as always there, so a recipe
     // using it isn't held up forever.
@@ -1620,6 +1622,8 @@ function resetLayoutSim(sim) {
         unit.job = null;
         unit.until = null;
         unit.free = 0;
+        unit.held = new Map();
+        unit.heldCount = 0;
         unit.lastDot = -Infinity;
         unit.line?.classList.remove('live');
         showRing(unit, 0, false);
@@ -1659,6 +1663,27 @@ function simStart(sim, unit, at) {
     unit.until = at + job.cycle;
 }
 
+// Finished output sits at the facility until its local output stack reaches the station cap.
+// A Hauling pickup then exposes that stack to the shared Home storage. Hauler travel/carry time is
+// still not modeled because no reliable movement/carry-capacity data is available.
+function simFinishBatch(sim, unit, job, age) {
+    const { makes, byproduct, yield: amount } = job.terms;
+    unit.held.set(makes, (unit.held.get(makes) || 0) + amount);
+    unit.heldCount += amount;
+    if (byproduct) {
+        unit.held.set(byproduct[0], (unit.held.get(byproduct[0]) || 0) + byproduct[1]);
+        unit.heldCount += byproduct[1];
+    }
+
+    const limit = Math.max(1, job.outputLimit || 1);
+    if (unit.heldCount + 1e-9 < limit) return;
+
+    unit.held.forEach((n, item) => sim.store.set(item, (sim.store.get(item) || 0) + n));
+    unit.held.clear();
+    unit.heldCount = 0;
+    deliver(sim, unit, age);
+}
+
 function stepLayoutSim(sim, dt) {
     const from = sim.game;
     sim.game += dt;
@@ -1672,10 +1697,7 @@ function stepLayoutSim(sim, dt) {
         unit.jobs.forEach(job => { job.pace = Math.min(1 + job.rate * SIM_STEP, job.pace + job.rate * dt); });
         // Each batch finished within the step is delivered then, and the next starts right away.
         while (unit.until != null && unit.until <= sim.game) {
-            const { makes, byproduct, yield: amount } = unit.job.terms;
-            sim.store.set(makes, (sim.store.get(makes) || 0) + amount);
-            if (byproduct) sim.store.set(byproduct[0], (sim.store.get(byproduct[0]) || 0) + byproduct[1]);
-            deliver(sim, unit, (sim.game - unit.until) / sim.speed);
+            simFinishBatch(sim, unit, unit.job, (sim.game - unit.until) / sim.speed);
             unit.free = unit.until;
             unit.until = null;
             unit.job = null;
