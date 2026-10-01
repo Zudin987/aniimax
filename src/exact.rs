@@ -136,6 +136,8 @@ pub struct ExactPlan {
     pub power_capacity: u32,
     /// Crackle Generators the chosen plan actually switches on.
     pub generators_used: u32,
+    /// Active generator tiers as `(tier level, count)`.
+    pub generators: Vec<(u32, u32)>,
     /// Units/sec sold of each item.
     pub sold: BTreeMap<String, f64>,
     pub environment: Vec<ExactEnvironment>,
@@ -1107,6 +1109,7 @@ fn plan_from(model: &Model, value: f64, upper_bound: f64, proven_optimal: bool, 
     let mut sold = BTreeMap::new();
     let mut power_used = 0u32;
     let mut generators_used = 0u32;
+    let mut generators: Vec<(u32, u32)> = Vec::new();
     let mut environment = Vec::new();
     let mut pairs: Vec<ExactPair> = Vec::new();
     let mut pace = None;
@@ -1142,8 +1145,10 @@ fn plan_from(model: &Model, value: f64, upper_bound: f64, proven_optimal: bool, 
                     count * crate::models::e_mode_power_per_unit(facility, *tier_level),
                 );
             }
-            VarKind::Generator { .. } if v > 0.5 => {
-                generators_used = generators_used.saturating_add(v.round() as u32);
+            VarKind::Generator { tier_level } if v > 0.5 => {
+                let count = v.round() as u32;
+                generators_used = generators_used.saturating_add(count);
+                generators.push((*tier_level, count));
             }
             VarKind::Sold(name) if v > 1e-9 => {
                 sold.insert(name.to_string(), v);
@@ -1200,6 +1205,7 @@ fn plan_from(model: &Model, value: f64, upper_bound: f64, proven_optimal: bool, 
         power_used,
         power_capacity: model.power_capacity,
         generators_used,
+        generators,
         sold,
         environment,
         pairs,
