@@ -136,8 +136,10 @@ pub struct ExactPlan {
     pub power_capacity: u32,
     /// Crackle Generators the chosen plan actually switches on.
     pub generators_used: u32,
-    /// Power supplied by the generators actually switched on.
+    /// Rated power supplied by the generators actually switched on.
     pub power_supply: u32,
+    /// E-Mode grid work efficiency selected by the optimizer: 0, 100 or 120 percent.
+    pub power_efficiency: u32,
     /// Active generator tiers as `(tier level, count)`.
     pub generators: Vec<(u32, u32)>,
     /// Units/sec sold of each item.
@@ -243,8 +245,12 @@ enum VarKind<'a> {
     ElectricUnits { recipe: &'a ProductionItem, tier_level: u32 },
     /// A physical machine of an exact tier switched into E-Mode.
     ElectricMachines { facility: &'a str, tier_level: u32 },
-    /// A Crackle Generator of an exact tier switched on, with the power this setup gets from it.
-    Generator { tier_level: u32, power: u32 },
+    /// One global switch: 1 means the powered grid uses the verified 120% efficiency band;
+    /// 0 means the 100% rated-output band.
+    GridBoost,
+    /// A Crackle Generator of an exact tier switched on. `usable_power` is the draw allowed in
+    /// this grid band; `rated_power` is what the generator reports as its maximum output.
+    Generator { tier_level: u32, usable_power: u32, rated_power: u32, boosted: bool },
     Sold(&'a str),
     Pace,
     /// Made beyond what the level-up needs, of one of its costs.
@@ -307,7 +313,7 @@ impl<'a> Model<'a> {
         self.bounds.push(bounds);
         self.integer.push(integer);
         self.priority.push(match &kind {
-            VarKind::Environment { .. } | VarKind::EnvironmentPair { .. } | VarKind::Generator { .. } => 0,
+            VarKind::Environment { .. } | VarKind::EnvironmentPair { .. } | VarKind::GridBoost | VarKind::Generator { .. } => 0,
             VarKind::Units(recipe) if recipe.raw_materials.is_none() => 1,
             VarKind::ElectricUnits { recipe, .. } if recipe.raw_materials.is_none() => 1,
             VarKind::ElectricMachines { facility, .. } if *facility == "Mine" || *facility == "Well" => 1,
@@ -382,6 +388,11 @@ fn build_model<'a>(
     let mut rate_of: Vec<(&ProductionItem, usize)> = Vec::new();
     let mut units_of: Vec<(&ProductionItem, usize)> = Vec::new();
     let mut electric_units_of: Vec<(&ProductionItem, u32, usize)> = Vec::new();
+    // A connected grid has one supply-rate efficiency. Choose between the two verified bands:
+    // 120% below the decoded low-draw threshold, or 100% up to rated output.
+    let grid_boost = recipes.iter().any(|r| crate::models::is_electric_item(&r.name)).then(|| {
+        model.add(0.0, (0.0, 1.0), true, VarKind::GridBoost)
+    });
     for &recipe in &recipes {
         let rate = model.add(-seed_cost(recipe), (0.0, f64::INFINITY), false, VarKind::Rate(recipe));
         if crate::models::is_electric_item(&recipe.name) {
@@ -396,6 +407,19 @@ fn build_model<'a>(
                     !takes_turns(recipe),
                     VarKind::ElectricUnits { recipe, tier_level },
                 );
+                if let Some(boost) = grid_boost {
+                    if crate::models::is_boosted_electric_item(&recipe.name) {
+                        // Boosted electric units exist only when the whole grid is in the 120% band.
+                        model.constrain(vec![(units, 1.0), (boost, -(count as f64))], ComparisonOp::Le, 0.0);
+                    } else {
+                        // Plain electric units exist only in the 100% band.
+                        model.constrain(
+                            vec![(units, 1.0), (boost, count as f64)],
+                            ComparisonOp::Le,
+                            count as f64,
+                        );
+                    }
+                }
                 capacity.push((units, -1.0));
                 electric_units_of.push((recipe, tier_level, units));
             }
@@ -410,19 +434,64 @@ fn build_model<'a>(
     }
 
     // Crackle Generators are explicit whole units so roster plans can reserve a Lightning Aniimo
-    // for every generator actually switched on, while unused generators stay idle.
-    let mut generator_vars: Vec<(u32, u32, usize)> = Vec::new(); // (tier, power, variable)
+    // for every generator actually switched on, while unused generators stay idle. Each owned tier
+    // gets a 100% and a 120% variable, but the global grid-band switch permits only one family.
+    // For Best/per-facility plans, do not claim rated output from a Generator tier when the chosen
+    // Lightning worker is below that tier's documented requirement.
+    let mut generator_vars: Vec<(u32, u32, u32, bool, usize)> = Vec::new();
     if module_levels.power_module > 0 {
         for (count, tier_level) in facility_counts.tiers("Crackle Generator") {
             if count == 0 {
                 continue;
             }
-            let power = crate::models::generator_power(tier_level.min(module_levels.power_module));
-            if power == 0 {
+            let required = crate::models::generator_required_lightning_level(tier_level);
+            if facility_counts
+                .generator_lightning_level()
+                .is_some_and(|level| level < required)
+            {
                 continue;
             }
-            let var = model.add(0.0, (0.0, count as f64), true, VarKind::Generator { tier_level, power });
-            generator_vars.push((tier_level, power, var));
+            let operating_level = tier_level.min(module_levels.power_module);
+            let rated_power = crate::models::generator_power(operating_level);
+            let boost_power = crate::models::generator_boost_power(operating_level);
+            if rated_power == 0 {
+                continue;
+            }
+            let Some(boost) = grid_boost else { continue };
+
+            let full = model.add(
+                0.0,
+                (0.0, count as f64),
+                true,
+                VarKind::Generator {
+                    tier_level,
+                    usable_power: rated_power,
+                    rated_power,
+                    boosted: false,
+                },
+            );
+            model.constrain(
+                vec![(full, 1.0), (boost, count as f64)],
+                ComparisonOp::Le,
+                count as f64,
+            );
+            generator_vars.push((tier_level, rated_power, rated_power, false, full));
+
+            if boost_power > 0 {
+                let fast = model.add(
+                    0.0,
+                    (0.0, count as f64),
+                    true,
+                    VarKind::Generator {
+                        tier_level,
+                        usable_power: boost_power,
+                        rated_power,
+                        boosted: true,
+                    },
+                );
+                model.constrain(vec![(fast, 1.0), (boost, -(count as f64))], ComparisonOp::Le, 0.0);
+                generator_vars.push((tier_level, boost_power, rated_power, true, fast));
+            }
         }
     }
 
@@ -619,7 +688,7 @@ fn build_model<'a>(
                 (*machines, crate::models::e_mode_power_per_unit(facility, *tier_level) as f64)
             })
             .collect();
-        terms.extend(generator_vars.iter().map(|(_, power, generator)| (*generator, -(*power as f64))));
+        terms.extend(generator_vars.iter().map(|(_, usable_power, _, _, generator)| (*generator, -(*usable_power as f64))));
         model.constrain(terms, ComparisonOp::Le, 0.0);
     }
 
@@ -1222,6 +1291,7 @@ fn plan_from(model: &Model, value: f64, upper_bound: f64, proven_optimal: bool, 
     let mut power_used = 0u32;
     let mut generators_used = 0u32;
     let mut power_supply = 0u32;
+    let mut power_efficiency = 0u32;
     let mut generators: Vec<(u32, u32)> = Vec::new();
     let mut environment = Vec::new();
     let mut pairs: Vec<ExactPair> = Vec::new();
@@ -1262,11 +1332,16 @@ fn plan_from(model: &Model, value: f64, upper_bound: f64, proven_optimal: bool, 
                     count * crate::models::e_mode_power_per_unit(facility, *tier_level),
                 );
             }
-            VarKind::Generator { tier_level, power } if v > 0.5 => {
+            VarKind::Generator { tier_level, rated_power, boosted, .. } if v > 0.5 => {
                 let count = v.round() as u32;
                 generators_used = generators_used.saturating_add(count);
-                power_supply = power_supply.saturating_add(count.saturating_mul(*power));
-                generators.push((*tier_level, count));
+                power_supply = power_supply.saturating_add(count.saturating_mul(*rated_power));
+                power_efficiency = if *boosted { 120 } else { 100 };
+                if let Some((_, existing)) = generators.iter_mut().find(|(level, _)| level == tier_level) {
+                    *existing = existing.saturating_add(count);
+                } else {
+                    generators.push((*tier_level, count));
+                }
             }
             VarKind::Sold(name) if v > 1e-9 => {
                 sold.insert(name.to_string(), v);
@@ -1350,6 +1425,7 @@ fn plan_from(model: &Model, value: f64, upper_bound: f64, proven_optimal: bool, 
         power_capacity: model.power_capacity,
         generators_used,
         power_supply,
+        power_efficiency,
         generators,
         sold,
         environment,
@@ -1501,14 +1577,36 @@ pub fn check_plan(
         .iter()
         .map(|(level, count)| count * crate::models::generator_power((*level).min(module_levels.power_module)))
         .sum();
+    let active_usable_power: u32 = plan
+        .generators
+        .iter()
+        .map(|(level, count)| {
+            let operating = (*level).min(module_levels.power_module);
+            let per = if plan.power_efficiency == 120 {
+                crate::models::generator_boost_power(operating)
+            } else {
+                crate::models::generator_power(operating)
+            };
+            count * per
+        })
+        .sum();
     if plan.generators.iter().map(|(_, count)| *count).sum::<u32>() != plan.generators_used {
         return Err("generator count does not match its tier assignments".to_string());
     }
     if plan.power_supply != active_generator_power {
         return Err(format!("active generator supply says {} but tiers provide {active_generator_power}", plan.power_supply));
     }
-    if plan.power_used > active_generator_power {
-        return Err(format!("E-Mode draws {} power but active generators provide {active_generator_power}", plan.power_used));
+    if plan.generators_used > 0 && !matches!(plan.power_efficiency, 100 | 120) {
+        return Err(format!("invalid E-Mode efficiency {}", plan.power_efficiency));
+    }
+    if plan.generators_used == 0 && plan.power_efficiency != 0 {
+        return Err(format!("E-Mode efficiency {} without an active generator", plan.power_efficiency));
+    }
+    if plan.power_used > active_usable_power {
+        return Err(format!(
+            "E-Mode draws {} power but the {}% grid band permits {active_usable_power}",
+            plan.power_used, plan.power_efficiency
+        ));
     }
     if active_generator_power > plan.power_capacity {
         return Err(format!("active generators provide {active_generator_power}, above configured capacity {}", plan.power_capacity));
@@ -2025,7 +2123,8 @@ pub fn to_production_plan(
                 );
             }
             if crate::models::is_electric_item(&recipe.name) {
-                reason = format!("{reason}; E-Mode at full grid supply");
+                let efficiency = if crate::models::is_boosted_electric_item(&recipe.name) { 120 } else { 100 };
+                reason = format!("{reason}; E-Mode at {efficiency}% grid efficiency");
             }
             if takes_turns(recipe) {
                 let others: Vec<&str> = shared.iter().copied().filter(|n| *n != recipe.name).collect();
