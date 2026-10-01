@@ -110,8 +110,8 @@ function trialCountToPercent(count) {
 // change, since those invalidate the plan.
 let lastPlan = null;
 
-// Plans for both Aniimo setups from the latest Calculate: `{ best, minimum }`. Best is solved and
-// shown first; Minimum follows in the background (see `runFindPlan`). `planRunId` lets a newer
+// Plans for Aniimo setups from the latest Calculate. The selected team is solved and shown
+// first; other setups are cached as they are requested. `planRunId` lets a newer
 // Calculate click discard an older run's late Minimum result.
 let plansBySetup = {};
 let planRunId = 0;
@@ -4064,11 +4064,11 @@ async function runFindPlan() {
         // bar above for however long this takes, instead of freezing. `onTrialProgress` receives
         // the solver's own real, running trial-solve count after every trial solve; converted to
         // a fill percentage by `trialCountToPercent` below.
-        // Only the backup planner reports progress (see worker.js); the exact planner is quick.
-        // Whichever Best the player has asked for; the other one waits until they switch to it.
-        const bestSetup = selectedAniimoSetup() === 'minimum' ? bestAniimoSetup() : selectedAniimoSetup();
-        Object.assign(input, aniimoInput(bestSetup));
-        const bestJson = await callWorker('find_plan', JSON.stringify({ ...input, aniimo: bestSetup }), (count) => {
+        // Solve the team on screen first. Minimum must not wait for a potentially much longer
+        // Best solve before it can show its powered plan.
+        const firstSetup = selectedAniimoSetup();
+        Object.assign(input, aniimoInput(firstSetup));
+        const firstJson = await callWorker('find_plan', JSON.stringify({ ...input, aniimo: firstSetup }), (count) => {
             // The exact planner reports each solve; the backup planner counts its trials.
             if (typeof count === 'object') {
                 setStep(count.step, count.state, undefined, count.proven);
@@ -4081,16 +4081,25 @@ async function runFindPlan() {
         progressFill.style.width = '100%';
         if (runId !== planRunId) return;
         finishSolveSteps();
-        plansBySetup[bestSetup] = JSON.parse(bestJson);
+        plansBySetup[firstSetup] = JSON.parse(firstJson);
         showSelectedPlan();
         // With no plan there's nothing to lay out or improve on.
-        if (!plansBySetup[bestSetup].success && progress) {
+        if (!plansBySetup[firstSetup].success && progress) {
             progress.steps.forEach(s => { if ((s.key === 'layout' || s.key === 'improve') && s.state === 'pending') s.state = 'skipped'; });
             renderProgress();
         }
 
-        // The Minimum setup solves after Best is already on screen; switching to it before it's
-        // done shows a short "still working" note until it arrives.
+        // Minimum is already ready when it was selected. Best is worked out on demand by
+        // ensurePlanFor when the player switches to it.
+        if (firstSetup === 'minimum') {
+            setStep('minimum', 'skip');
+            return;
+        }
+        // Avoid repeating a Minimum solve already completed or started by a tab switch.
+        if (plansBySetup.minimum || setupSolve?.setup === 'minimum') {
+            setStep('minimum', plansBySetup.minimum ? 'done' : 'skip');
+            return;
+        }
         setStep('minimum', 'start');
         callWorker('find_plan', JSON.stringify({ ...input, aniimo: 'minimum' }))
             .then(json => {

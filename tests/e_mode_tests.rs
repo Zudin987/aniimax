@@ -141,6 +141,30 @@ fn e_mode_cannot_run_without_grid_capacity() {
 }
 
 #[test]
+fn independent_check_rejects_recipe_using_a_different_grid_band() {
+    let mut items = vec![item("widget", "Crafting Table", 100.0, 100.0)];
+    add_e_mode_variants(&mut items, "name,production_time\nwidget,10\n").unwrap();
+    let counts = FacilityCounts::only(&[("Crafting Table", 1, 5), ("Crackle Generator", 1, 1)]);
+    let modules = ModuleLevels { power_module: 1, ..Default::default() };
+    let mut plan = solve(&items, &counts, &modules);
+    plan.power_efficiency = 100;
+    let error = check_plan(&plan, &items, "coins", &counts, &modules, None).unwrap_err();
+    assert!(error.contains("uses 120% but the grid runs at 100%"), "{error}");
+
+    // Even after renaming every powered row, low draw cannot describe a 100% grid.
+    let rate = plan.recipe_rates.remove("widget__electric_boost").unwrap();
+    plan.recipe_rates.insert("widget__electric".to_string(), rate / 1.2);
+    let units = plan.units.remove("widget__electric_boost").unwrap();
+    plan.units.insert("widget__electric".to_string(), units);
+    let tiers = plan.electric_units.remove("widget__electric_boost").unwrap();
+    plan.electric_units.insert("widget__electric".to_string(), tiers);
+    plan.sold.insert("widget".to_string(), rate / 1.2);
+    plan.rate_per_second = rate / 1.2 * 100.0;
+    let error = check_plan(&plan, &items, "coins", &counts, &modules, None).unwrap_err();
+    assert!(error.contains("within the 120% band"), "{error}");
+}
+
+#[test]
 fn harvest_moon_keeps_two_plots_of_each_mutation_crop_when_unprofitable() {
     let items = vec![
         item("moondew_radish", "Farmland", 100.0, 0.0),
