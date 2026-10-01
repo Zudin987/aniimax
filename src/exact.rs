@@ -416,19 +416,40 @@ fn build_model<'a>(
         }
     }
 
-    // Harvest Moon mutation farming is a gameplay requirement rather than a profitability choice.
-    // When the season is enabled both crop recipes are present, so always keep 2 plots of each
-    // actively cycling to keep mutation rolls going.
+    // Harvest Moon has two finite-resource concerns the normal economy does not: players may want
+    // a few plots continuously cycling for mutation rolls, while Moonray Wheat itself is daily
+    // limited. Both are user-controlled rather than hard-coded.
     const HARVEST_MUTATION_CROPS: [&str; 2] = ["moondew_radish", "waxing_moon_pepper"];
     let harvest_enabled = HARVEST_MUTATION_CROPS
         .iter()
         .all(|name| recipes.iter().any(|recipe| recipe.name == *name));
-    if harvest_enabled {
+    let mutation_plots = facility_counts.harvest_mutation_plots();
+    if harvest_enabled && mutation_plots > 0 {
         for name in HARVEST_MUTATION_CROPS {
             let Some((recipe, rate)) = rate_of.iter().find(|(recipe, _)| recipe.name == name).copied() else { continue };
             let Some((_, units)) = units_of.iter().find(|(recipe, _)| recipe.name == name).copied() else { continue };
-            model.constrain(vec![(units, 1.0)], ComparisonOp::Ge, 2.0);
-            model.constrain(vec![(rate, recipe.production_time)], ComparisonOp::Ge, 2.0);
+            model.constrain(vec![(units, 1.0)], ComparisonOp::Ge, mutation_plots as f64);
+            model.constrain(
+                vec![(rate, recipe.production_time)],
+                ComparisonOp::Ge,
+                mutation_plots as f64,
+            );
+        }
+    }
+    if harvest_enabled {
+        if let Some(per_day) = facility_counts.season_currency_per_day() {
+            let wheat_terms: Vec<(usize, f64)> = rate_of
+                .iter()
+                .filter_map(|(recipe, rate)| {
+                    recipe
+                        .season
+                        .filter(|season| season.seed_cost > 0.0)
+                        .map(|season| (*rate, season.seed_cost))
+                })
+                .collect();
+            if !wheat_terms.is_empty() {
+                model.constrain(wheat_terms, ComparisonOp::Le, per_day / PACE_UNIT);
+            }
         }
     }
 
@@ -1228,6 +1249,7 @@ pub fn check_plan(
     const TOLERANCE: f64 = 1e-6;
     let all: HashMap<&str, &ProductionItem> = items.iter().map(|i| (i.name.as_str(), i)).collect();
     let mut earned = 0.0;
+    let mut season_currency_per_second = 0.0;
     let mut made: HashMap<&str, f64> = HashMap::new();
     let mut plots_needing: HashMap<(&str, &str), u32> = HashMap::new();
     // Units in use per facility and level; a recipe taking turns counts only its share of time.
@@ -1274,7 +1296,36 @@ pub fn check_plan(
         if currency == "coins" {
             earned -= rate * recipe.cost.unwrap_or(0.0);
         }
+        if let Some(season) = recipe.season.filter(|season| season.seed_cost > 0.0) {
+            season_currency_per_second += rate * season.seed_cost;
+        }
     }
+
+    if let Some(per_day) = facility_counts.season_currency_per_day() {
+        if season_currency_per_second * PACE_UNIT > per_day + TOLERANCE {
+            return Err(format!(
+                "Harvest Moon seeds spend {:.3}/day, above the configured {:.3}/day limit",
+                season_currency_per_second * PACE_UNIT,
+                per_day
+            ));
+        }
+    }
+    let mutation_plots = facility_counts.harvest_mutation_plots();
+    if mutation_plots > 0 {
+        for name in ["moondew_radish", "waxing_moon_pepper"] {
+            if all.contains_key(name) {
+                let units = plan.units.get(name).copied().unwrap_or(0);
+                let rate = plan.recipe_rates.get(name).copied().unwrap_or(0.0);
+                let recipe = all[name];
+                if units < mutation_plots || rate * recipe.production_time + TOLERANCE < mutation_plots as f64 {
+                    return Err(format!(
+                        "{name} needs at least {mutation_plots} continuously cycling plots for the configured mutation minimum"
+                    ));
+                }
+            }
+        }
+    }
+
     for (name, &sold) in &plan.sold {
         let item = all.get(name.as_str()).ok_or(format!("unknown item {name}"))?;
         *made.entry(item.name.as_str()).or_default() -= sold;
