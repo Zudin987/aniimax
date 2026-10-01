@@ -265,6 +265,18 @@ pub fn e_mode_power_per_unit(facility: &str, facility_level: u32) -> u32 {
     per_level * facility_level.max(1)
 }
 
+/// Lightning level that reaches the Crackle Generator tier's documented base-power workload.
+/// A lower-level Lightning Aniimo can work the station, but does so more slowly; the optimizer
+/// requires this level when it claims the generator's full rated supply.
+pub fn generator_required_lightning_level(level: u32) -> u32 {
+    match level {
+        0 => 0,
+        1 => 1,
+        2 => 2,
+        3.. => 3,
+    }
+}
+
 /// Crackle Generator output at a Power Module / generator level.
 pub fn generator_power(level: u32) -> u32 {
     match level {
