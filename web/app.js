@@ -1373,7 +1373,7 @@ function renderHomelandLayout(plan) {
     layoutWorker.postMessage({
         pieces,
         cells: cells.map(({ x, y, w, h }) => ({ x, y, w, h })),
-        storageCount: Math.max(1, Math.min(3, numberOrDefault(document.getElementById('layout-storage-count').value, 2))),
+        storageCount: Math.max(1, Math.min(24, Math.round(numberOrDefault(document.getElementById('layout-storage-count').value, 2)))),
         generatorCount: plan.generators_used || 0,
     });
 }
