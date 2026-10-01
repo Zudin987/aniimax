@@ -208,6 +208,21 @@ pub fn has_personality_bonus(facility: &str) -> bool {
     !FACILITIES_WITHOUT_PERSONALITY.contains(&facility)
 }
 
+/// Personality required for the facility's work bonus, matching the web facility configuration.
+pub fn facility_personality(facility: &str) -> Option<&'static str> {
+    match facility {
+        "Mine" | "Pickling Jar" => Some("Playful"),
+        "Well" | "Starfall Hammock" | "Joy Wheel Loom" => Some("Faithful"),
+        "Tidewhisper Sandcastle" | "Nimbus Bed" | "Crafting Table" => Some("Judicious"),
+        "Dewy House" | "Phonolfactory Table" => Some("Instinctive"),
+        "Floral Windmill" | "Jukebox Dryer" | "Blazing Stove" => Some("Nimble"),
+        "Carousel Mill" | "Simmering Pot" => Some("Tenacious"),
+        "Claw Game Cooker" | "Chimney Kiln" => Some("Practical"),
+        "Bouncy Brew Keg" | "Woodworking Bench" => Some("Energetic"),
+        _ => None,
+    }
+}
+
 /// Efficiency at a facility without a personality ([`FACILITIES_WITHOUT_PERSONALITY`]): 100% at
 /// the level the recipe needs, then +40% a level, whatever level the recipe needs. A level-3
 /// Aniimo reads 180%, 140% and 100% on the Dance Pad Polisher's Growth Bud, Flower and Fruit

@@ -1,5 +1,5 @@
 use aniimax::data::add_e_mode_variants;
-use aniimax::exact::{check_plan, solve_exact, to_production_plan, Goal};
+use aniimax::exact::{check_plan, solve_exact, to_production_plan, AniimoWork, Goal};
 use aniimax::models::{Crew, FacilityCounts, GrowerStep, GrowerSteps, ModuleLevels, ProductionItem, RosterAniimo, SeasonTerms};
 use std::time::Duration;
 
@@ -38,6 +38,89 @@ fn solve(items: &[ProductionItem], counts: &FacilityCounts, modules: &ModuleLeve
     .expect("plan");
     check_plan(&plan, items, "coins", counts, modules, None).expect("plan re-check");
     plan
+}
+
+#[test]
+fn e_mode_frees_whole_worker_slots_even_when_normal_mode_is_faster() {
+    let raw = item("raw", "Farmland", 1_000.0, 0.0);
+    let mut first = item("first", "Carousel Mill", 10.0, 0.0);
+    first.raw_materials = Some(vec!["raw".into()]);
+    first.required_amount = Some(vec![1]);
+    let mut second = item("second", "Jukebox Dryer", 10.0, 0.0);
+    second.raw_materials = Some(vec!["first".into()]);
+    second.required_amount = Some(vec![1]);
+    let mut last = item("last", "Crafting Table", 10.0, 1_000.0);
+    last.raw_materials = Some(vec!["second".into()]);
+    last.required_amount = Some(vec![1]);
+    let mut items = vec![raw, first, second, last];
+    // E-Mode is ten times slower, but still easily keeps up with the material bottleneck.
+    add_e_mode_variants(&mut items, "name,production_time\nfirst,100\nsecond,100\nlast,100\n").unwrap();
+    let counts = FacilityCounts::only(&[
+        ("Farmland", 1, 1), ("Carousel Mill", 1, 1), ("Jukebox Dryer", 1, 1),
+        ("Crafting Table", 1, 1), ("Crackle Generator", 1, 1),
+    ]);
+    let modules = ModuleLevels { power_module: 1, ..Default::default() };
+    let work: Vec<AniimoWork> = ["first", "second", "last"].into_iter().map(|name| AniimoWork {
+        recipe: name.into(), group: name.into(), per_unit: false, seconds: 10.0,
+    }).collect();
+    let plan = solve_exact(&items, "coins", &counts, &modules,
+        Goal::FreeAniimo { floors: &[], level_up: None, coins: 1.0, work: &work },
+        Some(Duration::from_secs(10)), None).expect("worker-saving plan");
+    check_plan(&plan, &items, "coins", &counts, &modules, None).unwrap();
+    assert!(plan.rate_per_second >= 0.9999 - 1e-9);
+    assert_eq!(plan.generators_used, 1);
+    for name in ["first", "second", "last"] {
+        assert!(!plan.recipe_rates.contains_key(name), "{name} still requires a production worker");
+        assert!(plan.recipe_rates.contains_key(&format!("{name}__electric_boost")));
+    }
+    assert_eq!(plan.power_used, 45);
+}
+
+#[test]
+fn free_aniimo_keeps_priority_floors_and_accounts_for_generator_workers() {
+    let mut widget = item("widget", "Crafting Table", 10.0, 1_000.0);
+    widget.raw_materials = Some(vec!["raw".into()]);
+    widget.required_amount = Some(vec![1]);
+    widget.byproduct = Some(("Wood Blocks".into(), 1));
+    let mut items = vec![item("raw", "Farmland", 1_000.0, 0.0), widget];
+    add_e_mode_variants(&mut items, "name,production_time\nwidget,100\n").unwrap();
+    let counts = FacilityCounts::only(&[("Farmland", 1, 1), ("Crafting Table", 1, 1), ("Crackle Generator", 1, 1)]);
+    let modules = ModuleLevels { power_module: 1, ..Default::default() };
+    let work = [AniimoWork { recipe: "widget".into(), group: "Artisanship".into(), per_unit: false, seconds: 10.0 }];
+    let floors = [("Wood Blocks".into(), 0.001)];
+    let plan = solve_exact(&items, "coins", &counts, &modules,
+        Goal::FreeAniimo { floors: &floors, level_up: None, coins: 1.0, work: &work },
+        Some(Duration::from_secs(10)), None).expect("worker-saving plan");
+    check_plan(&plan, &items, "coins", &counts, &modules, None).unwrap();
+    // One normal worker cannot be replaced by fewer than one generator resident.
+    assert_eq!(plan.generators_used, 0);
+    assert!(plan.recipe_rates["widget"] >= 0.0009999 - 1e-9);
+}
+
+#[test]
+fn free_aniimo_respects_personality_sharing_when_counting_saved_slots() {
+    let mut a = item("a", "Claw Game Cooker", 10.0, 1_000.0);
+    a.raw_materials = Some(vec!["raw".into()]); a.required_amount = Some(vec![1]);
+    a.byproduct = Some(("Wood Blocks".into(), 1));
+    let mut b = item("b", "Simmering Pot", 10.0, 1_000.0);
+    b.raw_materials = Some(vec!["raw".into()]); b.required_amount = Some(vec![1]);
+    b.byproduct = Some(("Mineral Sand".into(), 1));
+    let mut items = vec![item("raw", "Farmland", 1_000.0, 0.0), a, b];
+    add_e_mode_variants(&mut items, "name,production_time\na,100\nb,100\n").unwrap();
+    let counts = FacilityCounts::only(&[("Farmland", 1, 1), ("Claw Game Cooker", 1, 1), ("Simmering Pot", 1, 1), ("Crackle Generator", 1, 1)]);
+    let modules = ModuleLevels { power_module: 1, ..Default::default() };
+    let floors = [("Wood Blocks".into(), 0.0005), ("Mineral Sand".into(), 0.0005)];
+    for (other_personality, expected_generators) in [("Tenacious", 0), ("Nimble", 1)] {
+        let work = [
+            AniimoWork { recipe: "a".into(), group: "Fire:4:Practical".into(), per_unit: false, seconds: 10.0 },
+            AniimoWork { recipe: "b".into(), group: format!("Fire:4:{other_personality}"), per_unit: false, seconds: 10.0 },
+        ];
+        let plan = solve_exact(&items, "coins", &counts, &modules,
+            Goal::FreeAniimo { floors: &floors, level_up: None, coins: 1.0, work: &work },
+            Some(Duration::from_secs(10)), None).unwrap();
+        check_plan(&plan, &items, "coins", &counts, &modules, None).unwrap();
+        assert_eq!(plan.generators_used, expected_generators, "{other_personality}");
+    }
 }
 
 #[test]

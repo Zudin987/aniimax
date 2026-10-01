@@ -4,6 +4,7 @@
 // thread stays free to paint a progress indicator while a solve is in flight. See `web/app.js`'s
 // `callWorker` for the request/response contract this expects.
 import highsModule from './vendor/highs/highs.mjs';
+import { aniimoTeamCount } from './aniimo-team.js';
 
 // The page starts this worker as `worker.js?load=<page load time>` (see app.js), and the wasm
 // module is loaded with the same query and a revalidated fetch, so a page never pairs new page
@@ -35,6 +36,8 @@ async function newHighs() {
 
 // Seconds HiGHS may search before settling for the best plan found so far.
 const EXACT_TIME_LIMIT = 30;
+// Staffing is a refinement of an already valid production plan, so keep its extra wait short.
+const STAFFING_TIME_LIMIT = 5;
 
 // HiGHS options for every solve.
 const SOLVE_OPTIONS = { mip_rel_gap: 0, time_limit: EXACT_TIME_LIMIT };
@@ -84,7 +87,7 @@ function tiebreakOf(problem, values) {
 // Returns the plan's JSON, or throws with the reason it couldn't, so the caller can fall back to
 // `find_plan` and say why. `step(key, state, proven)` reports each solve as it starts and ends,
 // and whether it proved its answer, for the page's progress card: `priority:<target>`,
-// `level_up`, `final`, `stock_up` and `check`. `first(top)` gets the plan's first solve with
+// `level_up`, `final`, `free_aniimo`, `stock_up` and `check`. `first(top)` gets the plan's first solve with
 // nothing before it, `{ measure, objective, proven }`: the most of its first priority, its
 // level-up pace, or its Home Coins. The page's Opportunities solve that same model for the plan
 // as it stands, so they take it from here.
@@ -146,24 +149,6 @@ async function exactPlanJson(pkg, payload, step = () => {}, first = () => {}) {
         }
     }
     step('final', 'done', solved.proven);
-    if (stage.pace) {
-        // Keeping that pace and those coins, spare Bench and Kiln time goes to the level-up. If
-        // that solve fails, the plan above already has the pace and coins, so it stands.
-        const stockStage = { ...stage, coins: solved.objective };
-        const stockJson = JSON.stringify(stockStage);
-        step('stock_up', 'start');
-        const stocked = await solveModel(JSON.parse(exact_problem(payload, stockJson)));
-        step('stock_up', 'done', stocked?.proven);
-        step('check', 'start');
-        const stockedPlan = stocked
-            && JSON.parse(exact_plan(payload, stockJson, JSON.stringify({ values: stocked.values, proven: proven && stocked.proven, bound })));
-        if (stockedPlan && stockedPlan.success) {
-            step('check', 'done');
-            stockedPlan.level_up_note = levelUpNote;
-            return JSON.stringify(stockedPlan);
-        }
-        console.warn('Level-up stock solve found no usable plan; keeping the plan without it.');
-    }
     step('check', 'start');
     let json = exact_plan(payload, stageJson, JSON.stringify({ values: solved.values, proven, bound }));
     let plan = JSON.parse(json);
@@ -177,8 +162,42 @@ async function exactPlanJson(pkg, payload, step = () => {}, first = () => {}) {
         }
     }
     if (!plan.success) throw new Error(plan.error || 'the plan failed its check');
+
+    if (plan.power_capacity > 0) {
+        // Preserve coins, priorities and the RV pace, then minimize the Aniimo team. This is
+        // deliberately separate from maximizing production: slower E-Mode can still cover a
+        // material-limited station and free its worker for a star-generating station.
+        const freeJson = JSON.stringify({ ...stage, coins: plan.rate_per_second, free_aniimo: true });
+        step('free_aniimo', 'start');
+        let freed = null;
+        try {
+            const freeProblem = JSON.parse(exact_problem(payload, freeJson));
+            freed = await solveModel(freeProblem, { ...SOLVE_OPTIONS, time_limit: STAFFING_TIME_LIMIT });
+            const candidate = freed && JSON.parse(exact_plan(payload, freeJson,
+                JSON.stringify({ values: freed.values, proven: proven && freed.proven, bound })));
+            const input = JSON.parse(payload);
+            if (candidate?.success && aniimoTeamCount(candidate, input) <= aniimoTeamCount(plan, input)) {
+                candidate.aniimo_slots_saved = aniimoTeamCount(plan, input) - aniimoTeamCount(candidate, input);
+                candidate.workforce_optimized = true;
+                plan = candidate;
+            }
+        } catch (error) {
+            console.warn('Aniimo staffing refinement failed; keeping the verified production plan:', error);
+        }
+        step('free_aniimo', 'done', freed?.proven);
+    }
+    // Power-enabled plans prefer spare Aniimo slots over speculative extra stock. RV material
+    // production still covers the selected pace, even if the staffing search runs out of time.
+    if (stage.pace && !(plan.power_capacity > 0)) {
+        const stockJson = JSON.stringify({ ...stage, coins: plan.rate_per_second });
+        step('stock_up', 'start');
+        const stocked = await solveModel(JSON.parse(exact_problem(payload, stockJson)));
+        step('stock_up', 'done', stocked?.proven);
+        const stockedPlan = stocked && JSON.parse(exact_plan(payload, stockJson,
+            JSON.stringify({ values: stocked.values, proven: proven && stocked.proven, bound })));
+        if (stockedPlan?.success) plan = stockedPlan;
+    }
     step('check', 'done');
-    if (!levelUpNote) return json;
     plan.level_up_note = levelUpNote;
     return JSON.stringify(plan);
 }

@@ -1468,10 +1468,21 @@ struct JsStage {
     /// [`crate::exact::Goal::StockUp`]).
     #[serde(default)]
     coins: Option<f64>,
+    /// Minimize the Aniimo team while keeping the earlier production targets.
+    #[serde(default)]
+    free_aniimo: bool,
 }
 
 impl JsStage {
-    fn goal<'a>(&'a self, input: &'a JsPlanInput) -> crate::exact::Goal<'a> {
+    fn goal<'a>(&'a self, input: &'a JsPlanInput, work: &'a [crate::exact::AniimoWork]) -> crate::exact::Goal<'a> {
+        if self.free_aniimo {
+            return crate::exact::Goal::FreeAniimo {
+                floors: &self.floors,
+                level_up: input.level_up.as_ref().zip(self.pace),
+                coins: self.coins.unwrap_or(0.0),
+                work,
+            };
+        }
         match (&input.level_up, self.pace, self.coins) {
             (Some(level_up), Some(pace), Some(coins)) => crate::exact::Goal::StockUp(level_up, pace, coins),
             (Some(level_up), Some(pace), None) => crate::exact::Goal::EarnWhileLevelingUp(level_up, pace),
@@ -1493,13 +1504,16 @@ impl JsStage {
 pub fn exact_problem(input_json: &str, stage_json: &str) -> String {
     let stage: JsStage = serde_json::from_str(stage_json).unwrap_or_default();
     let lp = match PreparedInput::from_json(input_json) {
-        Ok(prepared) if !prepared.input.currency.is_empty() => crate::exact::write_lp(
-            &prepared.items,
-            &prepared.input.currency,
-            &prepared.facility_counts,
-            &prepared.module_levels,
-            stage.goal(&prepared.input),
-        ),
+        Ok(prepared) if !prepared.input.currency.is_empty() => {
+            let work = prepared.aniimo_work();
+            crate::exact::write_lp(
+                &prepared.items,
+                &prepared.input.currency,
+                &prepared.facility_counts,
+                &prepared.module_levels,
+                stage.goal(&prepared.input, &work),
+            )
+        }
         _ => Default::default(),
     };
     lp_json(&lp)
@@ -1532,9 +1546,11 @@ pub fn exact_plan(input_json: &str, stage_json: &str, solution_json: &str) -> St
     let stage: JsStage = serde_json::from_str(stage_json).unwrap_or_default();
     let Ok(result) = serde_json::from_str::<JsSolverResult>(solution_json) else { return no_plan() };
     let currency = prepared.input.currency.clone();
-    let goal = stage.goal(&prepared.input);
+    let work = prepared.aniimo_work();
+    let goal = stage.goal(&prepared.input, &work);
     let level_up = match goal {
         crate::exact::Goal::EarnWhileLevelingUp(level_up, _) | crate::exact::Goal::StockUp(level_up, ..) => Some(level_up),
+        crate::exact::Goal::FreeAniimo { level_up: Some((level_up, _)), .. } => Some(level_up),
         _ => None,
     };
     let Some(exact) = crate::exact::plan_from_values(
@@ -1658,6 +1674,41 @@ struct PreparedInput {
 }
 
 impl PreparedInput {
+    /// The same normal-mode Aniimo work shown in the team's table, before any E-Mode jobs
+    /// replace it. Count each ability/level/personality row in whole slots, and include the
+    /// short growing jobs rather than treating grow time itself as Aniimo work.
+    fn aniimo_work(&self) -> Vec<crate::exact::AniimoWork> {
+        let Some(setup) = &self.setup else { return Vec::new() };
+        let mut work = Vec::new();
+        for recipe in &self.items {
+            if crate::models::is_electric_item(&recipe.name) { continue; }
+            if let Some((ability, _)) = self.requirements.get(&recipe.name) {
+                let worker = self.requirements.worker_for_at(&recipe.name, &recipe.facility, setup);
+                work.push(crate::exact::AniimoWork {
+                    recipe: recipe.name.clone(),
+                    group: format!("{ability}:{}:{}", worker.suitability,
+                        if worker.personality_bonus {
+                            crate::models::facility_personality(&recipe.facility).unwrap_or(&recipe.facility)
+                        } else { "" }),
+                    per_unit: recipe.raw_materials.is_none(),
+                    seconds: if recipe.raw_materials.is_none() { 1.0 } else { recipe.production_time },
+                });
+            } else {
+                for job in self.grower_steps.get(&recipe.name) {
+                    let seconds = crate::models::Worker::new(job.min_level, false)
+                        .seconds_for(job.workload, job.min_level, true);
+                    work.push(crate::exact::AniimoWork {
+                        recipe: recipe.name.clone(),
+                        group: format!("{}:{}:", job.ability, job.min_level),
+                        per_unit: true,
+                        seconds: seconds / recipe.production_time,
+                    });
+                }
+            }
+        }
+        work
+    }
+
     /// Parses `input_json`; on failure, the error result to return instead.
     fn from_json(input_json: &str) -> Result<Self, String> {
         let input: JsPlanInput = serde_json::from_str(input_json).map_err(|e| {

@@ -176,6 +176,24 @@ pub enum Goal<'a> {
     /// (each as a share of its cost): spare Bench and Kiln time processes whatever the level-up
     /// doesn't need yet, instead of leaving it raw.
     StockUp(&'a LevelUp, f64, f64),
+    /// Keep the production targets already found, then free whole Aniimo slots for other
+    /// Homeland stations. Generators and environment residents count toward the team too.
+    FreeAniimo {
+        floors: &'a [(String, f64)],
+        level_up: Option<(&'a LevelUp, f64)>,
+        coins: f64,
+        work: &'a [AniimoWork],
+    },
+}
+
+/// One normal-mode job's contribution to a team row. With `per_unit`, `seconds` is the
+/// busy fraction per assigned station/plot; otherwise it is seconds of work per batch.
+#[derive(Debug, Clone)]
+pub struct AniimoWork {
+    pub recipe: String,
+    pub group: String,
+    pub per_unit: bool,
+    pub seconds: f64,
 }
 
 /// What an RV level-up costs and what's already in stock, as `(item, amount)` with `"coins"` for
@@ -268,6 +286,10 @@ enum VarKind<'a> {
     /// Harvests/sec of one Farmland/Woodland job assigned to one roster member. `seconds` turns
     /// it into that member's share of a day in the common busy-time constraint.
     GrowerStaff { item: String, step: String, member: usize, seconds: f64 },
+    /// Whole Aniimo required by a normal-mode work group (or one custom-roster member).
+    Workers,
+    /// Work assigned to one compatible ability/personality pool in the staffing refinement.
+    WorkerShare,
 }
 
 /// One linear constraint: `(variable, coefficient)` terms, comparison, right-hand side.
@@ -550,7 +572,7 @@ fn build_model<'a>(
     // A floor naming a currency ("aniimo_exp", "aniipods") keeps a plan making that much of it
     // while it earns `currency`; those items need sell variables too, worth nothing here.
     let floor_currencies: Vec<&str> = match goal {
-        Goal::Earn { floors } => floors.iter().map(|(name, _)| name.as_str()).collect(),
+        Goal::Earn { floors } | Goal::FreeAniimo { floors, .. } => floors.iter().map(|(name, _)| name.as_str()).collect(),
         _ => Vec::new(),
     };
     let mut sold_of: Vec<(usize, &ProductionItem)> = Vec::new();
@@ -571,6 +593,7 @@ fn build_model<'a>(
         // Slack of 0.01% (about 9 seconds a day): `pace` is another solve's maximum, and the pace
         // terms are small enough that a tighter floor sits inside the solver's tolerances.
         Goal::EarnWhileLevelingUp(level_up, pace) | Goal::StockUp(level_up, pace, _) => Some((level_up, pace * (1.0 - 1e-4))),
+        Goal::FreeAniimo { level_up: Some((level_up, pace)), .. } => Some((level_up, pace * (1.0 - 1e-4))),
         _ => None,
     };
     if let Some((level_up, min_pace)) = level_up {
@@ -818,7 +841,7 @@ fn build_model<'a>(
             .collect()
     };
     match goal {
-        Goal::Earn { floors } => {
+        Goal::Earn { floors } | Goal::FreeAniimo { floors, .. } => {
             for (resource, floor) in floors {
                 if *floor <= 0.0 {
                     continue;
@@ -987,8 +1010,96 @@ fn build_model<'a>(
         }
         for (member, terms) in busy.into_iter().enumerate() {
             if !terms.is_empty() {
-                model.constrain(terms, ComparisonOp::Le, crew.members[member].count as f64);
+                if matches!(goal, Goal::FreeAniimo { .. }) {
+                    let workers = model.add(0.0, (0.0, crew.members[member].count as f64), true, VarKind::Workers);
+                    let mut staffed = terms;
+                    staffed.push((workers, -1.0));
+                    model.constrain(staffed, ComparisonOp::Le, 0.0);
+                } else {
+                    model.constrain(terms, ComparisonOp::Le, crew.members[member].count as f64);
+                }
             }
+        }
+    }
+
+    if let Goal::FreeAniimo { coins, work, .. } = goal {
+        // A distinct solve, with coefficients at the scale of whole workers rather than tiny
+        // production tie-breaks. A handful of partially busy ability groups can still occupy
+        // several slots, so rounding each group matters more than summing its busy time.
+        model.constrain(
+            model.earnings.iter().enumerate().filter(|(_, c)| **c != 0.0).map(|(v, c)| (v, *c)).collect(),
+            ComparisonOp::Ge,
+            coins - 1e-4 * coins.abs(),
+        );
+        model.objective.fill(0.0);
+        if facility_counts.crew().is_none() {
+            let mut groups: BTreeMap<&str, Vec<(usize, f64)>> = BTreeMap::new();
+            for job in work {
+                let vars = if job.per_unit { &units_of } else { &rate_of };
+                if let Some((_, var)) = vars.iter().find(|(recipe, _)| recipe.name == job.recipe) {
+                    groups.entry(&job.group).or_default().push((*var, job.seconds));
+                }
+            }
+            let mut abilities: BTreeMap<&str, Vec<(&str, Vec<(usize, f64)>)>> = BTreeMap::new();
+            for (group, terms) in groups {
+                for &(v, seconds) in &terms {
+                    model.objective[v] -= seconds * 1e-4;
+                }
+                abilities.entry(group.split(':').next().unwrap_or(group)).or_default().push((group, terms));
+            }
+            // Higher-level workers can handle the short growing jobs as well. One Aniimo can
+            // also hold multiple facility bonuses, provided the personalities aren't opposites.
+            // Allocate busy time to those compatible pools before rounding to whole workers.
+            let opposite = |personality: &str| match personality {
+                "Instinctive" => "Energetic", "Energetic" => "Instinctive",
+                "Nimble" => "Practical", "Practical" => "Nimble",
+                "Faithful" => "Tenacious", "Tenacious" => "Faithful",
+                "Playful" => "Judicious", "Judicious" => "Playful",
+                _ => "",
+            };
+            for demands in abilities.into_values() {
+                let personality = |group: &str| group.splitn(3, ':').nth(2).unwrap_or("").to_string();
+                let personalities: std::collections::BTreeSet<String> = demands.iter()
+                    .map(|(group, _)| personality(group)).filter(|p| !p.is_empty()).collect();
+                let mut profiles = vec![std::collections::BTreeSet::<String>::new()];
+                for p in personalities {
+                    let added: Vec<_> = profiles.iter().filter(|profile| !profile.contains(opposite(&p)))
+                        .map(|profile| { let mut next = profile.clone(); next.insert(p.clone()); next }).collect();
+                    profiles.extend(added);
+                }
+                let maximal: Vec<_> = profiles.iter().filter(|profile|
+                    !profiles.iter().any(|other| profile.len() < other.len() && profile.is_subset(other)))
+                    .cloned().collect();
+                let mut capacity: Vec<Vec<(usize, f64)>> = maximal.iter().map(|_| Vec::new()).collect();
+                for (group, terms) in demands {
+                    let needed = personality(group);
+                    let mut covered: Vec<(usize, f64)> = terms.iter().map(|&(v, seconds)| (v, -seconds)).collect();
+                    for (pool, profile) in maximal.iter().enumerate() {
+                        if !needed.is_empty() && !profile.contains(&needed) { continue; }
+                        let share = model.add(0.0, (0.0, f64::INFINITY), false, VarKind::WorkerShare);
+                        covered.push((share, 1.0));
+                        capacity[pool].push((share, 1.0));
+                    }
+                    model.constrain(covered, ComparisonOp::Ge, 0.0);
+                }
+                for mut terms in capacity {
+                    let workers = model.add(0.0, (0.0, f64::INFINITY), true, VarKind::Workers);
+                    terms.push((workers, -1.0));
+                    model.constrain(terms, ComparisonOp::Le, 0.0);
+                }
+            }
+        }
+        for v in 0..model.kinds.len() {
+            let workers = match model.kinds[v] {
+                VarKind::Workers => 1.0,
+                VarKind::Generator { .. } | VarKind::Environment { .. } if facility_counts.crew().is_none() => 1.0,
+                VarKind::EnvironmentPair { .. } if facility_counts.crew().is_none() => 2.0,
+                _ => 0.0,
+            };
+            // A resident generator/environment worker also occupies a whole day's work. When
+            // headcounts tie, keep the plan with less occupied time rather than adding power
+            // that merely swaps one mostly idle production Aniimo for a full-time resident.
+            model.objective[v] -= workers * if matches!(model.kinds[v], VarKind::Workers) { 1.0 } else { 1.0001 };
         }
     }
     // Of plans otherwise equal, the fewest environment buildings: a pair is two.
