@@ -1596,6 +1596,16 @@ pub fn check_plan(
     if plan.power_supply != active_generator_power {
         return Err(format!("active generator supply says {} but tiers provide {active_generator_power}", plan.power_supply));
     }
+    if let Some(lightning) = facility_counts.generator_lightning_level() {
+        for &(level, count) in &plan.generators {
+            if count > 0 && lightning < crate::models::generator_required_lightning_level(level) {
+                return Err(format!(
+                    "Crackle Generator Lv.{level} needs Lightning {}, but this setup has Lightning {lightning}",
+                    crate::models::generator_required_lightning_level(level)
+                ));
+            }
+        }
+    }
     if plan.generators_used > 0 && !matches!(plan.power_efficiency, 100 | 120) {
         return Err(format!("invalid E-Mode efficiency {}", plan.power_efficiency));
     }
