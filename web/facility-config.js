@@ -201,8 +201,8 @@ export const SPECIAL_RECIPES = [
 ];
 
 // The Harvest Moon Festival, from RV 10: season crops' seeds cost Moonray Wheat, which season
-// orders pay out, and every season item sold counts points on top of its coins. Wheat is taken as
-// unlimited; plans show how much their seeds use. The recipes and seed costs are in
+// orders pay out, and every season item sold counts points on top of its coins. The planner can
+// cap Wheat spend per day; the recipes and seed costs are in
 // data/harvest_moon_festival.csv.
 export const SEASON = {
     name: 'Harvest Moon Festival',
@@ -280,6 +280,9 @@ export const FACILITY_FOOTPRINTS = {
     'Chimney Kiln': [5.5, 5.5],
     'Dance Pad Polisher': [2.5, 2.5],
     'Aniipod Maker': [4.5, 4.5],
+    // Verified launch footprint. Its direct power effect is an 11x11 square; Power Pole reach is
+    // intentionally not guessed because public sources disagree on the exact extension geometry.
+    'Crackle Generator': [1, 1],
     'Storage Unit': [2, 2],
 };
 
