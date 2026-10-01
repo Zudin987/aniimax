@@ -1986,9 +1986,10 @@ function renderRosterSummary(plan) {
         const letters = aniimo.personalities.map(personalityLetter).join('');
         return `<tr><td data-label="Aniimo">${rosterLabel(aniimo, i)}<div class="hint small">${abilities} · ${letters}</div></td><td data-label="How many">${aniimo.count}</td><td data-label="Busy on average">${busy[i].toFixed(1)}</td><td data-label="Where">${places || '<span class="hint small">idle</span>'}</td></tr>`;
     }).join('');
+    const dailyFood = have * 10 * 60 * 24;
     document.getElementById('aniimo-summary').innerHTML = roster.length
         ? `<table class="aniimo-table"><thead><tr><th>Aniimo</th><th>How many</th><th>Busy on average</th><th>Where</th></tr></thead><tbody>${rows}</tbody></table>
-           <p class="hint small">${working} of your ${have} Aniimo have work in this plan.</p>`
+           <p class="hint small">${working} of your ${have} Aniimo have work in this plan. All ${have} residents still eat: about <strong>${formatNumber(dailyFood)} food Energy/day</strong> at 10 Energy/min each. The calculator assumes the food bowl stays stocked; an empty bowl drops Aniimo work to 20%.</p>`
         : '<p class="hint">Add the Aniimo you have under My Aniimo to plan with them.</p>';
     document.getElementById('aniimo-collapsed-summary').textContent = '';
     document.getElementById('aniimo-abilities').innerHTML = '';
@@ -3247,6 +3248,7 @@ function renderAniimoSummary(plan) {
                 <span class="ability-count">${n}</span><span class="ability-name">${a.name}</span>
             </div>${stack}</div>`;
     }).join('');
+    const minimumFood = total * 10 * 60 * 24;
     container.innerHTML = `
         <div class="table-wrapper">
             <table class="facility-plan-table">
@@ -3255,6 +3257,7 @@ function renderAniimoSummary(plan) {
             </table>
         </div>
         ${capNote}
+        <p class="hint small">The shown minimum team consumes about <strong>${formatNumber(minimumFood)} food Energy/day</strong> at 10 Energy/min per Aniimo. Every extra resident also eats even while idle. Production assumes the food bowl stays stocked; an empty bowl drops Aniimo work to 20%.</p>
     `;
 }
 
