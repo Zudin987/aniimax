@@ -1246,8 +1246,19 @@ pub fn check_plan(
         if rate * recipe.production_time > units as f64 + TOLERANCE {
             return Err(format!("{name} runs {rate}/s but has {units} units at {}s each", recipe.production_time));
         }
-        let in_use = if takes_turns(recipe) { rate * recipe.production_time } else { units as f64 };
-        units_at.entry(recipe.facility.as_str()).or_default().push((recipe.facility_level, in_use));
+        if crate::models::is_electric_item(name) {
+            let tiers = plan.electric_units.get(name).ok_or(format!("{name} has no E-Mode tier assignment"))?;
+            let assigned: u32 = tiers.iter().map(|(_, count)| *count).sum();
+            if assigned != units {
+                return Err(format!("{name} reports {units} E-Mode units but tier assignments total {assigned}"));
+            }
+            if tiers.iter().any(|(tier, _)| *tier < recipe.facility_level) {
+                return Err(format!("{name} is assigned to a machine below required level {}", recipe.facility_level));
+            }
+        } else {
+            let in_use = if takes_turns(recipe) { rate * recipe.production_time } else { units as f64 };
+            units_at.entry(recipe.facility.as_str()).or_default().push((recipe.facility_level, in_use));
+        }
         if let Some(environment) = recipe.environment.as_deref() {
             *plots_needing.entry((recipe.facility.as_str(), environment)).or_default() += units;
         }
@@ -1291,6 +1302,50 @@ pub fn check_plan(
             return Err(format!("{item} is used or sold faster than it's made (short {:.6}/s)", -left));
         }
     }
+    // Add physical powered machines once, rather than once per E-Mode recipe: Bench/Kiln
+    // recipes can take turns on the same powered machine.
+    let mut checked_power = 0u32;
+    for (facility, tiers) in &plan.electric_machines {
+        for &(level, count) in tiers {
+            units_at.entry(facility.as_str()).or_default().push((level, count as f64));
+            checked_power = checked_power.saturating_add(
+                count * crate::models::e_mode_power_per_unit(facility, level),
+            );
+        }
+    }
+    if checked_power != plan.power_used {
+        return Err(format!("E-Mode power says {} but powered machines draw {checked_power}", plan.power_used));
+    }
+    let available_power = crate::models::grid_power_capacity(facility_counts, module_levels);
+    if plan.power_capacity != available_power {
+        return Err(format!("grid capacity says {} but setup provides {available_power}", plan.power_capacity));
+    }
+    let active_generator_power: u32 = plan
+        .generators
+        .iter()
+        .map(|(level, count)| count * crate::models::generator_power((*level).min(module_levels.power_module)))
+        .sum();
+    if plan.generators.iter().map(|(_, count)| *count).sum::<u32>() != plan.generators_used {
+        return Err("generator count does not match its tier assignments".to_string());
+    }
+    if plan.power_used > active_generator_power {
+        return Err(format!("E-Mode draws {} power but active generators provide {active_generator_power}", plan.power_used));
+    }
+    if active_generator_power > plan.power_capacity {
+        return Err(format!("active generators provide {active_generator_power}, above configured capacity {}", plan.power_capacity));
+    }
+    for &(level, count) in &plan.generators {
+        let owned: u32 = facility_counts
+            .tiers("Crackle Generator")
+            .into_iter()
+            .filter(|(_, tier)| *tier == level)
+            .map(|(n, _)| n)
+            .sum();
+        if count > owned {
+            return Err(format!("{count} Crackle Generator Lv.{level} active but only {owned} owned"));
+        }
+    }
+
     for (facility, entries) in &units_at {
         for &(level, _) in entries {
             let needed: f64 = entries.iter().filter(|(l, _)| *l >= level).map(|(_, u)| u).sum();
@@ -1301,6 +1356,9 @@ pub fn check_plan(
         }
     }
     let mut buildings_used: HashMap<&str, u32> = HashMap::new();
+    if plan.generators_used > 0 {
+        buildings_used.insert("Crackle Generator", plan.generators_used);
+    }
     let mut covered: HashMap<(&str, &str), u32> = HashMap::new();
     for env in &plan.environment {
         *buildings_used.entry(env.building.as_str()).or_default() += env.count;
@@ -1348,7 +1406,11 @@ pub fn check_plan(
         let mut staffed: HashMap<&str, f64> = HashMap::new();
         for (building, member, share) in &plan.staffing {
             let aniimo = crew.members.get(*member).ok_or(format!("{building} staffed by roster member {member}, who isn't there"))?;
-            let ability = crew.environment.get(building).ok_or(format!("{building} needs no Aniimo"))?;
+            let ability = if building == "Crackle Generator" {
+                "Lightning"
+            } else {
+                crew.environment.get(building).ok_or(format!("{building} needs no Aniimo"))?.as_str()
+            };
             if aniimo.level(ability) == 0 {
                 return Err(format!("{building} staffed by roster member {member}, who has no {ability}"));
             }
