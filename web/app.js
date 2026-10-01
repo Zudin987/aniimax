@@ -2999,6 +2999,23 @@ function renderAniimoSummary(plan) {
         needsAniimo(building, units, `${building} (${modes[0]})`);
         needsAniimo(partner, units, `${partner} (${modes[1]})`);
     });
+    // Every Crackle Generator actually switched on needs its own Lightning Aniimo. Keep these
+    // workers resident like environment-building workers, so generic team planning never merges
+    // them into a processor's spare time.
+    if ((plan.generators_used || 0) > 0) {
+        const ability = 'Lightning';
+        const key = `${ability} (power)`;
+        groups.set(key, {
+            label: `${ability} any level`,
+            ability,
+            level: 1,
+            bonus: false,
+            busy: plan.generators_used,
+            where: new Map([['Crackle Generator (E-Mode power)', plan.generators_used]]),
+            jobs: new Map(),
+            environment: true,
+        });
+    }
     const collapsedSummary = document.getElementById('aniimo-collapsed-summary');
     if (groups.size === 0) {
         container.innerHTML = '<p class="hint">Nothing in this plan needs an Aniimo.</p>';
