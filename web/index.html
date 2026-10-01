@@ -159,8 +159,20 @@
                         <span class="season-title">Harvest Moon Festival</span>
                     </label>
                     <div id="season-config" hidden>
-                        <p class="hint">A seasonal event with its own currency, Moonray Wheat, which buys the season's seeds. Keeping enough wheat on hand is up to you; plans show how much their seeds use. Season items also earn Harvest Moon Points, which you can rank under Priorities.</p>
-                        <p class="harvest-mutation-note"><strong>Mutation farming:</strong> while the festival is enabled, the plan always keeps at least <strong>2 Farmland</strong> on Moondew Radish and <strong>2 Farmland</strong> on Waxing Moon Pepper, even when those crops do not improve the selected goal.</p>
+                        <p class="hint">A seasonal event with its own currency, Moonray Wheat, which buys the season's seeds. Plans can now stay inside a daily Wheat budget instead of treating it as unlimited. Season items also earn Harvest Moon Points, which you can rank under Priorities.</p>
+                        <div class="input-row season-limits">
+                            <div class="input-field">
+                                <label for="season-wheat-budget">Moonray Wheat / day</label>
+                                <input type="number" id="season-wheat-budget" value="600" min="0" step="50">
+                                <span class="hint small">0 = unlimited. 600/day is the guaranteed festival-daily baseline; seasonal orders can add more.</span>
+                            </div>
+                            <div class="input-field">
+                                <label for="season-mutation-plots">Mutation plots / crop</label>
+                                <input type="number" id="season-mutation-plots" value="2" min="0" max="10" step="1">
+                                <span class="hint small">Keeps this many Moondew Radish and Waxing Moon Pepper plots cycling even when another crop pays better.</span>
+                            </div>
+                        </div>
+                        <p class="harvest-mutation-note"><strong>Tip:</strong> mutation rolls are RNG. Use 1 plot each to conserve Wheat, 2 each for the balanced default, or more only if mutations are your priority.</p>
                         <p class="assume-title">Recipe Notes</p>
                         <div class="special-grid" id="season-notes"></div>
                     </div>
@@ -295,15 +307,27 @@
                         <p class="hint" id="layout-summary"></p>
                         <details class="explain">
                             <summary>How it's laid out</summary>
-                            <p>Every finished batch is carried to the Storage Unit (SU), so each facility is placed by its trips per hour times its straight-line distance to it: the busiest sit closest, idle ones go to the edge. Each environment building's plots can go anywhere its coverage still reaches them, so they sit on its Storage Unit side. No covered plot reaches another building's coverage, and a crop that needs an environment but is grown without one stays out of all of it, so every crop keeps the temperature the plan gave it. Crops that need no environment can go anywhere. Everything stays within the plots your RV level has open (each 20 by 15 tiles; in Advanced mode, the lowest RV level that allows what you entered), and the Storage Unit goes wherever the walking comes out least. Hover or tap a facility for its trips and distance. The diagram plays the homeland out in sped-up game time from when everything is set up: each finished batch goes to the Storage Unit (carrying takes no time here), and a recipe starts only once what it takes is there. A ring on each facility shows its batch, amber while it waits for materials. This is a close-packed arrangement worked out step by step, not a proven shortest one.</p>
+                            <p>Every finished batch is carried to the nearest Storage Unit (SU), so each facility is placed by its trips per hour times its straight-line distance to storage: the busiest sit closest, idle ones go to the edge. You can model 1–3 Storage Units; the layout spreads them through production demand and repacks around them. Each environment building's plots can go anywhere its coverage still reaches them, so they sit on its Storage Unit side. No covered plot reaches another building's coverage, and a crop that needs an environment but is grown without one stays out of all of it, so every crop keeps the temperature the plan gave it. Crops that need no environment can go anywhere. Everything stays within the plots your RV level has open (each 20 by 15 tiles; in Advanced mode, the lowest RV level that allows what you entered), and the Storage Unit goes wherever the walking comes out least. Hover or tap a facility for its trips and distance. The diagram plays the homeland out in sped-up game time from when everything is set up: each finished batch goes to the Storage Unit (carrying takes no time here), and a recipe starts only once what it takes is there. A ring on each facility shows its batch, amber while it waits for materials. This is a close-packed arrangement worked out step by step, not a proven shortest one.</p>
                         </details>
                         <div class="layout-controls">
                             <span class="layout-toggles">
                                 <label class="layout-whole"><input type="checkbox" id="layout-whole"> Show the whole homeland</label>
                                 <label class="layout-whole"><input type="checkbox" id="layout-sim-on" checked> Simulate</label>
+                                <label class="layout-storage-control">Storage Units
+                                    <select id="layout-storage-count" aria-label="Storage Units in layout">
+                                        <option value="1">1</option>
+                                        <option value="2" selected>2</option>
+                                        <option value="3">3</option>
+                                    </select>
+                                </label>
                             </span>
-                            <span class="layout-sim" id="layout-sim" hidden><span id="layout-clock">0h 00m</span><button type="button" class="toggle-button small" id="layout-replay">Replay</button></span>
+                            <span class="layout-actions">
+                                <button type="button" class="toggle-button small" id="layout-copy-code">Copy layout code</button>
+                                <button type="button" class="toggle-button small" id="layout-import-code">Import layout code</button>
+                                <span class="layout-sim" id="layout-sim" hidden><span id="layout-clock">0h 00m</span><button type="button" class="toggle-button small" id="layout-replay">Replay</button></span>
+                            </span>
                         </div>
+                        <p class="hint small layout-share-hint" id="layout-share-hint">Aniimax layout codes share this calculator's placement. They are not the game's server-side 8-character Combo Codes.</p>
                         <div class="layout-diagram" id="layout-diagram"></div>
                     </div>
 
