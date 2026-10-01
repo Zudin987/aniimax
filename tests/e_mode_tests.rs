@@ -1,5 +1,5 @@
 use aniimax::data::add_e_mode_variants;
-use aniimax::exact::{check_plan, solve_exact, to_production_plan, AniimoWork, Goal};
+use aniimax::exact::{check_plan, solve_exact, to_production_plan, AniimoWork, Goal, LevelUp};
 use aniimax::models::{Crew, FacilityCounts, GrowerStep, GrowerSteps, ModuleLevels, ProductionItem, RosterAniimo, SeasonTerms};
 use std::time::Duration;
 
@@ -38,6 +38,72 @@ fn solve(items: &[ProductionItem], counts: &FacilityCounts, modules: &ModuleLeve
     .expect("plan");
     check_plan(&plan, items, "coins", counts, modules, None).expect("plan re-check");
     plan
+}
+
+#[test]
+fn forced_e_mode_runs_a_real_station_even_when_normal_is_faster() {
+    let mut items = vec![item("widget", "Crafting Table", 10.0, 1_000.0)];
+    add_e_mode_variants(&mut items, "name,production_time\nwidget,100\n").unwrap();
+    let mut counts = FacilityCounts::only(&[("Crafting Table", 1, 1), ("Crackle Generator", 1, 1)]);
+    let modules = ModuleLevels { power_module: 1, ..Default::default() };
+    let normal = solve(&items, &counts, &modules);
+    assert_eq!(normal.power_used, 0);
+    counts.set_force_e_mode(true);
+    assert!(check_plan(&normal, &items, "coins", &counts, &modules, None).unwrap_err().contains("Force E-Mode"));
+    let powered = solve(&items, &counts, &modules);
+    assert_eq!(powered.generators_used, 1);
+    assert_eq!(powered.power_used, 15);
+    assert!(powered.recipe_rates["widget__electric_boost"] > 0.0);
+    assert!(powered.rate_per_second < normal.rate_per_second);
+}
+
+#[test]
+fn forced_e_mode_cannot_be_satisfied_by_an_idle_generator_or_missing_worker() {
+    let mut items = vec![item("widget", "Crafting Table", 10.0, 1_000.0)];
+    add_e_mode_variants(&mut items, "name,production_time\nwidget,100\n").unwrap();
+    let modules = ModuleLevels { power_module: 3, ..Default::default() };
+    for (generators, lightning, recipes) in [(0, 3, &items[..]), (1, 1, &items[..]), (1, 3, &items[..1])] {
+        let mut counts = FacilityCounts::only(&[("Crafting Table", 1, 3), ("Crackle Generator", generators, 3)]);
+        counts.set_force_e_mode(true).set_generator_lightning_level(Some(lightning));
+        assert!(solve_exact(recipes, "coins", &counts, &modules, Goal::Earn { floors: &[] },
+            Some(Duration::from_secs(5)), None).is_none());
+    }
+}
+
+#[test]
+fn forced_rv_staffing_preserves_pace_without_hiring_for_extra_coins() {
+    let mut first = item("first", "Carousel Mill", 10.0, 0.0);
+    first.raw_materials = Some(vec!["raw".into()]); first.required_amount = Some(vec![1]);
+    let mut last = item("last", "Crafting Table", 10.0, 0.0);
+    last.raw_materials = Some(vec!["first".into()]); last.required_amount = Some(vec![1]);
+    let mut items = vec![item("raw", "Farmland", 1_000.0, 0.0), first, last,
+        item("extra_coins", "Mine", 1.0, 100.0)];
+    add_e_mode_variants(&mut items, "name,production_time\nfirst,100\nlast,100\n").unwrap();
+    let mut counts = FacilityCounts::only(&[("Farmland", 1, 1), ("Carousel Mill", 1, 1),
+        ("Crafting Table", 1, 1), ("Mine", 1, 1), ("Crackle Generator", 1, 1)]);
+    counts.set_force_e_mode(true);
+    let modules = ModuleLevels { power_module: 1, ..Default::default() };
+    let cost = LevelUp { cost: vec![("last".into(), 86.4), ("coins".into(), 86_400.0)],
+        stock: vec![("coins".into(), 86_400.0)] };
+    let fastest = solve_exact(&items, "coins", &counts, &modules, Goal::LevelUp(&cost),
+        Some(Duration::from_secs(5)), None).unwrap();
+    let pace = fastest.pace.unwrap();
+    let income = solve_exact(&items, "coins", &counts, &modules, Goal::EarnWhileLevelingUp(&cost, pace),
+        Some(Duration::from_secs(5)), None).unwrap();
+    assert!(income.recipe_rates.contains_key("extra_coins"));
+    let work: Vec<_> = [("first", "Wind", false, 10.0), ("last", "Artisanship", false, 10.0),
+        ("extra_coins", "Earth", true, 1.0)].into_iter().map(|(recipe, group, per_unit, seconds)|
+            AniimoWork { recipe: recipe.into(), group: group.into(), per_unit, seconds }).collect();
+    let freed = solve_exact(&items, "coins", &counts, &modules,
+        Goal::FreeAniimo { floors: &[], level_up: Some((&cost, pace)), coins: 0.0, work: &work },
+        Some(Duration::from_secs(5)), None).unwrap();
+    check_plan(&freed, &items, "coins", &counts, &modules, Some(&cost)).unwrap();
+    assert!(freed.pace.unwrap() >= pace * 0.9999 - 1e-8);
+    assert!(!freed.recipe_rates.contains_key("extra_coins"));
+    assert!(!freed.recipe_rates.contains_key("first"));
+    assert!(!freed.recipe_rates.contains_key("last"));
+    assert_eq!(freed.generators_used, 1);
+    assert_eq!(freed.power_used, 30);
 }
 
 #[test]

@@ -359,7 +359,7 @@ let rateUnitChosen = false;
 function getPersistedFieldIds() {
     return [
         'target-amount', 'current-amount',
-        'strategy-level-up', 'strategy-priorities', 'level-up-target',
+        'strategy-level-up', 'strategy-priorities', 'level-up-target', 'force-e-mode',
         'mode-simple', 'mode-advanced', 'home-level',
         'ecological-module-level', 'kitchen-module-level',
         'resource-detector-level', 'crafting-module-level', 'power-module-level',
@@ -571,7 +571,7 @@ function renderSimpleSummary() {
     const active = modules.power_module > 0 && generators > 0;
     const note = document.getElementById('simple-emode-note');
     note?.classList.toggle('is-active', active);
-    document.getElementById('simple-emode-title').textContent = active ? 'E-Mode is active automatically' : 'E-Mode unlocks at RV 12';
+    document.getElementById('simple-emode-title').textContent = active ? 'E-Mode is available' : 'E-Mode unlocks at RV 12';
     document.getElementById('simple-emode-copy').textContent = active
         ? `Power Module Lv.${modules.power_module} + ${generators} Crackle Generator${generators === 1 ? '' : 's'}. Powered production is compared automatically with Aniimo work.`
         : 'Powered production becomes available with the Power Module and Crackle Generator.';
@@ -2495,6 +2495,10 @@ function populateLevelUpTargets() {
 
 function renderStrategy() {
     renderSeason();
+    const forced = document.getElementById('force-e-mode').checked;
+    document.getElementById('level-up-strategy-hint').textContent = forced
+        ? 'Finds the fastest RV level-up with E-Mode required, then reduces the Aniimo team. Extra Home Coin production may be lower so you can use spare slots at star stations.'
+        : 'Gets everything your next RV level costs as soon as possible, then earns as many Home Coins as that leaves room for.';
     const levelUp = isLevelUpStrategy();
     document.getElementById('level-up-config').style.display = levelUp ? 'block' : 'none';
     document.getElementById('priorities-config').style.display = levelUp ? 'none' : 'block';
@@ -2528,6 +2532,7 @@ function renderStrategy() {
 }
 
 function attachStrategyHandlers() {
+    document.getElementById('force-e-mode').addEventListener('change', renderStrategy);
     document.getElementById('strategy-level-up').addEventListener('change', renderStrategy);
     document.getElementById('strategy-priorities').addEventListener('change', renderStrategy);
     document.getElementById('level-up-target').addEventListener('change', () => {
@@ -2744,6 +2749,7 @@ function getPlanInputValues() {
             currency: 'coins',
             priorities: activePriorities(),
             prioritize_byproducts: false,
+            force_e_mode: document.getElementById('force-e-mode').checked,
             level_up: levelUpInput(),
             exclude: excludedRecipes(),
             season: seasonActive(),
@@ -2774,6 +2780,7 @@ function getPlanInputValues() {
         currency: 'coins',
         priorities: activePriorities(),
         prioritize_byproducts: false,
+        force_e_mode: document.getElementById('force-e-mode').checked,
         level_up: levelUpInput(),
         exclude: excludedRecipes(),
         season: seasonActive(),
@@ -3888,6 +3895,7 @@ function renderPowerSummary(plan) {
         return;
     }
     card.style.display = 'block';
+    document.getElementById('emode-plan-kind').textContent = plan.e_mode_forced ? 'Forced' : 'Automatic';
     const used = plan.power_used || 0;
     const activeSupply = plan.power_supply || 0;
     const configuredSpare = Math.max(0, capacity - used);
@@ -3917,7 +3925,9 @@ function renderPowerSummary(plan) {
         </div>`;
     const note = document.getElementById('power-spare-note');
     if (note) {
-        const staffing = plan.workforce_optimized
+        const staffing = plan.staffing_first
+            ? 'Force E-Mode is on. RV level-up pace comes first, then the Aniimo team. Extra coin production is reduced where it can free slots for star stations. '
+            : plan.workforce_optimized
             ? `The planner also checked E-Mode to reduce the Aniimo team while keeping your production targets.${plan.aniimo_slots_saved > 0 ? ` Freed ${plan.aniimo_slots_saved} additional Aniimo slot${plan.aniimo_slots_saved === 1 ? '' : 's'} for other stations.` : ''} `
             : '';
         note.textContent = used <= 0
@@ -3962,7 +3972,11 @@ function displayPlan(plan) {
     // planner made it.
     const explored = document.getElementById('plan-explored-hint');
     explored.style.display = plan.proven_optimal === true ? 'none' : '';
-    if (plan.proven_optimal === true) {
+    if (plan.staffing_first) {
+        explored.textContent = plan.staffing_proven
+            ? 'RV pace was optimized with E-Mode required, then the modeled Aniimo team was minimized. Extra Home Coins are not the target of this plan.'
+            : 'Best E-Mode team found in the time allowed, while keeping the RV pace found. A smaller team or faster level-up may still be possible.';
+    } else if (plan.proven_optimal === true) {
         explored.textContent = '';
     } else if (plan.proven_optimal === false && plan.upper_bound > 0) {
         const gap = Math.max(0, (plan.upper_bound - plan.rate_per_second) / plan.upper_bound * 100);
