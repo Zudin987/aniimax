@@ -1,6 +1,6 @@
 use aniimax::data::add_e_mode_variants;
 use aniimax::exact::{check_plan, solve_exact, Goal};
-use aniimax::models::{Crew, FacilityCounts, ModuleLevels, ProductionItem, RosterAniimo, SeasonTerms};
+use aniimax::models::{Crew, FacilityCounts, GrowerStep, GrowerSteps, ModuleLevels, ProductionItem, RosterAniimo, SeasonTerms};
 use std::time::Duration;
 
 fn item(name: &str, facility: &str, seconds: f64, sell_value: f64) -> ProductionItem {
@@ -186,4 +186,37 @@ fn rated_generator_power_requires_the_recommended_lightning_level() {
     assert_eq!(powered.generators_used, 1);
     assert!(powered.staffing.iter().any(|(building, member, share)|
         building == "Crackle Generator Lv.3" && *member == 0 && (*share - 1.0).abs() < 1e-9));
+}
+
+
+#[test]
+fn grower_jobs_consume_custom_roster_time() {
+    let crop = item("test_crop", "Farmland", 10.0, 100.0);
+    let mut steps = GrowerSteps::default();
+    steps.insert("test_crop", GrowerStep {
+        step: "Reclaiming".to_string(),
+        ability: "Earth".to_string(),
+        min_level: 1,
+        workload: 100.0,
+    });
+
+    let mut counts = FacilityCounts::only(&[("Farmland", 10, 1)]);
+    counts.set_crew(Crew {
+        members: vec![RosterAniimo {
+            count: 1,
+            abilities: [("Earth".to_string(), 1)].into_iter().collect(),
+            personalities: Vec::new(),
+        }],
+        residents: Default::default(),
+        environment: Default::default(),
+        personalities: Default::default(),
+    });
+    counts.set_grower_steps(steps);
+
+    let plan = solve(&[crop], &counts, &ModuleLevels::default());
+    let rate = plan.recipe_rates.get("test_crop").copied().unwrap_or(0.0);
+    assert!(rate <= 0.010001, "one Earth worker should cap 100s reclaiming work, got {rate}/s");
+    assert!(!plan.grower_staffing.is_empty());
+    let busy: f64 = plan.grower_staffing.iter().map(|(_, _, _, share)| *share).sum();
+    assert!(busy <= 1.0 + 1e-6, "grower work used {busy} Aniimo-days per day");
 }
