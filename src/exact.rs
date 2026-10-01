@@ -757,7 +757,8 @@ fn build_model<'a>(
     // Every environment building in use is staffed all day by a member with its ability.
     if let Some(crew) = facility_counts.crew() {
         let mut busy: Vec<Vec<(usize, f64)>> = vec![Vec::new(); crew.members.len()];
-        for (&(recipe, rate), &(_, units)) in rate_of.iter().zip(&units_of) {
+        for &(recipe, units) in &units_of {
+            let Some((_, rate)) = rate_of.iter().find(|(r, _)| std::ptr::eq(*r, recipe)).copied() else { continue };
             let Some(member) = recipe.crew.filter(|&m| m < busy.len()) else { continue };
             if crew.residents.contains(&recipe.facility) {
                 busy[member].push((units, 1.0));
@@ -771,6 +772,7 @@ fn build_model<'a>(
             let named: Vec<&str> = match kind {
                 VarKind::Environment { building, .. } => vec![building],
                 VarKind::EnvironmentPair { buildings: (a, b), .. } => vec![a, b],
+                VarKind::Generator { .. } => vec!["Crackle Generator"],
                 _ => continue,
             };
             for building in named {
@@ -778,8 +780,14 @@ fn build_model<'a>(
             }
         }
         for (building, used) in set_up {
-            // A building with no ability listed needs no Aniimo (as `check_plan` takes it).
-            let Some(ability) = crew.environment.get(&building) else { continue };
+            // Environment buildings use the roster's configured ability; every active Crackle
+            // Generator always needs one Lightning Aniimo.
+            let ability = if building == "Crackle Generator" {
+                "Lightning"
+            } else {
+                let Some(ability) = crew.environment.get(&building) else { continue };
+                ability.as_str()
+            };
             let mut staffed: Vec<(usize, f64)> = used.into_iter().map(|(v, n)| (v, -n)).collect();
             for (member, aniimo) in crew.members.iter().enumerate() {
                 if aniimo.count == 0 || aniimo.level(ability) == 0 {
@@ -806,6 +814,37 @@ fn build_model<'a>(
         };
         model.objective[v] -= BUILDING_TIE_BREAK * buildings;
         model.tiebreak.push((v, BUILDING_TIE_BREAK * buildings));
+    }
+
+    // After the real production objective is settled, prefer E-Mode when it can free a production
+    // Aniimo without meaningfully changing output. Whole normal machines are the strongest
+    // preference; normal busy time breaks ties after that. Active generators get a tiny cost so
+    // spare grid hardware is not switched on merely because it can be.
+    let e_mode_bases: std::collections::HashSet<&str> = recipes
+        .iter()
+        .filter(|recipe| crate::models::is_electric_item(&recipe.name))
+        .map(|recipe| crate::models::base_item_name(&recipe.name))
+        .collect();
+    for v in 0..model.kinds.len() {
+        let weight = match &model.kinds[v] {
+            VarKind::Units(recipe)
+                if e_mode_bases.contains(crate::models::base_item_name(&recipe.name)) =>
+            {
+                EMODE_UNIT_TIE_BREAK
+            }
+            VarKind::Rate(recipe)
+                if !crate::models::is_electric_item(&recipe.name)
+                    && e_mode_bases.contains(crate::models::base_item_name(&recipe.name)) =>
+            {
+                EMODE_BUSY_TIE_BREAK * recipe.production_time
+            }
+            VarKind::Generator { .. } => GENERATOR_TIE_BREAK,
+            _ => 0.0,
+        };
+        if weight > 0.0 {
+            model.objective[v] -= weight;
+            model.tiebreak.push((v, weight));
+        }
     }
     model
 }
