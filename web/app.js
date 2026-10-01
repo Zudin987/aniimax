@@ -1962,21 +1962,13 @@ function renderRosterSummary(plan) {
         busy[member] += share;
         where[member].set(building, (where[member].get(building) || 0) + share);
     });
-    // The growing jobs (sowing, reaping and the like) take seconds a harvest, so they don't count
-    // as busy time, but someone has to do them: each goes to the least busy Aniimo able to.
-    const jobs = new Map();
-    (plan.coin_items || []).forEach(step => {
-        if (step.status !== 'producing' || !(step.facility === 'Farmland' || step.facility === 'Woodland')) return;
-        (recipeIndex.find(r => r.name === basePlanItem(step.item_name))?.jobs || []).forEach(([job, ability, level]) => {
-            jobs.set(`${job}|${ability}|${level}|${step.facility}`, { job, ability, level, facility: step.facility });
-        });
-    });
-    jobs.forEach(({ job, ability, level, facility }) => {
-        const able = roster.map((a, i) => i).filter(i => (roster[i].abilities[ability] || 0) >= level);
-        if (!able.length) return;
-        const pick = able.reduce((a, b) => (busy[b] / roster[b].count < busy[a] / roster[a].count ? b : a));
-        const place = `${job} on ${facility}`;
-        if (!where[pick].has(place)) where[pick].set(place, 1);
+    // The exact solver now assigns every Reclaiming/Sowing/Watering/harvest job too, so a busy
+    // Earth worker at the Mine cannot be reused for unlimited soil reclamation.
+    (plan.grower_staffing || []).forEach(([item, job, member, share]) => {
+        if (!roster[member]) return;
+        busy[member] += share;
+        const place = `${job} (${prettyItem(item)})`;
+        where[member].set(place, (where[member].get(place) || 0) + share);
     });
     const have = roster.reduce((sum, a) => sum + a.count, 0);
     const working = roster.reduce((sum, a, i) => sum + Math.min(a.count, Math.ceil(busy[i] - 1e-6)), 0);
