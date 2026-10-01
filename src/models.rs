@@ -362,6 +362,13 @@ pub fn crew_variants(
         .collect();
     let mut out = Vec::new();
     for mut item in items {
+        // E-Mode is powered by the grid, not worked by a roster member. Keep its fixed timer and
+        // bypass both processor staffing and grower-job checks.
+        if is_electric_item(&item.name) {
+            item.crew = None;
+            out.push(item);
+            continue;
+        }
         match (item.workload, requirements.get(base_item_name(&item.name))) {
             (Some(workload), Some((ability, required))) => {
                 let mut fastest = f64::INFINITY;
