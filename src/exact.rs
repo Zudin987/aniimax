@@ -125,6 +125,14 @@ pub struct ExactPlan {
     pub recipe_rates: BTreeMap<String, f64>,
     /// Whole units set to each recipe that runs.
     pub units: BTreeMap<String, u32>,
+    /// For E-Mode recipes, units split by the actual owned facility tier.
+    pub electric_units: BTreeMap<String, Vec<(u32, u32)>>,
+    /// Grid power drawn by powered facilities.
+    pub power_used: u32,
+    /// Maximum full-power capacity of the configured Crackle Generators.
+    pub power_capacity: u32,
+    /// Crackle Generators the chosen plan actually switches on.
+    pub generators_used: u32,
     /// Units/sec sold of each item.
     pub sold: BTreeMap<String, f64>,
     pub environment: Vec<ExactEnvironment>,
@@ -220,6 +228,12 @@ fn made_item<'a>(name: &'a str, all: &HashMap<&str, &ProductionItem>) -> &'a str
 enum VarKind<'a> {
     Rate(&'a ProductionItem),
     Units(&'a ProductionItem),
+    /// One E-Mode recipe assigned to an owned machine at this exact facility tier.
+    ElectricUnits { recipe: &'a ProductionItem, tier_level: u32 },
+    /// A physical machine of an exact tier switched into E-Mode.
+    ElectricMachines { facility: &'a str, tier_level: u32 },
+    /// A Crackle Generator of an exact tier switched on.
+    Generator { tier_level: u32 },
     Sold(&'a str),
     Pace,
     /// Made beyond what the level-up needs, of one of its costs.
@@ -253,8 +267,10 @@ struct Model<'a> {
     priority: Vec<u8>,
     kinds: Vec<VarKind<'a>>,
     constraints: Vec<Constraint>,
-    /// `(variable, weight)` for the tie-break in the objective (see [`BUILDING_TIE_BREAK`]),
-    /// so a solve's objective can be given back without it.
+    /// Maximum configured E-Mode grid capacity.
+    power_capacity: u32,
+    /// `(variable, weight)` for tiny preference terms in the objective, so a solve's real
+    /// production objective can be recovered without them.
     tiebreak: Vec<(usize, f64)>,
 }
 
@@ -263,6 +279,12 @@ struct Model<'a> {
 /// the one with the fewest buildings wins. Each building in use needs an Aniimo, and otherwise
 /// the solver is free to spread three plots over two Heat Furnaces that one would cover.
 const BUILDING_TIE_BREAK: f64 = 1e-5;
+/// Of otherwise-equal plans, prefer freeing a whole production Aniimo with E-Mode.
+const EMODE_UNIT_TIE_BREAK: f64 = 5e-6;
+/// Then prefer less normal Aniimo busy time among plans using the same number of normal machines.
+const EMODE_BUSY_TIE_BREAK: f64 = 1e-8;
+/// Do not switch on extra generators when they are not needed.
+const GENERATOR_TIE_BREAK: f64 = 1e-7;
 
 impl<'a> Model<'a> {
     fn add(&mut self, objective: f64, bounds: (f64, f64), integer: bool, kind: VarKind<'a>) -> usize {
@@ -270,8 +292,10 @@ impl<'a> Model<'a> {
         self.bounds.push(bounds);
         self.integer.push(integer);
         self.priority.push(match &kind {
-            VarKind::Environment { .. } | VarKind::EnvironmentPair { .. } => 0,
+            VarKind::Environment { .. } | VarKind::EnvironmentPair { .. } | VarKind::Generator { .. } => 0,
             VarKind::Units(recipe) if recipe.raw_materials.is_none() => 1,
+            VarKind::ElectricUnits { recipe, .. } if recipe.raw_materials.is_none() => 1,
+            VarKind::ElectricMachines { facility, .. } if *facility == "Mine" || *facility == "Well" => 1,
             _ => 2,
         });
         self.kinds.push(kind);
@@ -321,6 +345,7 @@ fn build_model<'a>(
                 && item.production_time > 0.0
         })
         .collect();
+    let power_capacity = crate::models::grid_power_capacity(facility_counts, module_levels);
     let mut model = Model {
         objective: Vec::new(),
         earnings: Vec::new(),
@@ -329,6 +354,7 @@ fn build_model<'a>(
         priority: Vec::new(),
         kinds: Vec::new(),
         constraints: Vec::new(),
+        power_capacity,
         tiebreak: Vec::new(),
     };
 
