@@ -359,7 +359,7 @@ function getPersistedFieldIds() {
         'strategy-level-up', 'strategy-priorities', 'level-up-target',
         'mode-simple', 'mode-advanced', 'home-level',
         'ecological-module-level', 'kitchen-module-level',
-        'resource-detector-level', 'crafting-module-level',
+        'resource-detector-level', 'crafting-module-level', 'power-module-level',
         'rate-unit', 'season-on', 'layout-sim-on'
     ];
 }
@@ -553,14 +553,24 @@ function renderSimpleSummary() {
         ['Kitchen Module', modules.kitchen_module],
         ['Resource Detector', modules.resource_detector],
         ['Crafting Module', modules.crafting_module],
+        ['Power Module', modules.power_module],
     ].map(([name, level]) => chip('', name, level > 0 ? `Lv.${level}` : 'not yet')).join('');
     const kinds = FACILITIES.filter(f => facilities[f.name][0].count > 0).length;
-    document.getElementById('simple-summary-title').textContent = `${kinds} facilities and 4 modules at RV ${homeLevel}`;
+    document.getElementById('simple-summary-title').textContent = `${kinds} facilities and 5 modules at RV ${homeLevel}`;
     document.getElementById('simple-summary').innerHTML = `
         <p class="assume-title">Facilities</p>
         <div class="chip-grid">${built}</div>
         <p class="assume-title">Modules</p>
         <div class="chip-grid">${moduleChips}</div>`;
+
+    const generators = tierCount(facilities['Crackle Generator']);
+    const active = modules.power_module > 0 && generators > 0;
+    const note = document.getElementById('simple-emode-note');
+    note?.classList.toggle('is-active', active);
+    document.getElementById('simple-emode-title').textContent = active ? 'E-Mode is active automatically' : 'E-Mode unlocks at RV 12';
+    document.getElementById('simple-emode-copy').textContent = active
+        ? `Power Module Lv.${modules.power_module} + ${generators} Crackle Generator${generators === 1 ? '' : 's'}. Powered production is compared automatically with Aniimo work.`
+        : 'Powered production becomes available with the Power Module and Crackle Generator.';
 }
 
 // Whether the player has picked Advanced mode's level-up target; until then it follows the RV
@@ -592,6 +602,7 @@ function fillAdvancedFrom(homeLevel) {
     document.getElementById('kitchen-module-level').value = modules.kitchen_module;
     document.getElementById('resource-detector-level').value = modules.resource_detector;
     document.getElementById('crafting-module-level').value = modules.crafting_module;
+    document.getElementById('power-module-level').value = modules.power_module;
     followLevelUpTarget(homeLevel);
     renderStrategy();
     saveInputsToStorage();
@@ -654,6 +665,7 @@ const MODULE_NAMES = {
     kitchen_module: 'Kitchen Module',
     resource_detector: 'Resource Detector',
     crafting_module: 'Crafting Module',
+    power_module: 'Power Module',
 };
 
 function stopRanking() {
@@ -1017,7 +1029,7 @@ function tripsPerUnit(step) {
 
 // Whether a crop needs a growing environment: grown without one, a building's temperature
 // would change it. Crops that need none grow the same anywhere.
-const needsEnvironment = item => !!recipeIndex.find(r => r.name === item)?.environment;
+const needsEnvironment = item => !!recipeIndex.find(r => r.name === basePlanItem(item))?.environment;
 
 // The plan as pieces for `layOut`: environment blocks, then one piece per other facility unit,
 // then whatever the player owns that the plan doesn't use.
@@ -1078,7 +1090,7 @@ function homelandPieces(plan, input) {
 
     // Recipes taking turns on the same units (the Bench's and Kiln's tiers) share them: as many
     // units as their busy time together needs, each running every tier in turn at its share.
-    const takesTurns = step => step.status === 'producing' && !!recipeIndex.find(r => r.name === step.item_name)?.turns;
+    const takesTurns = step => step.status === 'producing' && !!recipeIndex.find(r => r.name === basePlanItem(step.item_name))?.turns;
     const turnGroups = new Map();
     steps.filter(takesTurns).forEach(step => turnGroups.set(step.facility, [...(turnGroups.get(step.facility) || []), step]));
     turnGroups.forEach((rows, facility) => {
@@ -1122,6 +1134,7 @@ function homelandPieces(plan, input) {
 
     // What's owned but not in the plan at all, such as environment buildings it didn't need.
     FACILITIES.forEach(f => {
+        if (f.name === 'Crackle Generator') return; // footprint not verified; omit from the placement diagram
         const owned = tierCount(input.facilities[f.name]);
         const extra = owned - (placed[f.name] || 0);
         if (extra <= 0) return;
@@ -1859,7 +1872,7 @@ function renderRosterSummary(plan) {
     const jobs = new Map();
     (plan.coin_items || []).forEach(step => {
         if (step.status !== 'producing' || !(step.facility === 'Farmland' || step.facility === 'Woodland')) return;
-        (recipeIndex.find(r => r.name === step.item_name)?.jobs || []).forEach(([job, ability, level]) => {
+        (recipeIndex.find(r => r.name === basePlanItem(step.item_name))?.jobs || []).forEach(([job, ability, level]) => {
             jobs.set(`${job}|${ability}|${level}|${step.facility}`, { job, ability, level, facility: step.facility });
         });
     });
@@ -2577,7 +2590,8 @@ function getPlanInputValues() {
         ecological_module: numberOrDefault(document.getElementById('ecological-module-level').value, 0),
         kitchen_module: numberOrDefault(document.getElementById('kitchen-module-level').value, 0),
         resource_detector: numberOrDefault(document.getElementById('resource-detector-level').value, 0),
-        crafting_module: numberOrDefault(document.getElementById('crafting-module-level').value, 0)
+        crafting_module: numberOrDefault(document.getElementById('crafting-module-level').value, 0),
+        power_module: numberOrDefault(document.getElementById('power-module-level').value, 0)
     };
 
     return {
@@ -2596,8 +2610,18 @@ function getPlanInputValues() {
 // at all (blank/invalid); unlike `value || fallback`, these correctly keep a legitimate 0 (e.g.
 // "I own zero of this facility"), which `||` would silently discard since 0 is falsy in JS.
 // "quick_aromathyst" -> "Quick Aromathyst": the data uses snake_case names.
+function basePlanItem(name) {
+    if (!name) return name;
+    return name.replace(/__electric$/, '').replace(/__uncovered$/, '').replace(/__by\d+$/, '');
+}
+
+function isElectricItem(name) {
+    return !!name && name.endsWith('__electric');
+}
+
 function prettyItem(name) {
     if (!name) return name;
+    name = basePlanItem(name);
     if (ITEM_NAMES[name]) return ITEM_NAMES[name];
     return name.split('_').map(w => w ? w[0].toUpperCase() + w.slice(1) : w).join(' ');
 }
@@ -2806,6 +2830,7 @@ function abilityDot(name, level, note) {
 }
 
 function aniimoLabel(step) {
+    if (isElectricItem(step.item_name)) return '<span class="tag emode" title="Powered by E-Mode; no production Aniimo needed">⚡ E-Mode</span>';
     const a = step.aniimo;
     if (!a) {
         // Crops and trees: the abilities their planting and harvesting jobs need.
@@ -2867,7 +2892,7 @@ function planRows(rows) {
                     <tr class="status-${step.status}">
                         <td data-label="Facility">${step.facility}</td>
                         <td data-label="Count">${step.facility_count}</td>
-                        <td data-label="Producing">${step.item_name ? prettyItem(step.item_name) : '-'}${unverifiedRowKeys.has(`${step.facility}|${step.item_name}`) ? '<span class="tag unverified" title="Not yet checked in game">unverified</span>' : ''}${step.item_name && step.status === 'producing' ? `<button type="button" class="skip-row" data-skip="${step.item_name}" title="Can't make this? Skip it and plan again" aria-label="Skip ${prettyItem(step.item_name)} and plan again">✕</button>` : ''}</td>
+                        <td data-label="Producing">${step.item_name ? prettyItem(step.item_name) : '-'}${isElectricItem(step.item_name) ? '<span class="tag emode" title="Powered by E-Mode; no production Aniimo needed">⚡ E-Mode</span>' : ''}${unverifiedRowKeys.has(`${step.facility}|${basePlanItem(step.item_name)}`) ? '<span class="tag unverified" title="Not yet checked in game">unverified</span>' : ''}${step.item_name && step.status === 'producing' ? `<button type="button" class="skip-row" data-skip="${basePlanItem(step.item_name)}" title="Can't make this? Skip it and plan again" aria-label="Skip ${prettyItem(step.item_name)} and plan again">✕</button>` : ''}</td>
                         <td data-label="Aniimo">${aniimoLabel(step)}</td>
                         <td data-label="Why">${prettyReason(step.reason)}</td>
                     </tr>
@@ -3642,6 +3667,33 @@ function updateRateUnitDisplays() {
     }
 }
 
+function renderPowerSummary(plan) {
+    const card = document.getElementById('power-card');
+    const el = document.getElementById('power-summary');
+    if (!card || !el) return;
+    const capacity = plan.power_capacity || 0;
+    if (capacity <= 0) {
+        card.style.display = 'none';
+        return;
+    }
+    card.style.display = 'block';
+    const used = plan.power_used || 0;
+    const spare = Math.max(0, capacity - used);
+    const generators = plan.generators_used || 0;
+    el.innerHTML = `
+        <div class="summary-grid">
+            <div class="summary-item"><span class="summary-label">Power in use</span><span class="summary-value">${formatNumber(used)} / ${formatNumber(capacity)}</span></div>
+            <div class="summary-item"><span class="summary-label">Available headroom</span><span class="summary-value">${formatNumber(spare)}</span></div>
+            <div class="summary-item"><span class="summary-label">Generators active</span><span class="summary-value">${generators}</span></div>
+        </div>`;
+    const note = document.getElementById('power-spare-note');
+    if (note) {
+        note.textContent = spare > 0
+            ? `${formatNumber(spare)} power remains available. Extra E-Mode is used only when it improves the selected goal or frees Aniimo without changing the main result.`
+            : 'The current plan uses all available full-power capacity.';
+    }
+}
+
 // Render a successfully computed plan: rate summary + facility plan table. Goal-independent,
 // called once per Calculate click (or facility/currency/module change), not on every goal
 // keystroke.
@@ -3706,6 +3758,7 @@ function displayPlan(plan) {
     renderSeedTable(plan);
     renderLevelUp(plan);
     renderProfitBreakdown(plan);
+    renderPowerSummary(plan);
     renderFacilityPlan(plan);
     renderAniimoSummary(plan);
     // The page stays where the player is; the results appear without scrolling to them.
