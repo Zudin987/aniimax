@@ -1,5 +1,5 @@
 use aniimax::data::add_e_mode_variants;
-use aniimax::exact::{check_plan, solve_exact, Goal};
+use aniimax::exact::{check_plan, solve_exact, to_production_plan, Goal};
 use aniimax::models::{Crew, FacilityCounts, GrowerStep, GrowerSteps, ModuleLevels, ProductionItem, RosterAniimo, SeasonTerms};
 use std::time::Duration;
 
@@ -122,6 +122,27 @@ fn harvest_mutation_minimum_is_configurable() {
     assert_eq!(plan.units.get("moondew_radish"), Some(&1));
     assert_eq!(plan.units.get("waxing_moon_pepper"), Some(&1));
     assert_eq!(plan.units.get("profitable_crop"), Some(&5));
+}
+
+#[test]
+fn harvest_mutation_reason_uses_configured_minimum() {
+    let items = vec![
+        item("moondew_radish", "Farmland", 100.0, 0.0),
+        item("waxing_moon_pepper", "Farmland", 100.0, 0.0),
+        item("profitable_crop", "Farmland", 100.0, 1_000.0),
+    ];
+    let mut counts = FacilityCounts::only(&[("Farmland", 7, 1)]);
+    counts.set_season_limits(None, 1);
+    let exact = solve(&items, &counts, &ModuleLevels::default());
+    let shown = to_production_plan(&exact, &items, "coins", &counts);
+
+    let radish = shown
+        .coin_items
+        .iter()
+        .find(|step| step.item_name.as_deref() == Some("moondew_radish"))
+        .expect("radish row");
+    assert!(radish.reason.contains("at least 1 plot planted"));
+    assert!(!radish.reason.contains("at least 2 plots planted"));
 }
 
 #[test]
