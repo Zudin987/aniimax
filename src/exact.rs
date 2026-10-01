@@ -1425,10 +1425,31 @@ fn plan_from(model: &Model, value: f64, upper_bound: f64, proven_optimal: bool, 
         if replacements.iter().all(|(_, boosted)| model.kinds.iter().any(|kind| {
             matches!(kind, VarKind::Rate(recipe) if recipe.name == *boosted)
         })) {
-            for (name, boosted) in replacements {
-                if let Some(rate) = recipe_rates.remove(&name) { recipe_rates.insert(boosted.clone(), rate); }
-                if let Some(count) = units.remove(&name) { units.insert(boosted.clone(), count); }
-                if let Some(tiers) = electric_units.remove(&name) { electric_units.insert(boosted, tiers); }
+            let renamed: BTreeMap<String, String> = replacements.into_iter().collect();
+            for (name, boosted) in &renamed {
+                if let Some(rate) = recipe_rates.remove(name) { recipe_rates.insert(boosted.clone(), rate); }
+                units.remove(name);
+                electric_units.remove(name);
+            }
+            // Bench/Kiln recipes share machine time. Their faster cycles can free a whole
+            // physical machine, so rebuild tier assignments and draw with the shorter shares.
+            let mut active_powered: BTreeMap<(String, u32), f64> = BTreeMap::new();
+            for (kind, &v) in model.kinds.iter().zip(values) {
+                let VarKind::ElectricUnits { recipe, tier_level } = kind else { continue };
+                let Some(boosted) = renamed.get(&recipe.name) else { continue };
+                if v <= 1e-9 { continue; }
+                let share = if takes_turns(recipe) { v / 1.2 } else { v };
+                let count = ((share - INTEGRAL).ceil().max(1.0)) as u32;
+                *units.entry(boosted.clone()).or_default() += count;
+                electric_units.entry(boosted.clone()).or_default().push((*tier_level, count));
+                *active_powered.entry((recipe.facility.clone(), *tier_level)).or_default() += share;
+            }
+            electric_machines.clear();
+            power_used = 0;
+            for ((facility, tier_level), share) in active_powered {
+                let count = ((share - INTEGRAL).ceil().max(1.0)) as u32;
+                power_used = power_used.saturating_add(count * crate::models::e_mode_power_per_unit(&facility, tier_level));
+                electric_machines.entry(facility).or_default().push((tier_level, count));
             }
             power_efficiency = 120;
         }
@@ -2489,15 +2510,26 @@ mod e_mode_handoff_tests {
 
         // A Lv.5 Generator is capped by the Power Module. 600 draw is above the Lv.1
         // boost band, but 450 draw is inside it; a fully unlocked generator also boosts.
-        for (module, machines, expected) in [(5, 1, 120), (1, 8, 100), (1, 6, 120)] {
-            let counts = FacilityCounts::only(&[("Crafting Table", machines, 5), ("Crackle Generator", 1, 5)]);
+        for (facility, module, machines, share, expected, physical) in [
+            ("Crafting Table", 5, 1, 1.0, 120, 1),
+            ("Crafting Table", 1, 8, 8.0, 100, 8),
+            ("Crafting Table", 1, 6, 6.0, 120, 6),
+            ("Woodworking Bench", 1, 2, 1.2, 120, 1),
+        ] {
+            let mut items = items.clone();
+            for item in &mut items {
+                item.facility = facility.to_string();
+                if facility == "Woodworking Bench" { item.sell_currency = "none".to_string(); item.sell_value = 0.0; }
+            }
+            let counts = FacilityCounts::only(&[(facility, machines, 5), ("Crackle Generator", 1, 5)]);
             let modules = ModuleLevels { power_module: module, ..Default::default() };
             let model = build_model(&items, "coins", &counts, &modules, Goal::Earn { floors: &[] });
             let mut bounds = model.bounds.clone();
             for (i, kind) in model.kinds.iter().enumerate() {
                 let fixed = match kind {
                     VarKind::GridBoost | VarKind::Units(_) => Some(0.0),
-                    VarKind::ElectricUnits { recipe, .. } => Some(if crate::models::is_boosted_electric_item(&recipe.name) { 0.0 } else { machines as f64 }),
+                    VarKind::Rate(recipe) if takes_turns(recipe) && recipe.name.ends_with(crate::models::ELECTRIC_SUFFIX) => Some(share / recipe.production_time),
+                    VarKind::ElectricUnits { recipe, .. } => Some(if crate::models::is_boosted_electric_item(&recipe.name) { 0.0 } else { share }),
                     VarKind::ElectricMachines { .. } => Some(machines as f64),
                     VarKind::Generator { boosted, .. } => Some(if *boosted { 0.0 } else { 1.0 }),
                     _ => None,
@@ -2507,10 +2539,11 @@ mod e_mode_handoff_tests {
             let (value, values) = model.relax(&bounds).expect("100% MIP allocation");
             let plan = plan_from(&model, value, value, false, 0, &values, value);
             assert_eq!(plan.power_efficiency, expected);
-            assert_eq!(plan.power_used, machines * 75);
+            assert_eq!(plan.power_used, physical * 75);
             check_plan(&plan, &items, "coins", &counts, &modules, None).unwrap();
             let displayed = to_production_plan(&plan, &items, "coins", &counts);
             let row = displayed.coin_items.iter().find(|row| row.item_name.is_some()).unwrap();
+            assert_eq!(row.facility_count, physical);
             let cycle = row.cycle_time.unwrap();
             assert!((cycle - 10.0 * 100.0 / expected as f64).abs() < 1e-9);
         }
