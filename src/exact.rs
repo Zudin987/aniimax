@@ -136,6 +136,8 @@ pub struct ExactPlan {
     pub power_capacity: u32,
     /// Crackle Generators the chosen plan actually switches on.
     pub generators_used: u32,
+    /// Power supplied by the generators actually switched on.
+    pub power_supply: u32,
     /// Active generator tiers as `(tier level, count)`.
     pub generators: Vec<(u32, u32)>,
     /// Units/sec sold of each item.
@@ -237,8 +239,8 @@ enum VarKind<'a> {
     ElectricUnits { recipe: &'a ProductionItem, tier_level: u32 },
     /// A physical machine of an exact tier switched into E-Mode.
     ElectricMachines { facility: &'a str, tier_level: u32 },
-    /// A Crackle Generator of an exact tier switched on.
-    Generator { tier_level: u32 },
+    /// A Crackle Generator of an exact tier switched on, with the power this setup gets from it.
+    Generator { tier_level: u32, power: u32 },
     Sold(&'a str),
     Pace,
     /// Made beyond what the level-up needs, of one of its costs.
@@ -411,7 +413,7 @@ fn build_model<'a>(
             if power == 0 {
                 continue;
             }
-            let var = model.add(0.0, (0.0, count as f64), true, VarKind::Generator { tier_level });
+            let var = model.add(0.0, (0.0, count as f64), true, VarKind::Generator { tier_level, power });
             generator_vars.push((tier_level, power, var));
         }
     }
@@ -1130,6 +1132,7 @@ fn plan_from(model: &Model, value: f64, upper_bound: f64, proven_optimal: bool, 
     let mut sold = BTreeMap::new();
     let mut power_used = 0u32;
     let mut generators_used = 0u32;
+    let mut power_supply = 0u32;
     let mut generators: Vec<(u32, u32)> = Vec::new();
     let mut environment = Vec::new();
     let mut pairs: Vec<ExactPair> = Vec::new();
@@ -1166,9 +1169,10 @@ fn plan_from(model: &Model, value: f64, upper_bound: f64, proven_optimal: bool, 
                     count * crate::models::e_mode_power_per_unit(facility, *tier_level),
                 );
             }
-            VarKind::Generator { tier_level } if v > 0.5 => {
+            VarKind::Generator { tier_level, power } if v > 0.5 => {
                 let count = v.round() as u32;
                 generators_used = generators_used.saturating_add(count);
+                power_supply = power_supply.saturating_add(count.saturating_mul(*power));
                 generators.push((*tier_level, count));
             }
             VarKind::Sold(name) if v > 1e-9 => {
@@ -1226,6 +1230,7 @@ fn plan_from(model: &Model, value: f64, upper_bound: f64, proven_optimal: bool, 
         power_used,
         power_capacity: model.power_capacity,
         generators_used,
+        power_supply,
         generators,
         sold,
         environment,
@@ -1378,6 +1383,9 @@ pub fn check_plan(
         .sum();
     if plan.generators.iter().map(|(_, count)| *count).sum::<u32>() != plan.generators_used {
         return Err("generator count does not match its tier assignments".to_string());
+    }
+    if plan.power_supply != active_generator_power {
+        return Err(format!("active generator supply says {} but tiers provide {active_generator_power}", plan.power_supply));
     }
     if plan.power_used > active_generator_power {
         return Err(format!("E-Mode draws {} power but active generators provide {active_generator_power}", plan.power_used));
