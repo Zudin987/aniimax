@@ -43,3 +43,8 @@ jobs:
 
       - name: Aniimo staffing smoke test
         run: node --experimental-default-type=module tests/aniimo_team_smoke.mjs
+
+      - name: Browser asset version checks
+        run: |
+          python3 tests/version_web_assets_test.py
+          node --experimental-default-type=module tests/asset_loader_smoke.mjs
