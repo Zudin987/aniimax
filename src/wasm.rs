@@ -1241,10 +1241,13 @@ pub struct JsProductionPlan {
     /// Power supplied by the generators the solver actually switches on.
     #[serde(default)]
     pub power_supply: u32,
-    /// With the player's roster, `[building, member, share of its day]` for each environment
-    /// building kind a member staffs.
+    /// With the player's roster, `[building, member, share of its day]` for resident,
+    /// environment and power facilities.
     #[serde(default)]
     pub staffing: Vec<(String, usize, f64)>,
+    /// Custom-roster grower jobs as `[item, job, member, share of its day]`.
+    #[serde(default)]
+    pub grower_staffing: Vec<(String, String, usize, f64)>,
 }
 
 /// What a plan makes of one priority.
@@ -1312,6 +1315,7 @@ fn empty_production_plan(success: bool, error: Option<String>) -> JsProductionPl
         generator_tiers: Vec::new(),
         power_supply: 0,
         staffing: Vec::new(),
+        grower_staffing: Vec::new(),
     }
 }
 
@@ -1558,6 +1562,7 @@ pub fn exact_plan(input_json: &str, stage_json: &str, solution_json: &str) -> St
     let mut js = prepared.to_js(plan, Some(proof));
     js.level_up = report;
     js.staffing = exact.staffing.clone();
+    js.grower_staffing = exact.grower_staffing.clone();
     js.power_used = exact.power_used;
     js.power_capacity = exact.power_capacity;
     js.generators_used = exact.generators_used;
