@@ -127,6 +127,9 @@ pub struct ExactPlan {
     pub units: BTreeMap<String, u32>,
     /// For E-Mode recipes, units split by the actual owned facility tier.
     pub electric_units: BTreeMap<String, Vec<(u32, u32)>>,
+    /// Physical machines switched into E-Mode, keyed by facility and split by actual tier. This
+    /// can be smaller than the sum of recipe rows for Bench/Kiln chains that take turns.
+    pub electric_machines: BTreeMap<String, Vec<(u32, u32)>>,
     /// Grid power drawn by powered facilities.
     pub power_used: u32,
     /// Maximum full-power capacity of the configured Crackle Generators.
@@ -1100,6 +1103,7 @@ fn plan_from(model: &Model, value: f64, upper_bound: f64, proven_optimal: bool, 
     let mut recipe_rates = BTreeMap::new();
     let mut units = BTreeMap::new();
     let mut electric_units: BTreeMap<String, Vec<(u32, u32)>> = BTreeMap::new();
+    let mut electric_machines: BTreeMap<String, Vec<(u32, u32)>> = BTreeMap::new();
     let mut sold = BTreeMap::new();
     let mut power_used = 0u32;
     let mut generators_used = 0u32;
@@ -1132,8 +1136,10 @@ fn plan_from(model: &Model, value: f64, upper_bound: f64, proven_optimal: bool, 
                 electric_units.entry(recipe.name.clone()).or_default().push((*tier_level, count));
             }
             VarKind::ElectricMachines { facility, tier_level } if v > 0.5 => {
+                let count = v.round() as u32;
+                electric_machines.entry((*facility).to_string()).or_default().push((*tier_level, count));
                 power_used = power_used.saturating_add(
-                    v.round() as u32 * crate::models::e_mode_power_per_unit(facility, *tier_level),
+                    count * crate::models::e_mode_power_per_unit(facility, *tier_level),
                 );
             }
             VarKind::Generator { .. } if v > 0.5 => {
@@ -1190,6 +1196,7 @@ fn plan_from(model: &Model, value: f64, upper_bound: f64, proven_optimal: bool, 
         recipe_rates,
         units,
         electric_units,
+        electric_machines,
         power_used,
         power_capacity: model.power_capacity,
         generators_used,
