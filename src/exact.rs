@@ -1769,6 +1769,12 @@ pub fn to_production_plan(
         let used = used.min(owned);
         for (recipe, units, rate) in rows {
             let mut reason = uses_of(recipe);
+            if matches!(crate::models::base_item_name(&recipe.name), "moondew_radish" | "waxing_moon_pepper") {
+                reason = format!("{reason}; keep at least 2 plots planted for Harvest Moon mutation rolls");
+            }
+            if crate::models::is_electric_item(&recipe.name) {
+                reason = format!("{reason}; E-Mode at full grid supply");
+            }
             if takes_turns(recipe) {
                 let others: Vec<&str> = shared.iter().copied().filter(|n| *n != recipe.name).collect();
                 if !others.is_empty() {
@@ -1781,8 +1787,15 @@ pub fn to_production_plan(
                 let wants = base.unwrap_or("its environment");
                 reason = format!("{reason}; grown without {wants} at {speed:.0}% speed");
             }
+            let electric = crate::models::is_electric_item(&recipe.name);
             coin_items.push(PlanStep {
-                item_name: Some(crate::models::base_item_name(&recipe.name).to_string()),
+                // Keep the internal electric suffix so the frontend can label powered rows and,
+                // crucially, never assign a production Aniimo to one. Normal rows stay readable.
+                item_name: Some(if electric {
+                    recipe.name.clone()
+                } else {
+                    crate::models::base_item_name(&recipe.name).to_string()
+                }),
                 facility: facility.to_string(),
                 facility_count: units,
                 status: PlanStepStatus::Producing,
@@ -1790,9 +1803,10 @@ pub fn to_production_plan(
                 is_grower: grower,
                 cycle_time: Some(recipe.production_time),
                 environment: if grower { recipe.environment.clone() } else { None },
-                // A roster member's row says how much of its time it really takes, gathering too.
-                busy_units: (!grower || recipe.crew.is_some()).then(|| (rate * recipe.production_time).min(units as f64)),
-                crew: recipe.crew,
+                // Powered rows need no production Aniimo.
+                busy_units: (!electric && (!grower || recipe.crew.is_some()))
+                    .then(|| (rate * recipe.production_time).min(units as f64)),
+                crew: if electric { None } else { recipe.crew },
             });
         }
         if owned > used {
