@@ -314,11 +314,7 @@
                                 <label class="layout-whole"><input type="checkbox" id="layout-whole"> Show the whole homeland</label>
                                 <label class="layout-whole"><input type="checkbox" id="layout-sim-on" checked> Simulate</label>
                                 <label class="layout-storage-control">Storage Units
-                                    <select id="layout-storage-count" aria-label="Storage Units in layout">
-                                        <option value="1">1</option>
-                                        <option value="2" selected>2</option>
-                                        <option value="3">3</option>
-                                    </select>
+                                    <input type="number" id="layout-storage-count" aria-label="Storage Units in layout" value="2" min="1" max="24" step="1">
                                 </label>
                             </span>
                             <span class="layout-actions">
