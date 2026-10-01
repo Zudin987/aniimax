@@ -1677,6 +1677,7 @@ impl PreparedInput {
         let requirements = embedded_aniimo_requirements();
         let grower_steps = embedded_grower_steps();
         let mut facility_counts = facility_counts;
+        facility_counts.set_grower_steps(grower_steps.clone());
         let crew = match (input.aniimo.as_deref(), &input.roster) {
             (Some(name), Some(roster)) if name.starts_with("roster") => Some(roster.crew()),
             _ => None,
