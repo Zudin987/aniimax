@@ -1093,8 +1093,14 @@ function homelandPieces(plan, input) {
     // units as their busy time together needs, each running every tier in turn at its share.
     const takesTurns = step => step.status === 'producing' && !!recipeIndex.find(r => r.name === basePlanItem(step.item_name))?.turns;
     const turnGroups = new Map();
-    steps.filter(takesTurns).forEach(step => turnGroups.set(step.facility, [...(turnGroups.get(step.facility) || []), step]));
-    turnGroups.forEach((rows, facility) => {
+    steps.filter(takesTurns).forEach(step => {
+        const key = `${step.facility}|${isElectricItem(step.item_name) ? 'electric' : 'normal'}`;
+        turnGroups.set(key, [...(turnGroups.get(key) || []), step]);
+    });
+    turnGroups.forEach((rows, key) => {
+        const split = key.lastIndexOf('|');
+        const facility = key.slice(0, split);
+        const electric = key.slice(split + 1) === 'electric';
         const footprint = FACILITY_FOOTPRINTS[facility];
         if (!footprint) {
             unplaced.add(facility);
@@ -1105,7 +1111,7 @@ function homelandPieces(plan, input) {
         const jobs = rows.filter(r => r.cycle_time > 0).map(r => ({ item: r.item_name, cycle: r.cycle_time, rate: (r.busy_units ?? r.facility_count) / r.cycle_time / n }));
         const weight = jobs.reduce((sum, j) => sum + j.rate * 3600, 0);
         for (let i = 0; i < n; i++) {
-            pieces.push({ members: [{ x: 0, y: 0, w: footprint[0], h: footprint[1], weight, jobs, cycle: jobs[0]?.cycle, facility, crop: jobs[0]?.item ?? null, sensitive: false }] });
+            pieces.push({ members: [{ x: 0, y: 0, w: footprint[0], h: footprint[1], weight, jobs, cycle: jobs[0]?.cycle, facility, crop: jobs[0]?.item ?? null, sensitive: false, electric }] });
         }
         count(facility, n);
     });
@@ -1128,14 +1134,14 @@ function homelandPieces(plan, input) {
             // A crop that needs an environment but is grown without one stays out of every
             // coverage square, so no building's temperature changes it.
             const growing = step.status === 'producing';
-            pieces.push({ members: [{ x: 0, y: 0, w: footprint[0], h: footprint[1], weight: tripsPerUnit(step), cycle: step.cycle_time, facility: step.facility, crop: growing ? step.item_name : null, sensitive: growing && needsEnvironment(step.item_name) }] });
+            pieces.push({ members: [{ x: 0, y: 0, w: footprint[0], h: footprint[1], weight: tripsPerUnit(step), cycle: step.cycle_time, facility: step.facility, crop: growing ? step.item_name : null, sensitive: growing && needsEnvironment(step.item_name), electric: isElectricItem(step.item_name) }] });
         }
         count(step.facility, n);
     });
 
     // What's owned but not in the plan at all, such as environment buildings it didn't need.
     FACILITIES.forEach(f => {
-        if (f.name === 'Crackle Generator') return; // footprint not verified; omit from the placement diagram
+        if (f.name === 'Crackle Generator') return; // active generators are placed by verified 11x11 power coverage
         const owned = tierCount(input.facilities[f.name]);
         const extra = owned - (placed[f.name] || 0);
         if (extra <= 0) return;
@@ -1296,6 +1302,8 @@ function renderHomelandLayout(plan) {
         const notes = [
             noRoom.length ? `No room found in RV ${homeLevel}'s plots for: ${noRoom.join(', ')}.` : '',
             unplaced.length ? `Not placed, size unknown: ${unplaced.join(', ')}.` : '',
+            layout.unplacedGenerators ? `${layout.unplacedGenerators} active Crackle Generator(s) could not be fitted.` : '',
+            layout.needsPowerPole ? `${layout.needsPowerPole} E-Mode machine(s) sit outside direct 11×11 generator coverage; connect them with Crackle Power Poles in game.` : '',
         ].filter(Boolean).join(' ');
         document.getElementById('layout-summary').textContent = `${trips > 0
             ? `${formatNumber(Math.round(trips))} trips/hour to ${storages.length} Storage Unit${storages.length === 1 ? '' : 's'}, ${(walked / trips).toFixed(1)} tiles each on average, in the ${cells.length} plot${cells.length === 1 ? '' : 's'} open at RV ${homeLevel}.`
@@ -1315,6 +1323,7 @@ function renderHomelandLayout(plan) {
         pieces,
         cells: cells.map(({ x, y, w, h }) => ({ x, y, w, h })),
         storageCount: Math.max(1, Math.min(3, numberOrDefault(document.getElementById('layout-storage-count').value, 2))),
+        generatorCount: plan.generators_used || 0,
     });
 }
 
@@ -1341,7 +1350,8 @@ function homelandSvg(layout, homeLevel) {
     const plots = homelandPlots();
     // Zoomed to what's placed, a couple of tiles around it, unless the whole homeland is asked for.
     const storages = layout.storages?.length ? layout.storages : [layout.storage];
-    const placed = [...storages, ...layout.pieces.flatMap(p => p.members)];
+    const generators = layout.generators || [];
+    const placed = [...storages, ...generators.flatMap(g => [g, g.coverage]), ...layout.pieces.flatMap(p => p.members)];
     const whole = layoutShowsWhole;
     const minX = whole ? -1 : Math.floor(Math.min(...placed.map(r => r.x))) - 2;
     const minY = whole ? -1 : Math.floor(Math.min(...placed.map(r => r.y))) - 2;
@@ -1364,8 +1374,13 @@ function homelandSvg(layout, homeLevel) {
             m.x + m.w / 2 - (s.x + s.w / 2),
             m.y + m.h / 2 - (s.y + s.h / 2),
         )));
+        const directPower = !m.electric || generators.some(g => {
+            const q = g.coverage;
+            return m.x < q.x + q.w && m.x + m.w > q.x && m.y < q.y + q.h && m.y + m.h > q.y;
+        });
+        const detail = m.jobs ? m.jobs.map(j => prettyItem(j.item)).join(', ') : m.crop ? prettyItem(m.crop) : m.building && m.mode ? m.mode : 'Idle';
         const tip = tipAttrs(m.facility, {
-            detail: m.jobs ? m.jobs.map(j => prettyItem(j.item)).join(', ') : m.crop ? prettyItem(m.crop) : m.building && m.mode ? m.mode : 'Idle',
+            detail: `${detail}${m.electric ? directPower ? ' · E-Mode · direct generator coverage' : ' · E-Mode · needs Power Pole coverage' : ''}`,
             stats: m.weight > 0 ? `${formatRate(m.weight)} trips/hour · ${away.toFixed(1)} tiles from storage` : '',
             color,
         });
@@ -1378,7 +1393,7 @@ function homelandSvg(layout, homeLevel) {
                 fill="${color}" fill-opacity="${m.mode ? 1 : 0.25}" stroke="currentColor" stroke-opacity="0.6" stroke-width="0.08" />
                 ${m.mode ? environmentBuildingIcon(m.facility, m.mode, m.x + m.w / 2, m.y + m.h / 2) : ''}</g>`;
         }
-        return `<g class="layout-piece" ${tip}><rect x="${m.x + 0.04}" y="${m.y + 0.04}" width="${m.w - 0.08}" height="${m.h - 0.08}" rx="0.2"
+        return `<g class="layout-piece${m.electric ? directPower ? ' electric' : ' electric needs-pole' : ''}" ${tip}><rect x="${m.x + 0.04}" y="${m.y + 0.04}" width="${m.w - 0.08}" height="${m.h - 0.08}" rx="0.2"
             fill="${color}" fill-opacity="${fill.toFixed(2)}" stroke="${color}" stroke-width="0.06" />${label}</g>`;
     }).join('');
     const coverageShapes = coverage.map(c => {
@@ -1392,6 +1407,12 @@ function homelandSvg(layout, homeLevel) {
         return `<rect x="${c.x}" y="${c.y}" width="${c.w}" height="${c.h}" fill="none"
             stroke="${tint}" stroke-opacity="0.8" stroke-dasharray="0.35,0.25" stroke-width="0.08" />`;
     }).join('');
+    const powerCoverage = generators.map(g => `<rect x="${g.coverage.x}" y="${g.coverage.y}" width="${g.coverage.w}" height="${g.coverage.h}" class="layout-power-coverage" />`).join('');
+    const generatorShapes = generators.map((g, i) => `
+        <g class="layout-piece layout-generator" ${tipAttrs('Crackle Generator', { detail: 'Active E-Mode generator', stats: '11×11 direct power coverage' })}>
+            <rect x="${g.x + 0.04}" y="${g.y + 0.04}" width="${g.w - 0.08}" height="${g.h - 0.08}" rx="0.15" />
+            <text x="${g.x + g.w / 2}" y="${g.y + g.h / 2}" font-size="0.55">CG${generators.length > 1 ? i + 1 : ''}</text>
+        </g>`).join('');
     // A line from everything carried to its nearest Storage Unit, each drawn once its first
     // batch is in, and a ring for the batch it's on (see "Deliveries").
     const flowList = layoutFlows(layout);
@@ -1405,7 +1426,9 @@ function homelandSvg(layout, homeLevel) {
         <g class="env-grid">${lines.join('')}</g>
         <g class="layout-plots">${plotShapes}</g>
         <g class="layout-coverage">${coverageShapes}</g>
+        <g class="layout-power-ranges" pointer-events="none">${powerCoverage}</g>
         ${shapes}
+        ${generatorShapes}
         <g class="layout-coverage-edges" pointer-events="none">${coverageEdges}</g>
         <g class="layout-rings" pointer-events="none">${rings}</g>
         <g class="layout-flows" pointer-events="none">${flows}<g class="layout-dots"></g></g>
@@ -1464,10 +1487,11 @@ function layoutFlows(layout) {
 // What a recipe takes and gives, from the recipe list: ingredients with amounts, its item and
 // yield (a quick variant makes the regular item), and its byproduct.
 function recipeTerms(name) {
-    const r = recipeIndex.find(r => r.name === name);
+    const base = basePlanItem(name);
+    const r = recipeIndex.find(r => r.name === base);
     return {
         takes: (r?.ingredients || []).map((ingredient, i) => [ingredient, r.amounts?.[i] ?? 1]),
-        makes: name.replace(/^quick_/, ''),
+        makes: base.replace(/^quick_/, ''),
         yield: r?.yieldAmount || 1,
         byproduct: r?.byproduct ? [r.byproduct, r.byproductAmount || 0] : null,
     };
@@ -3780,19 +3804,23 @@ function renderPowerSummary(plan) {
     }
     card.style.display = 'block';
     const used = plan.power_used || 0;
-    const spare = Math.max(0, capacity - used);
+    const activeSupply = plan.power_supply || 0;
+    const configuredSpare = Math.max(0, capacity - used);
+    const activeSpare = Math.max(0, activeSupply - used);
     const generators = plan.generators_used || 0;
     el.innerHTML = `
         <div class="summary-grid">
-            <div class="summary-item"><span class="summary-label">Power in use</span><span class="summary-value">${formatNumber(used)} / ${formatNumber(capacity)}</span></div>
-            <div class="summary-item"><span class="summary-label">Available headroom</span><span class="summary-value">${formatNumber(spare)}</span></div>
+            <div class="summary-item"><span class="summary-label">E-Mode draw</span><span class="summary-value">${formatNumber(used)}</span></div>
+            <div class="summary-item"><span class="summary-label">Active supply</span><span class="summary-value">${formatNumber(activeSupply)}</span></div>
+            <div class="summary-item"><span class="summary-label">Configured capacity</span><span class="summary-value">${formatNumber(capacity)}</span></div>
             <div class="summary-item"><span class="summary-label">Generators active</span><span class="summary-value">${generators}</span></div>
         </div>`;
     const note = document.getElementById('power-spare-note');
     if (note) {
-        note.textContent = spare > 0
-            ? `${formatNumber(spare)} power remains available. Extra E-Mode is used only when it improves the selected goal or frees Aniimo without changing the main result.`
-            : 'The current plan uses all available full-power capacity.';
+        const canReach120 = used > 0 && capacity >= used * 1.2 - 1e-9;
+        note.textContent = used <= 0
+            ? 'No facility needs E-Mode in this plan.'
+            : `The solver conservatively uses the documented base E-Mode timers at full supply. The game can speed a well-supplied grid up to 120%; ${canReach120 ? 'your configured generators have at least 20% nominal headroom' : 'this setup does not have 20% configured headroom'}. Active spare: ${formatNumber(activeSpare)}; total configured spare: ${formatNumber(configuredSpare)}.`;
     }
 }
 
