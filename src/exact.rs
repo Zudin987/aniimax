@@ -248,9 +248,9 @@ enum VarKind<'a> {
     /// One global switch: 1 means the powered grid uses the verified 120% efficiency band;
     /// 0 means the 100% rated-output band.
     GridBoost,
-    /// A Crackle Generator of an exact tier switched on. `usable_power` is the draw allowed in
-    /// this grid band; `rated_power` is what the generator reports as its maximum output.
-    Generator { tier_level: u32, usable_power: u32, rated_power: u32, boosted: bool },
+    /// A Crackle Generator of an exact tier switched on. `rated_power` is what the generator
+    /// reports as its maximum output; the band-specific usable power stays in the grid constraint.
+    Generator { tier_level: u32, rated_power: u32, boosted: bool },
     Sold(&'a str),
     Pace,
     /// Made beyond what the level-up needs, of one of its costs.
@@ -465,7 +465,6 @@ fn build_model<'a>(
                 true,
                 VarKind::Generator {
                     tier_level,
-                    usable_power: rated_power,
                     rated_power,
                     boosted: false,
                 },
@@ -484,7 +483,6 @@ fn build_model<'a>(
                     true,
                     VarKind::Generator {
                         tier_level,
-                        usable_power: boost_power,
                         rated_power,
                         boosted: true,
                     },
