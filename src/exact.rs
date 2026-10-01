@@ -1099,7 +1099,10 @@ pub fn solve_relaxed(
 fn plan_from(model: &Model, value: f64, upper_bound: f64, proven_optimal: bool, nodes: u32, values: &[f64], _root: f64) -> ExactPlan {
     let mut recipe_rates = BTreeMap::new();
     let mut units = BTreeMap::new();
+    let mut electric_units: BTreeMap<String, Vec<(u32, u32)>> = BTreeMap::new();
     let mut sold = BTreeMap::new();
+    let mut power_used = 0u32;
+    let mut generators_used = 0u32;
     let mut environment = Vec::new();
     let mut pairs: Vec<ExactPair> = Vec::new();
     let mut pace = None;
@@ -1117,6 +1120,24 @@ fn plan_from(model: &Model, value: f64, upper_bound: f64, proven_optimal: bool, 
             }
             VarKind::Units(recipe) if v > 0.5 => {
                 units.insert(recipe.name.clone(), v.round() as u32);
+            }
+            VarKind::ElectricUnits { recipe, tier_level } if takes_turns(recipe) && v > 1e-9 => {
+                let count = ((v - 1e-6).ceil().max(1.0)) as u32;
+                *units.entry(recipe.name.clone()).or_default() += count;
+                electric_units.entry(recipe.name.clone()).or_default().push((*tier_level, count));
+            }
+            VarKind::ElectricUnits { recipe, tier_level } if v > 0.5 => {
+                let count = v.round() as u32;
+                *units.entry(recipe.name.clone()).or_default() += count;
+                electric_units.entry(recipe.name.clone()).or_default().push((*tier_level, count));
+            }
+            VarKind::ElectricMachines { facility, tier_level } if v > 0.5 => {
+                power_used = power_used.saturating_add(
+                    v.round() as u32 * crate::models::e_mode_power_per_unit(facility, *tier_level),
+                );
+            }
+            VarKind::Generator { .. } if v > 0.5 => {
+                generators_used = generators_used.saturating_add(v.round() as u32);
             }
             VarKind::Sold(name) if v > 1e-9 => {
                 sold.insert(name.to_string(), v);
@@ -1158,6 +1179,7 @@ fn plan_from(model: &Model, value: f64, upper_bound: f64, proven_optimal: bool, 
     }
     // Units set to a recipe that doesn't run are just idle.
     units.retain(|name, _| recipe_rates.contains_key(name));
+    electric_units.retain(|name, _| recipe_rates.contains_key(name));
     let rate_per_second = model.earnings.iter().zip(values).map(|(c, v)| c * v).sum();
     ExactPlan {
         rate_per_second,
@@ -1167,6 +1189,10 @@ fn plan_from(model: &Model, value: f64, upper_bound: f64, proven_optimal: bool, 
         nodes,
         recipe_rates,
         units,
+        electric_units,
+        power_used,
+        power_capacity: model.power_capacity,
+        generators_used,
         sold,
         environment,
         pairs,
