@@ -360,7 +360,8 @@ function getPersistedFieldIds() {
         'mode-simple', 'mode-advanced', 'home-level',
         'ecological-module-level', 'kitchen-module-level',
         'resource-detector-level', 'crafting-module-level', 'power-module-level',
-        'rate-unit', 'season-on', 'layout-sim-on'
+        'rate-unit', 'season-on', 'season-wheat-budget', 'season-mutation-plots',
+        'layout-sim-on', 'layout-storage-count'
     ];
 }
 
@@ -1188,9 +1189,61 @@ function attachLayoutHandlers() {
     document.getElementById('layout-sim-on').addEventListener('change', () => {
         if (lastLayout) drawLayout(lastLayout);
     });
+    document.getElementById('layout-storage-count').addEventListener('change', () => {
+        saveInputsToStorage();
+        if (lastPlan?.success && lastPlanInput) renderHomelandLayout(lastPlan);
+    });
     document.getElementById('layout-replay').addEventListener('click', () => {
         if (layoutSim) resetLayoutSim(layoutSim);
     });
+    document.getElementById('layout-copy-code').addEventListener('click', async () => {
+        if (!lastLayout) return;
+        const code = encodeLayoutCode(lastLayout);
+        const hint = document.getElementById('layout-share-hint');
+        try {
+            await navigator.clipboard.writeText(code);
+            hint.textContent = 'Aniimax layout code copied. It can be imported with the button beside it; it is not an in-game Combo Code.';
+        } catch {
+            window.prompt('Copy this Aniimax layout code:', code);
+        }
+    });
+    document.getElementById('layout-import-code').addEventListener('click', () => {
+        const raw = window.prompt('Paste an Aniimax layout code:');
+        if (!raw) return;
+        try {
+            const imported = decodeLayoutCode(raw.trim());
+            lastLayout = imported;
+            document.getElementById('layout-card').style.display = 'block';
+            document.getElementById('layout-summary').textContent =
+                `Imported Aniimax layout with ${(imported.layout.storages || [imported.layout.storage]).length} Storage Unit(s).`;
+            drawLayout(lastLayout);
+            document.getElementById('layout-share-hint').textContent =
+                'Imported successfully. This is an Aniimax share code, not the game\'s server-side Combo Code.';
+        } catch (error) {
+            window.alert(`That Aniimax layout code is invalid: ${error.message || error}`);
+        }
+    });
+}
+
+function encodeLayoutCode(drawn) {
+    const payload = JSON.stringify({ v: 1, homeLevel: drawn.homeLevel, layout: drawn.layout });
+    const bytes = new TextEncoder().encode(payload);
+    let binary = '';
+    bytes.forEach(byte => { binary += String.fromCharCode(byte); });
+    return 'ANIIMAX1.' + btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+function decodeLayoutCode(code) {
+    if (!code.startsWith('ANIIMAX1.')) throw new Error('unsupported code version');
+    const body = code.slice('ANIIMAX1.'.length).replace(/-/g, '+').replace(/_/g, '/');
+    const padded = body + '='.repeat((4 - body.length % 4) % 4);
+    const binary = atob(padded);
+    const bytes = Uint8Array.from(binary, ch => ch.charCodeAt(0));
+    const parsed = JSON.parse(new TextDecoder().decode(bytes));
+    if (parsed?.v !== 1 || !parsed.layout || !Array.isArray(parsed.layout.pieces)) {
+        throw new Error('missing layout data');
+    }
+    return { homeLevel: Number(parsed.homeLevel) || 1, layout: parsed.layout };
 }
 
 function drawLayout(drawn) {
@@ -1227,11 +1280,15 @@ function renderHomelandLayout(plan) {
         layoutWorker = null;
         if (runId !== layoutRunId) return;
         const layout = event.data;
-        const at = layout.storageAt;
-        // Buildings carry nothing themselves.
+        const storages = layout.storages?.length ? layout.storages : [layout.storage];
+        // Buildings carry nothing themselves. Each delivery goes to the nearest Storage Unit.
         const members = layout.pieces.flatMap(p => p.members).map(m => ({ ...m, weight: m.weight || 0 }));
         const trips = members.reduce((sum, m) => sum + m.weight, 0);
-        const walked = members.reduce((sum, m) => sum + m.weight * Math.hypot(m.x + m.w / 2 - at.x, m.y + m.h / 2 - at.y), 0);
+        const distanceToStorage = m => Math.min(...storages.map(s => Math.hypot(
+            m.x + m.w / 2 - (s.x + s.w / 2),
+            m.y + m.h / 2 - (s.y + s.h / 2),
+        )));
+        const walked = members.reduce((sum, m) => sum + m.weight * distanceToStorage(m), 0);
         const noRoom = [...new Set(layout.unplaced.map(i => {
             const piece = pieces[i];
             return piece.cluster ? `${piece.buildings[0].facility} and its plots` : piece.members[0].facility;
@@ -1241,8 +1298,8 @@ function renderHomelandLayout(plan) {
             unplaced.length ? `Not placed, size unknown: ${unplaced.join(', ')}.` : '',
         ].filter(Boolean).join(' ');
         document.getElementById('layout-summary').textContent = `${trips > 0
-            ? `${formatNumber(Math.round(trips))} trips/hour to the Storage Unit, ${(walked / trips).toFixed(1)} tiles each on average, in the ${cells.length} plot${cells.length === 1 ? '' : 's'} open at RV ${homeLevel}.`
-            : 'Nothing in this plan is carried to the Storage Unit.'}${notes ? ` ${notes}` : ''}`;
+            ? `${formatNumber(Math.round(trips))} trips/hour to ${storages.length} Storage Unit${storages.length === 1 ? '' : 's'}, ${(walked / trips).toFixed(1)} tiles each on average, in the ${cells.length} plot${cells.length === 1 ? '' : 's'} open at RV ${homeLevel}.`
+            : 'Nothing in this plan needs hauling to storage.'}${notes ? ` ${notes}` : ''}`;
         lastLayout = { layout, homeLevel };
         drawLayout(lastLayout);
         setStep('layout', 'done');
@@ -1254,7 +1311,11 @@ function renderHomelandLayout(plan) {
         document.getElementById('layout-summary').textContent = 'The layout couldn\'t be worked out.';
         setStep('layout', 'fail');
     };
-    layoutWorker.postMessage({ pieces, cells: cells.map(({ x, y, w, h }) => ({ x, y, w, h })) });
+    layoutWorker.postMessage({
+        pieces,
+        cells: cells.map(({ x, y, w, h }) => ({ x, y, w, h })),
+        storageCount: Math.max(1, Math.min(3, numberOrDefault(document.getElementById('layout-storage-count').value, 2))),
+    });
 }
 
 // Stops a layout still being worked out, so it can't land over a newer plan.
@@ -1279,7 +1340,8 @@ function homelandSvg(layout, homeLevel) {
     // The whole homeland, its plots marked out and the ones not open yet shaded.
     const plots = homelandPlots();
     // Zoomed to what's placed, a couple of tiles around it, unless the whole homeland is asked for.
-    const placed = [layout.storage, ...layout.pieces.flatMap(p => p.members)];
+    const storages = layout.storages?.length ? layout.storages : [layout.storage];
+    const placed = [...storages, ...layout.pieces.flatMap(p => p.members)];
     const whole = layoutShowsWhole;
     const minX = whole ? -1 : Math.floor(Math.min(...placed.map(r => r.x))) - 2;
     const minY = whole ? -1 : Math.floor(Math.min(...placed.map(r => r.y))) - 2;
@@ -1298,7 +1360,10 @@ function homelandSvg(layout, homeLevel) {
     const maxTrips = Math.max(...layout.pieces.flatMap(p => p.members.map(m => m.weight || 0)), 1e-9);
     const shapes = layout.pieces.flatMap(p => p.members).map(m => {
         const color = layoutColor(m);
-        const away = Math.hypot(m.x + m.w / 2 - (layout.storage.x + layout.storage.w / 2), m.y + m.h / 2 - (layout.storage.y + layout.storage.h / 2));
+        const away = Math.min(...storages.map(s => Math.hypot(
+            m.x + m.w / 2 - (s.x + s.w / 2),
+            m.y + m.h / 2 - (s.y + s.h / 2),
+        )));
         const tip = tipAttrs(m.facility, {
             detail: m.jobs ? m.jobs.map(j => prettyItem(j.item)).join(', ') : m.crop ? prettyItem(m.crop) : m.building && m.mode ? m.mode : 'Idle',
             stats: m.weight > 0 ? `${formatRate(m.weight)} trips/hour · ${away.toFixed(1)} tiles from storage` : '',
@@ -1327,9 +1392,8 @@ function homelandSvg(layout, homeLevel) {
         return `<rect x="${c.x}" y="${c.y}" width="${c.w}" height="${c.h}" fill="none"
             stroke="${tint}" stroke-opacity="0.8" stroke-dasharray="0.35,0.25" stroke-width="0.08" />`;
     }).join('');
-    const s = layout.storage;
-    // A line from everything carried to the Storage Unit, each drawn once its first batch is in,
-    // and a ring for the batch it's on (see "Deliveries"), in the same order as `layoutFlows`.
+    // A line from everything carried to its nearest Storage Unit, each drawn once its first
+    // batch is in, and a ring for the batch it's on (see "Deliveries").
     const flowList = layoutFlows(layout);
     const flows = flowList.map(f => `<line x1="${f.x1}" y1="${f.y1}" x2="${f.x2}" y2="${f.y2}" class="layout-flow-line" />`).join('');
     const rings = flowList.map(f => `<g class="layout-ring" transform="translate(${f.rx.toFixed(2)} ${f.ry.toFixed(2)})">
@@ -1345,8 +1409,11 @@ function homelandSvg(layout, homeLevel) {
         <g class="layout-coverage-edges" pointer-events="none">${coverageEdges}</g>
         <g class="layout-rings" pointer-events="none">${rings}</g>
         <g class="layout-flows" pointer-events="none">${flows}<g class="layout-dots"></g></g>
-        <g class="layout-piece layout-storage-unit" ${tipAttrs('Storage Unit', { detail: 'Where everything is carried', stats: totalTrips > 0 ? `${formatRate(totalTrips)} trips/hour` : '' })}><rect x="${s.x + 0.04}" y="${s.y + 0.04}" width="${s.w - 0.08}" height="${s.h - 0.08}" rx="0.2" class="layout-storage" />
-        <text x="${s.x + s.w / 2}" y="${s.y + s.h / 2}" font-size="0.8" class="layout-storage-text">SU</text></g>
+        <g class="layout-storages">${storages.map((s, i) => `
+            <g class="layout-piece layout-storage-unit" ${tipAttrs(`Storage Unit ${i + 1}`, { detail: 'Haulers use the nearest Storage Unit', stats: totalTrips > 0 ? `${formatRate(totalTrips)} total trips/hour` : '' })}>
+                <rect x="${s.x + 0.04}" y="${s.y + 0.04}" width="${s.w - 0.08}" height="${s.h - 0.08}" rx="0.2" class="layout-storage" />
+                <text x="${s.x + s.w / 2}" y="${s.y + s.h / 2}" font-size="0.8" class="layout-storage-text">SU${storages.length > 1 ? i + 1 : ''}</text>
+            </g>`).join('')}</g>
     </svg>`;
 }
 
@@ -1375,12 +1442,16 @@ let layoutSim = null;
 // long a batch takes and its pace in the plan (batches a second). Most pieces have one; a Bench
 // or Kiln unit has one per tier it takes turns on (see `homelandPieces`).
 function layoutFlows(layout) {
-    const s = layout.storage;
-    const x2 = s.x + s.w / 2;
-    const y2 = s.y + s.h / 2;
+    const storages = layout.storages?.length ? layout.storages : [layout.storage];
     return layout.pieces.flatMap(p => p.members).filter(m => m.weight > 0 && m.crop && m.cycle > 0).map(m => {
         const x1 = m.x + m.w / 2;
         const y1 = m.y + m.h / 2;
+        const s = storages.reduce((best, candidate) => {
+            const d = Math.hypot(x1 - (candidate.x + candidate.w / 2), y1 - (candidate.y + candidate.h / 2));
+            return !best || d < best.d ? { s: candidate, d } : best;
+        }, null).s;
+        const x2 = s.x + s.w / 2;
+        const y2 = s.y + s.h / 2;
         const ring = Math.min(0.45, Math.min(m.w, m.h) * 0.22);
         return {
             x1, y1, x2, y2, length: Math.hypot(x2 - x1, y2 - y1),
@@ -1918,6 +1989,16 @@ function seasonAvailable() {
 
 function seasonActive() {
     return seasonAvailable() && document.getElementById('season-on').checked;
+}
+
+function seasonWheatBudget() {
+    const value = Number(document.getElementById('season-wheat-budget')?.value);
+    return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function seasonMutationPlots() {
+    const value = Number(document.getElementById('season-mutation-plots')?.value);
+    return Number.isFinite(value) ? Math.max(0, Math.round(value)) : 2;
 }
 
 function renderSeason() {
@@ -2573,6 +2654,8 @@ function getPlanInputValues() {
             level_up: levelUpInput(),
             exclude: excludedRecipes(),
             season: seasonActive(),
+            season_currency_per_day: seasonActive() ? seasonWheatBudget() : null,
+            harvest_mutation_plots: seasonActive() ? seasonMutationPlots() : 0,
             facilities,
             modules
         };
@@ -2601,6 +2684,8 @@ function getPlanInputValues() {
         level_up: levelUpInput(),
         exclude: excludedRecipes(),
         season: seasonActive(),
+        season_currency_per_day: seasonActive() ? seasonWheatBudget() : null,
+        harvest_mutation_plots: seasonActive() ? seasonMutationPlots() : 0,
         facilities,
         modules
     };
