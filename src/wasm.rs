@@ -1238,9 +1238,12 @@ pub struct JsProductionPlan {
     /// Active Crackle Generator tiers as `[tier level, count]`.
     #[serde(default)]
     pub generator_tiers: Vec<(u32, u32)>,
-    /// Power supplied by the generators the solver actually switches on.
+    /// Rated power supplied by the generators the solver actually switches on.
     #[serde(default)]
     pub power_supply: u32,
+    /// E-Mode work efficiency selected for the active grid: 0, 100 or 120 percent.
+    #[serde(default)]
+    pub power_efficiency: u32,
     /// With the player's roster, `[building, member, share of its day]` for resident,
     /// environment and power facilities.
     #[serde(default)]
@@ -1314,6 +1317,7 @@ fn empty_production_plan(success: bool, error: Option<String>) -> JsProductionPl
         generators_used: 0,
         generator_tiers: Vec::new(),
         power_supply: 0,
+        power_efficiency: 0,
         staffing: Vec::new(),
         grower_staffing: Vec::new(),
     }
@@ -1568,6 +1572,7 @@ pub fn exact_plan(input_json: &str, stage_json: &str, solution_json: &str) -> St
     js.generators_used = exact.generators_used;
     js.generator_tiers = exact.generators.clone();
     js.power_supply = exact.power_supply;
+    js.power_efficiency = exact.power_efficiency;
     if prepared.input.season {
         js.season_points = Some(crate::exact::target_rate(&exact, &prepared.items, crate::models::SEASON_POINTS));
     }
@@ -1683,6 +1688,18 @@ impl PreparedInput {
         let grower_steps = embedded_grower_steps();
         let mut facility_counts = facility_counts;
         facility_counts.set_grower_steps(grower_steps.clone());
+        // Best mode must not claim a generator tier's rated output from a weaker Lightning
+        // worker. Minimum mode may assume the documented minimum for the chosen Generator tier;
+        // custom-roster mode is checked by the exact staffing constraints below.
+        match &setup {
+            Some(crate::models::AniimoSetup::Best(levels)) => {
+                facility_counts.set_generator_lightning_level(Some(levels.level_for("Lightning")));
+            }
+            Some(crate::models::AniimoSetup::PerFacility(workers)) => {
+                facility_counts.set_generator_lightning_level(Some(workers.get("Crackle Generator").suitability));
+            }
+            _ => {}
+        }
         let crew = match (input.aniimo.as_deref(), &input.roster) {
             (Some(name), Some(roster)) if name.starts_with("roster") => Some(roster.crew()),
             _ => None,
@@ -1788,6 +1805,7 @@ impl PreparedInput {
             generators_used: 0,
             generator_tiers: Vec::new(),
             power_supply: 0,
+        power_efficiency: 0,
             staffing: Vec::new(),
             grower_staffing: Vec::new(),
         }
