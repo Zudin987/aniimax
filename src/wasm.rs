@@ -1235,6 +1235,9 @@ pub struct JsProductionPlan {
     pub power_capacity: u32,
     #[serde(default)]
     pub generators_used: u32,
+    /// Active Crackle Generator tiers as `[tier level, count]`.
+    #[serde(default)]
+    pub generator_tiers: Vec<(u32, u32)>,
     /// Power supplied by the generators the solver actually switches on.
     #[serde(default)]
     pub power_supply: u32,
@@ -1306,6 +1309,7 @@ fn empty_production_plan(success: bool, error: Option<String>) -> JsProductionPl
         power_used: 0,
         power_capacity: 0,
         generators_used: 0,
+        generator_tiers: Vec::new(),
         power_supply: 0,
         staffing: Vec::new(),
     }
@@ -1557,6 +1561,7 @@ pub fn exact_plan(input_json: &str, stage_json: &str, solution_json: &str) -> St
     js.power_used = exact.power_used;
     js.power_capacity = exact.power_capacity;
     js.generators_used = exact.generators_used;
+    js.generator_tiers = exact.generators.clone();
     js.power_supply = exact.power_supply;
     if prepared.input.season {
         js.season_points = Some(crate::exact::target_rate(&exact, &prepared.items, crate::models::SEASON_POINTS));
@@ -1775,6 +1780,7 @@ impl PreparedInput {
             power_used: 0,
             power_capacity: crate::models::grid_power_capacity(&self.facility_counts, &self.module_levels),
             generators_used: 0,
+            generator_tiers: Vec::new(),
             power_supply: 0,
             staffing: Vec::new(),
         }
