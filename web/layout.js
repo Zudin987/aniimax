@@ -251,7 +251,7 @@ export function layOut(pieces, options = {}) {
 // the middle of the open area and at the middles of the open plots nearest it, and keeping
 // whichever walks least with everything placed. Returns what `layOut` does, moved into the
 // homeland's own frame, plus `storageAt`, the Storage Unit's center.
-export function layOutHomeland(pieces, cells, storage = { w: 2, h: 2 }, storageCount = 1) {
+export function layOutHomeland(pieces, cells, storage = { w: 2, h: 2 }, storageCount = 1, generatorCount = 0) {
     const requested = Math.max(1, Math.min(3, Math.round(Number(storageCount) || 1)));
     const area = cells.reduce((sum, c) => sum + c.w * c.h, 0);
     const mid = {
@@ -297,8 +297,14 @@ export function layOutHomeland(pieces, cells, storage = { w: 2, h: 2 }, storageC
         return { ...fallback, storageAt: { x: 0, y: 0 }, requestedStorages: requested };
     }
     const { out, at } = best;
+    const relative = cells.map(cell => ({ x: cell.x - at.x, y: cell.y - at.y, w: cell.w, h: cell.h }));
+    const power = placeGenerators(out, relative, Math.max(0, Math.round(Number(generatorCount) || 0)));
     const move = r => ({ ...r, x: r.x + at.x, y: r.y + at.y });
     const storages = (out.storages || [out.storage]).map(move);
+    const generators = power.generators.map(g => ({
+        ...move(g),
+        coverage: move(g.coverage),
+    }));
     return {
         ...out,
         tried,
@@ -306,7 +312,76 @@ export function layOutHomeland(pieces, cells, storage = { w: 2, h: 2 }, storageC
         storageAt: { x: storages[0].x + storages[0].w / 2, y: storages[0].y + storages[0].h / 2 },
         storage: storages[0],
         storages,
+        generators,
+        needsPowerPole: power.needsPowerPole,
+        unplacedGenerators: power.unplacedGenerators,
         pieces: out.pieces.map(p => ({ ...p, members: p.members.map(move) })),
+    };
+}
+
+// Places active Crackle Generators after the production layout is packed. Their launch footprint
+// is 1x1 and their direct supply square is 11x11. Machines outside these direct squares are not
+// called invalid: Power Poles can extend a grid, so they are reported as needing pole coverage.
+function placeGenerators(out, cells, count) {
+    if (count <= 0) return { generators: [], needsPowerPole: 0, unplacedGenerators: 0 };
+    const storages = out.storages || [out.storage];
+    const members = out.pieces.flatMap(p => p.members);
+    const occupied = [...storages, ...members];
+    const electric = members.filter(m => m.electric);
+    const inside = r => cells.reduce((sum, cell) => sum + overlapArea(r, cell), 0) >= r.w * r.h - EPSILON;
+    const extent = {
+        x: Math.floor(Math.min(...cells.map(c => c.x))),
+        y: Math.floor(Math.min(...cells.map(c => c.y))),
+        x2: Math.ceil(Math.max(...cells.map(c => c.x + c.w))),
+        y2: Math.ceil(Math.max(...cells.map(c => c.y + c.h))),
+    };
+    const candidates = [];
+    for (let x = extent.x; x <= extent.x2 - 1 + EPSILON; x += 1) {
+        for (let y = extent.y; y <= extent.y2 - 1 + EPSILON; y += 1) {
+            const rect = { x, y, w: 1, h: 1 };
+            if (inside(rect) && !occupied.some(other => overlaps(rect, other))) candidates.push(rect);
+        }
+    }
+    const generators = [];
+    const covered = new Set();
+    const coverageOf = r => ({ x: r.x - 5, y: r.y - 5, w: 11, h: 11 });
+    for (let n = 0; n < count; n++) {
+        let best = null;
+        for (const rect of candidates) {
+            if (generators.some(g => overlaps(rect, g))) continue;
+            const coverage = coverageOf(rect);
+            let newly = 0;
+            let distance = 0;
+            electric.forEach((m, i) => {
+                const d = Math.hypot(
+                    rect.x + 0.5 - (m.x + m.w / 2),
+                    rect.y + 0.5 - (m.y + m.h / 2),
+                );
+                distance += d;
+                if (!covered.has(i) && overlaps(coverage, m)) newly += m.powerDemand || 1;
+            });
+            // Cover another powered machine first; compactness is the tie-break. With no powered
+            // machines, leave the generator close to storage instead of stranded at the edge.
+            if (!electric.length) {
+                distance = Math.min(...storages.map(s => Math.hypot(
+                    rect.x + 0.5 - (s.x + s.w / 2),
+                    rect.y + 0.5 - (s.y + s.h / 2),
+                )));
+            }
+            const score = newly * 1_000_000 - distance;
+            if (!best || score > best.score + EPSILON) best = { rect, coverage, score };
+        }
+        if (!best) break;
+        const generator = { ...best.rect, coverage: best.coverage, facility: 'Crackle Generator' };
+        generators.push(generator);
+        electric.forEach((m, i) => {
+            if (overlaps(generator.coverage, m)) covered.add(i);
+        });
+    }
+    return {
+        generators,
+        needsPowerPole: Math.max(0, electric.length - covered.size),
+        unplacedGenerators: Math.max(0, count - generators.length),
     };
 }
 
