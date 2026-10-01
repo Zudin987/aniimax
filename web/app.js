@@ -1,7 +1,7 @@
 // Aniimax Web Application
 
 import {
-    FACILITIES, FACILITY_CATEGORIES, FACILITY_CATEGORY_BY_NAME, FACILITY_FOOTPRINTS, HOMELAND_PLOTS, HOMELAND_PLOT_SIZE,
+    FACILITIES, FACILITY_CATEGORIES, FACILITY_CATEGORY_BY_NAME, FACILITY_FOOTPRINTS, FACILITY_OUTPUT_LIMITS, HOMELAND_PLOTS, HOMELAND_PLOT_SIZE,
     MAX_HOME_LEVEL, ANIIMO_MAX, simpleSetup,
     LEVEL_UP_COSTS, LEVEL_UP_CHAINS, SPECIAL_RECIPES, SEASON, ANIIPOD_TIERS, PERSONALITY_PAIRS, personalityLetter, opposedPersonality,
 } from './facility-config.js';
@@ -1021,11 +1021,34 @@ function improvementsChecked(best, status, open) {
 // there, so the busiest facilities sit closest. Environment buildings keep the plots they cover
 // exactly as planned, moving as one block. Facilities with no known size are left out and named.
 
-// Trips per hour for each unit of a plan row: one per finished batch.
-function tripsPerUnit(step) {
+// Hauling starts when a facility's finished-output stack reaches its cap, not after every batch.
+// Use the lowest owned tier that can run this recipe (conservative for mixed-level Advanced
+// setups); Simple mode owns one tier per facility so this is exact there.
+function outputLimitForStep(step, input = lastPlanInput) {
+    const limits = FACILITY_OUTPUT_LIMITS[step.facility];
+    if (!limits?.length) return 1;
+    const recipe = recipeIndex.find(r => r.name === basePlanItem(step.item_name));
+    const required = recipe?.facilityLevel || 1;
+    const tiers = (input?.facilities?.[step.facility] || [])
+        .filter(t => (t.count || 0) > 0 && (t.level || 1) >= required)
+        .map(t => t.level || 1);
+    const level = tiers.length ? Math.min(...tiers) : required;
+    return limits[Math.min(Math.max(1, level), limits.length) - 1] || limits[limits.length - 1] || 1;
+}
+
+function batchRatePerUnit(step) {
     if (step.status !== 'producing' || !step.cycle_time || !step.facility_count) return 0;
     const busy = step.busy_units ?? step.facility_count;
-    return (busy / step.cycle_time / step.facility_count) * 3600;
+    return busy / step.cycle_time / step.facility_count;
+}
+
+// Estimated full-stack pickups per hour for each physical unit in a plan row.
+function tripsPerUnit(step, input = lastPlanInput) {
+    const batches = batchRatePerUnit(step);
+    if (batches <= 0) return 0;
+    const recipe = recipeIndex.find(r => r.name === basePlanItem(step.item_name));
+    const yieldAmount = recipe?.yieldAmount || 1;
+    return batches * yieldAmount / outputLimitForStep(step, input) * 3600;
 }
 
 // Whether a crop needs a growing environment: grown without one, a building's temperature
@@ -2063,7 +2086,7 @@ function recipeLabel(recipe) {
 async function loadRecipeIndex() {
     try {
         recipeIndex = JSON.parse(await callWorker('get_all_items'))
-            .map(r => ({ name: r.name, facility: r.facility, cost: r.cost || 0, seasonSeedCost: r.season_seed_cost || 0, environment: r.environment || null, jobs: r.jobs || [], ingredients: r.raw_materials || [], amounts: r.required_amount || [], yieldAmount: r.yield_amount || 1, byproduct: r.byproduct_item || null, byproductAmount: r.byproduct?.[1] || 0, turns: r.sell_currency === 'none' }))
+            .map(r => ({ name: r.name, facility: r.facility, facilityLevel: r.facility_level || 1, cost: r.cost || 0, seasonSeedCost: r.season_seed_cost || 0, environment: r.environment || null, jobs: r.jobs || [], ingredients: r.raw_materials || [], amounts: r.required_amount || [], yieldAmount: r.yield_amount || 1, byproduct: r.byproduct_item || null, byproductAmount: r.byproduct?.[1] || 0, turns: r.sell_currency === 'none' }))
             .sort((a, b) => a.facility.localeCompare(b.facility) || a.name.localeCompare(b.name));
         document.getElementById('skip-options').innerHTML =
             recipeIndex.map(r => `<option value="${recipeLabel(r)}"></option>`).join('');
