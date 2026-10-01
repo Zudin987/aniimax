@@ -252,7 +252,7 @@ export function layOut(pieces, options = {}) {
 // whichever walks least with everything placed. Returns what `layOut` does, moved into the
 // homeland's own frame, plus `storageAt`, the Storage Unit's center.
 export function layOutHomeland(pieces, cells, storage = { w: 2, h: 2 }, storageCount = 1, generatorCount = 0) {
-    const requested = Math.max(1, Math.min(3, Math.round(Number(storageCount) || 1)));
+    const requested = Math.max(1, Math.min(24, Math.round(Number(storageCount) || 1)));
     const area = cells.reduce((sum, c) => sum + c.w * c.h, 0);
     const mid = {
         x: cells.reduce((sum, c) => sum + (c.x + c.w / 2) * c.w * c.h, 0) / area,
