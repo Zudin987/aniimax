@@ -1358,6 +1358,12 @@ footer {
     vertical-align: 1px;
 }
 
+.tag.emode {
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent) 32%, transparent);
+}
+
 .tag.unverified {
     border: 1px solid var(--warning);
     color: var(--warning);
@@ -2397,6 +2403,80 @@ tr:hover .skip-row,
 
 #season-config {
     margin-top: 0.75rem;
+}
+
+.harvest-mutation-note {
+    margin: 0.7rem 0;
+    padding: 0.6rem 0.7rem;
+    border-left: 2px solid var(--accent);
+    background: color-mix(in srgb, var(--accent) 7%, transparent);
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    line-height: 1.45;
+}
+
+.harvest-mutation-note strong {
+    color: var(--text);
+}
+
+.emode-auto-note {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.65rem;
+    margin: 0.85rem 0 1rem;
+    padding: 0.7rem 0.8rem;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface-2);
+    color: var(--text-muted);
+}
+
+.emode-auto-note.is-active {
+    border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+}
+
+.emode-bolt {
+    flex: 0 0 auto;
+    line-height: 1.35;
+}
+
+.emode-auto-note > div {
+    display: flex;
+    flex-direction: column;
+    gap: 0.12rem;
+}
+
+.emode-auto-note strong {
+    color: var(--text);
+    font-size: 0.84rem;
+}
+
+.emode-auto-note span:not(.emode-bolt) {
+    font-size: 0.78rem;
+    line-height: 1.45;
+}
+
+.emode-card-title {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.emode-auto-badge {
+    display: inline-flex;
+    padding: 0.16rem 0.45rem;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    color: var(--accent);
+    font-size: 0.68rem;
+    font-weight: 600;
+}
+
+.power-spare-note {
+    margin: 0.75rem 0 0;
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    line-height: 1.45;
 }
 
 /* A column's unit under its name, e.g. "Profit" over "Home Coins/hour". */
