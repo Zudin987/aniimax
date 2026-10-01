@@ -361,16 +361,70 @@ fn build_model<'a>(
     // Seeds are paid in coins, so they only come off a coin total.
     let seed_cost = |recipe: &ProductionItem| if currency == "coins" { recipe.cost.unwrap_or(0.0) } else { 0.0 };
 
-    // Recipe rates and units.
+    // Recipe rates and units. Normal recipes use a flexible whole-unit variable. Powered variants
+    // assign their units to the exact owned facility tier because E-Mode power draw depends on the
+    // machine's actual level, not only the recipe's minimum level.
     let mut rate_of: Vec<(&ProductionItem, usize)> = Vec::new();
     let mut units_of: Vec<(&ProductionItem, usize)> = Vec::new();
+    let mut electric_units_of: Vec<(&ProductionItem, u32, usize)> = Vec::new();
     for &recipe in &recipes {
         let rate = model.add(-seed_cost(recipe), (0.0, f64::INFINITY), false, VarKind::Rate(recipe));
-        let max = facility_counts.get_count(&recipe.facility) as f64;
-        let units = model.add(0.0, (0.0, max), !takes_turns(recipe), VarKind::Units(recipe));
-        model.constrain(vec![(rate, recipe.production_time), (units, -1.0)], ComparisonOp::Le, 0.0);
+        if crate::models::is_electric_item(&recipe.name) {
+            let mut capacity = vec![(rate, recipe.production_time)];
+            for (count, tier_level) in facility_counts.tiers(&recipe.facility) {
+                if count == 0 || tier_level < recipe.facility_level {
+                    continue;
+                }
+                let units = model.add(
+                    0.0,
+                    (0.0, count as f64),
+                    !takes_turns(recipe),
+                    VarKind::ElectricUnits { recipe, tier_level },
+                );
+                capacity.push((units, -1.0));
+                electric_units_of.push((recipe, tier_level, units));
+            }
+            model.constrain(capacity, ComparisonOp::Le, 0.0);
+        } else {
+            let max = facility_counts.get_count(&recipe.facility) as f64;
+            let units = model.add(0.0, (0.0, max), !takes_turns(recipe), VarKind::Units(recipe));
+            model.constrain(vec![(rate, recipe.production_time), (units, -1.0)], ComparisonOp::Le, 0.0);
+            units_of.push((recipe, units));
+        }
         rate_of.push((recipe, rate));
-        units_of.push((recipe, units));
+    }
+
+    // Crackle Generators are explicit whole units so roster plans can reserve a Lightning Aniimo
+    // for every generator actually switched on, while unused generators stay idle.
+    let mut generator_vars: Vec<(u32, u32, usize)> = Vec::new(); // (tier, power, variable)
+    if module_levels.power_module > 0 {
+        for (count, tier_level) in facility_counts.tiers("Crackle Generator") {
+            if count == 0 {
+                continue;
+            }
+            let power = crate::models::generator_power(tier_level.min(module_levels.power_module));
+            if power == 0 {
+                continue;
+            }
+            let var = model.add(0.0, (0.0, count as f64), true, VarKind::Generator { tier_level });
+            generator_vars.push((tier_level, power, var));
+        }
+    }
+
+    // Harvest Moon mutation farming is a gameplay requirement rather than a profitability choice.
+    // When the season is enabled both crop recipes are present, so always keep 2 plots of each
+    // actively cycling to keep mutation rolls going.
+    const HARVEST_MUTATION_CROPS: [&str; 2] = ["moondew_radish", "waxing_moon_pepper"];
+    let harvest_enabled = HARVEST_MUTATION_CROPS
+        .iter()
+        .all(|name| recipes.iter().any(|recipe| recipe.name == *name));
+    if harvest_enabled {
+        for name in HARVEST_MUTATION_CROPS {
+            let Some((recipe, rate)) = rate_of.iter().find(|(recipe, _)| recipe.name == name).copied() else { continue };
+            let Some((_, units)) = units_of.iter().find(|(recipe, _)| recipe.name == name).copied() else { continue };
+            model.constrain(vec![(units, 1.0)], ComparisonOp::Ge, 2.0);
+            model.constrain(vec![(rate, recipe.production_time)], ComparisonOp::Ge, 2.0);
+        }
     }
 
     // Item balances: made >= used + sold.
@@ -464,20 +518,73 @@ fn build_model<'a>(
         model.constrain(terms, ComparisonOp::Ge, 0.0);
     }
 
-    // Owned units per facility, by level: a recipe needing level L can only use units at L or
-    // above, and higher-level units can run lower-level recipes too.
+    // Owned units per facility and level. Normal recipes share the remaining physical machines
+    // with whole machines switched into E-Mode. Electric recipe shares are attached to exact tiers;
+    // Bench/Kiln turn-taking recipes may share one powered machine.
     let mut by_facility: BTreeMap<&str, Vec<(u32, usize)>> = BTreeMap::new();
     for &(recipe, units) in &units_of {
         by_facility.entry(recipe.facility.as_str()).or_default().push((recipe.facility_level, units));
     }
-    for (&facility, entries) in &by_facility {
-        let mut levels: Vec<u32> = entries.iter().map(|(l, _)| *l).collect();
+    let mut electric_by_facility: BTreeMap<&str, Vec<(u32, usize)>> = BTreeMap::new();
+    for &(recipe, tier_level, units) in &electric_units_of {
+        electric_by_facility.entry(recipe.facility.as_str()).or_default().push((tier_level, units));
+    }
+
+    let mut powered_tiers: Vec<(&str, u32, usize)> = Vec::new();
+    let mut facilities: Vec<&str> = by_facility.keys().chain(electric_by_facility.keys()).copied().collect();
+    facilities.sort_unstable();
+    facilities.dedup();
+    for facility in facilities {
+        let normal = by_facility.get(facility).cloned().unwrap_or_default();
+        let electric = electric_by_facility.get(facility).cloned().unwrap_or_default();
+
+        let mut tier_counts: BTreeMap<u32, u32> = BTreeMap::new();
+        for (count, level) in facility_counts.tiers(facility) {
+            *tier_counts.entry(level).or_default() += count;
+        }
+
+        for (&level, &count) in &tier_counts {
+            let shares: Vec<(usize, f64)> =
+                electric.iter().filter(|(l, _)| *l == level).map(|(_, v)| (*v, 1.0)).collect();
+            if shares.is_empty() {
+                continue;
+            }
+            let machines = model.add(
+                0.0,
+                (0.0, count as f64),
+                true,
+                VarKind::ElectricMachines { facility, tier_level: level },
+            );
+            let mut terms = shares;
+            terms.push((machines, -1.0));
+            model.constrain(terms, ComparisonOp::Le, 0.0);
+            powered_tiers.push((facility, level, machines));
+        }
+
+        let powered_here: Vec<(u32, usize)> =
+            powered_tiers.iter().filter(|(f, _, _)| *f == facility).map(|(_, l, v)| (*l, *v)).collect();
+        let mut levels: Vec<u32> = normal.iter().map(|(l, _)| *l).chain(powered_here.iter().map(|(l, _)| *l)).collect();
         levels.sort_unstable();
         levels.dedup();
         for level in levels {
-            let terms: Vec<(usize, f64)> = entries.iter().filter(|(l, _)| *l >= level).map(|(_, v)| (*v, 1.0)).collect();
+            let mut terms: Vec<(usize, f64)> =
+                normal.iter().filter(|(l, _)| *l >= level).map(|(_, v)| (*v, 1.0)).collect();
+            terms.extend(powered_here.iter().filter(|(l, _)| *l >= level).map(|(_, v)| (*v, 1.0)));
             model.constrain(terms, ComparisonOp::Le, facility_counts.capacity_at_level(facility, level) as f64);
         }
+    }
+
+    // Full-supply E-Mode only: powered machines may draw no more than the active Crackle
+    // Generators provide. This intentionally does not guess the game's partial-supply speed.
+    if !powered_tiers.is_empty() {
+        let mut terms: Vec<(usize, f64)> = powered_tiers
+            .iter()
+            .map(|(facility, tier_level, machines)| {
+                (*machines, crate::models::e_mode_power_per_unit(facility, *tier_level) as f64)
+            })
+            .collect();
+        terms.extend(generator_vars.iter().map(|(_, power, generator)| (*generator, -(*power as f64))));
+        model.constrain(terms, ComparisonOp::Le, 0.0);
     }
 
     // Growing environments: plots of a crop needing environment E at facility F must be covered.
