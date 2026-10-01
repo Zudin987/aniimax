@@ -148,8 +148,12 @@ pub struct ExactPlan {
     /// Level-ups per day, for a level-up goal (see [`PACE_UNIT`]).
     pub pace: Option<f64>,
     /// When planning with the player's roster, `(building, member, share of its day)` for each
-    /// environment building kind a member staffs (see [`crate::models::Crew`]).
+    /// resident/environment/power building a member staffs (see [`crate::models::Crew`]).
     pub staffing: Vec<(String, usize, f64)>,
+    /// Custom-roster Farmland/Woodland work: (item, job, member, share of one Aniimo's day).
+    /// Unlike crop grow time itself, these short reclaim/sow/water/harvest jobs compete with the
+    /// same Aniimo's Mine, Well and processor work.
+    pub grower_staffing: Vec<(String, String, usize, f64)>,
 }
 
 /// What a plan optimizes.
@@ -253,9 +257,11 @@ enum VarKind<'a> {
         types: Vec<&'a str>,
         option: PairOption,
     },
-    /// How much of a roster member's day goes to staffing environment buildings of one kind
-    /// (see [`crate::models::Crew`]).
+    /// How much of a roster member's day goes to staffing a resident/environment/power building.
     Staff { building: String, member: usize },
+    /// Harvests/sec of one Farmland/Woodland job assigned to one roster member. `seconds` turns
+    /// it into that member's share of a day in the common busy-time constraint.
+    GrowerStaff { item: String, step: String, member: usize, seconds: f64 },
 }
 
 /// One linear constraint: `(variable, coefficient)` terms, comparison, right-hand side.
@@ -794,6 +800,61 @@ fn build_model<'a>(
                 busy[member].push((rate, recipe.production_time));
             }
         }
+
+        // Crops/trees only occupy a plot for their grow timer; the Aniimo work is a series of
+        // short jobs each harvest. Model those jobs explicitly so Reclaiming (Earth) can become
+        // the real bottleneck instead of merely checking that one Earth Aniimo exists somewhere.
+        if let Some(grower_steps) = facility_counts.grower_steps() {
+            for &(recipe, rate) in &rate_of {
+                if crate::models::is_electric_item(&recipe.name) {
+                    continue;
+                }
+                let jobs = grower_steps.get(crate::models::base_item_name(&recipe.name));
+                if jobs.is_empty() {
+                    continue;
+                }
+                for job in jobs {
+                    let eligible: Vec<(usize, f64)> = crew
+                        .members
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, aniimo)| aniimo.count > 0 && aniimo.level(&job.ability) >= job.min_level)
+                        .map(|(member, aniimo)| {
+                            let seconds = crate::models::Worker::new(aniimo.level(&job.ability), false)
+                                .seconds_for(job.workload, job.min_level, true);
+                            (member, seconds)
+                        })
+                        .collect();
+                    // No Water worker is a valid configuration: crew_variants already lengthens
+                    // the crop's timer to its unwatered version. Other jobs were filtered out
+                    // before the solver if nobody can do them.
+                    if eligible.is_empty() && job.step == "Watering" {
+                        continue;
+                    }
+                    if eligible.is_empty() {
+                        continue;
+                    }
+                    let mut covered = vec![(rate, -1.0)];
+                    for (member, seconds) in eligible {
+                        let staff = model.add(
+                            0.0,
+                            (0.0, f64::INFINITY),
+                            false,
+                            VarKind::GrowerStaff {
+                                item: crate::models::base_item_name(&recipe.name).to_string(),
+                                step: job.step.clone(),
+                                member,
+                                seconds,
+                            },
+                        );
+                        covered.push((staff, 1.0));
+                        busy[member].push((staff, seconds));
+                    }
+                    model.constrain(covered, ComparisonOp::Ge, 0.0);
+                }
+            }
+        }
+
         // Environment buildings of each kind the plan sets up; a pair counts each of its two.
         let mut set_up: BTreeMap<String, BTreeMap<usize, f64>> = BTreeMap::new();
         for (v, kind) in model.kinds.iter().enumerate() {
@@ -1164,10 +1225,14 @@ fn plan_from(model: &Model, value: f64, upper_bound: f64, proven_optimal: bool, 
     let mut pairs: Vec<ExactPair> = Vec::new();
     let mut pace = None;
     let mut staffing = Vec::new();
+    let mut grower_staffing = Vec::new();
     for (kind, &v) in model.kinds.iter().zip(values) {
         match kind {
             VarKind::Pace => pace = Some(v),
             VarKind::Staff { building, member } if v > 1e-9 => staffing.push((building.clone(), *member, v)),
+            VarKind::GrowerStaff { item, step, member, seconds } if v > 1e-9 => {
+                grower_staffing.push((item.clone(), step.clone(), *member, v * *seconds));
+            }
             VarKind::Rate(recipe) if v > 1e-9 => {
                 recipe_rates.insert(recipe.name.clone(), v);
             }
@@ -1263,6 +1328,7 @@ fn plan_from(model: &Model, value: f64, upper_bound: f64, proven_optimal: bool, 
         pairs,
         pace,
         staffing,
+        grower_staffing,
     }
 }
 
