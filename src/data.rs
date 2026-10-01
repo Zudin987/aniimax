@@ -69,6 +69,34 @@ pub fn load_grower_steps(data_dir: &Path) -> Result<GrowerSteps, Box<dyn Error>>
     Ok(parse_grower_steps(&std::fs::read_to_string(data_dir.join("grower_steps.csv"))?)?.with_watering())
 }
 
+/// One row of `e_mode.csv`: the base recipe and its fixed full-power timer.
+#[derive(Debug, serde::Deserialize)]
+struct EModeRow {
+    name: String,
+    production_time: f64,
+}
+
+/// Adds internal electric variants for every E-Mode row whose base recipe exists in `items`.
+/// The normal recipe stays alongside it, so the optimizer can choose Aniimo mode or E-Mode.
+/// Unknown rows are ignored so the timing table may safely be a superset of the loaded recipes.
+pub fn add_e_mode_variants(items: &mut Vec<ProductionItem>, csv_text: &str) -> Result<usize, Box<dyn Error>> {
+    let source = items.clone();
+    let mut rdr = ReaderBuilder::new().trim(csv::Trim::All).from_reader(csv_text.as_bytes());
+    let mut added = 0usize;
+    for row in rdr.deserialize::<EModeRow>() {
+        let row = row?;
+        let Some(base) = source.iter().find(|item| item.name == row.name) else { continue };
+        let mut electric = base.clone();
+        electric.name = format!("{}{}", row.name, crate::models::ELECTRIC_SUFFIX);
+        electric.production_time = row.production_time;
+        electric.workload = None;
+        electric.crew = None;
+        items.push(electric);
+        added += 1;
+    }
+    Ok(added)
+}
+
 /// One row of `unverified.csv`.
 #[derive(Debug, serde::Deserialize)]
 struct UnverifiedRow {
