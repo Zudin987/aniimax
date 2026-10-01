@@ -55,6 +55,8 @@ pub struct JsModuleLevels {
     pub resource_detector: u32,
     #[serde(default)]
     pub crafting_module: u32,
+    #[serde(default)]
+    pub power_module: u32,
 }
 
 /// JavaScript-friendly input for optimization.
@@ -543,6 +545,7 @@ pub fn optimize(input_json: &str) -> String {
         kitchen_module: input.modules.kitchen_module,
         resource_detector: input.modules.resource_detector,
         crafting_module: input.modules.crafting_module,
+        power_module: input.modules.power_module,
     };
 
     let mut items = get_embedded_items();
@@ -1211,6 +1214,13 @@ pub struct JsProductionPlan {
     /// During the season, its points per second from everything the plan sells.
     #[serde(default)]
     pub season_points: Option<f64>,
+    /// Full-power E-Mode draw and configured grid capacity.
+    #[serde(default)]
+    pub power_used: u32,
+    #[serde(default)]
+    pub power_capacity: u32,
+    #[serde(default)]
+    pub generators_used: u32,
     /// With the player's roster, `[building, member, share of its day]` for each environment
     /// building kind a member staffs.
     #[serde(default)]
@@ -1276,6 +1286,9 @@ fn empty_production_plan(success: bool, error: Option<String>) -> JsProductionPl
         level_up: None,
         priorities: vec![],
         season_points: None,
+        power_used: 0,
+        power_capacity: 0,
+        generators_used: 0,
         staffing: Vec::new(),
     }
 }
@@ -1311,10 +1324,13 @@ impl JsProductionPlan {
 /// doesn't block anything else from rendering.
 #[wasm_bindgen]
 pub fn find_plan(input_json: &str, on_progress: Option<js_sys::Function>) -> String {
-    let prepared = match PreparedInput::from_json(input_json) {
+    let mut prepared = match PreparedInput::from_json(input_json) {
         Ok(p) => p,
         Err(error) => return error,
     };
+    // The backup heuristic does not model grid power. If the exact planner falls back here, strip
+    // powered variants so it can never return a fake E-Mode plan.
+    prepared.items.retain(|item| !crate::models::is_electric_item(&item.name));
 
     // `js_sys::Function::call1` takes `&JsValue` for both the `this` receiver and the argument;
     // errors (e.g. the JS callback itself throwing) are deliberately swallowed with `let _ =`,
@@ -1520,6 +1536,9 @@ pub fn exact_plan(input_json: &str, stage_json: &str, solution_json: &str) -> St
     let mut js = prepared.to_js(plan, Some(proof));
     js.level_up = report;
     js.staffing = exact.staffing.clone();
+    js.power_used = exact.power_used;
+    js.power_capacity = exact.power_capacity;
+    js.generators_used = exact.generators_used;
     if prepared.input.season {
         js.season_points = Some(crate::exact::target_rate(&exact, &prepared.items, crate::models::SEASON_POINTS));
     }
@@ -1621,6 +1640,10 @@ impl PreparedInput {
         if input.season {
             items.extend(embedded_season_items());
         }
+        if module_levels.power_module > 0 && facility_counts.get_count("Crackle Generator") > 0 {
+            crate::data::add_e_mode_variants(&mut items, include_str!("../data/e_mode.csv"))
+                .map_err(|e| serde_json::to_string(&empty_production_plan(false, Some(format!("Invalid E-Mode data: {e}")))).unwrap_or_default())?;
+        }
         items.retain(|item| !input.exclude.iter().any(|name| name == crate::models::base_item_name(&item.name)));
         let setup = input
             .aniimo
@@ -1654,10 +1677,11 @@ impl PreparedInput {
             .filter(|step| step.status == crate::models::PlanStepStatus::Producing)
             .filter_map(|step| {
                 let item = step.item_name.as_ref()?;
+                let base = crate::models::base_item_name(item);
                 listed
                     .iter()
-                    .any(|(name, facility)| name == item && *facility == step.facility)
-                    .then(|| JsUnverified { facility: step.facility.clone(), item_name: item.clone() })
+                    .any(|(name, facility)| name == base && *facility == step.facility)
+                    .then(|| JsUnverified { facility: step.facility.clone(), item_name: base.to_string() })
             })
             .collect();
         unverified.sort_by(|a, b| (&a.facility, &a.item_name).cmp(&(&b.facility, &b.item_name)));
@@ -1666,8 +1690,10 @@ impl PreparedInput {
             .coin_items
             .into_iter()
             .map(|step| {
-                // With the player's roster, the row names the member working it.
-                let from_crew = match (&self.crew, step.crew, &step.item_name) {
+                let powered = step.item_name.as_deref().is_some_and(crate::models::is_electric_item);
+                // With the player's roster, the row names the member working it. Powered rows
+                // deliberately have no production Aniimo.
+                let from_crew = if powered { None } else { match (&self.crew, step.crew, &step.item_name) {
                     (Some(crew), Some(member), Some(item)) => crew.members.get(member).and_then(|aniimo| {
                         let (ability, _) = self.requirements.get(item)?;
                         let bonus = crate::models::has_personality_bonus(&step.facility)
@@ -1675,8 +1701,8 @@ impl PreparedInput {
                         Some(JsAniimo { ability: ability.to_string(), level: aniimo.level(ability), personality_bonus: bonus })
                     }),
                     _ => None,
-                };
-                let aniimo = from_crew.or_else(|| match (&self.setup, &step.item_name) {
+                }};
+                let aniimo = from_crew.or_else(|| if powered { None } else { match (&self.setup, &step.item_name) {
                     (Some(setup), Some(item)) if step.status == crate::models::PlanStepStatus::Producing => {
                         self.requirements.get(item).map(|(ability, _)| {
                             let worker = self.requirements.worker_for_at(item, &step.facility, setup);
@@ -1688,12 +1714,14 @@ impl PreparedInput {
                         })
                     }
                     _ => None,
-                });
-                let aniimo_tasks = self
+                }});
+                let aniimo_tasks = if powered {
+                    Vec::new()
+                } else { self
                     .setup
                     .as_ref()
                     .map(|setup| aniimo_tasks_for(&step, setup, &self.requirements, &self.grower_steps))
-                    .unwrap_or_default();
+                    .unwrap_or_default() };
                 JsPlanStep { aniimo, aniimo_tasks, ..step.into() }
             })
             .collect();
@@ -1724,6 +1752,9 @@ impl PreparedInput {
             level_up: None,
             priorities: vec![],
             season_points,
+            power_used: 0,
+            power_capacity: crate::models::grid_power_capacity(&self.facility_counts, &self.module_levels),
+            generators_used: 0,
             staffing: Vec::new(),
         }
     }
