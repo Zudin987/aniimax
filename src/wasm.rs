@@ -1789,6 +1789,7 @@ impl PreparedInput {
             generator_tiers: Vec::new(),
             power_supply: 0,
             staffing: Vec::new(),
+            grower_staffing: Vec::new(),
         }
     }
 }
