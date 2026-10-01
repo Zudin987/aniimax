@@ -2641,9 +2641,9 @@ tr:hover .skip-row,
     color: var(--text-muted);
 }
 
-.layout-storage-control select {
-    width: auto;
-    min-width: 3.5rem;
+.layout-storage-control input {
+    width: 4.25rem;
+    min-width: 4.25rem;
     padding: 0.25rem 0.45rem;
 }
 
