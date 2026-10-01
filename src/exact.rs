@@ -1320,6 +1320,32 @@ fn plan_from(model: &Model, value: f64, upper_bound: f64, proven_optimal: bool, 
     // Units set to a recipe that doesn't run are just idle.
     units.retain(|name, _| recipe_rates.contains_key(name));
     electric_units.retain(|name, _| recipe_rates.contains_key(name));
+
+    // An external MIP solve is followed by a continuous re-solve with its whole-unit choices
+    // fixed (see `plan_from_values`). That cleanup can legitimately drive one chosen electric
+    // recipe's final rate to zero. Do not keep counting the now-idle physical machine as powered:
+    // rebuild E-Mode machine usage from only electric unit variables whose recipe still runs.
+    //
+    // The sum can be fractional for Bench/Kiln turn-taking recipes, so one physical powered
+    // machine is needed for each started unit of aggregate share at a tier.
+    let mut active_powered: BTreeMap<(String, u32), f64> = BTreeMap::new();
+    for (kind, &v) in model.kinds.iter().zip(values) {
+        if let VarKind::ElectricUnits { recipe, tier_level } = kind {
+            if v > 1e-9 && recipe_rates.contains_key(&recipe.name) {
+                *active_powered.entry((recipe.facility.clone(), *tier_level)).or_default() += v;
+            }
+        }
+    }
+    electric_machines.clear();
+    power_used = 0;
+    for ((facility, tier_level), share) in active_powered {
+        let count = ((share - INTEGRAL).ceil().max(1.0)) as u32;
+        electric_machines.entry(facility.clone()).or_default().push((tier_level, count));
+        power_used = power_used.saturating_add(
+            count * crate::models::e_mode_power_per_unit(&facility, tier_level),
+        );
+    }
+
     let rate_per_second = model.earnings.iter().zip(values).map(|(c, v)| c * v).sum();
     ExactPlan {
         rate_per_second,
