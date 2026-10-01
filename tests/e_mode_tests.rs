@@ -1,6 +1,6 @@
 use aniimax::data::add_e_mode_variants;
 use aniimax::exact::{check_plan, solve_exact, Goal};
-use aniimax::models::{FacilityCounts, ModuleLevels, ProductionItem, SeasonTerms};
+use aniimax::models::{Crew, FacilityCounts, ModuleLevels, ProductionItem, RosterAniimo, SeasonTerms};
 use std::time::Duration;
 
 fn item(name: &str, facility: &str, seconds: f64, sell_value: f64) -> ProductionItem {
@@ -145,4 +145,45 @@ fn harvest_moon_wheat_budget_caps_planting_rate() {
         * 86_400.0;
     assert!(spend_per_day <= 3_456.0 + 1e-5, "spent {spend_per_day}");
     assert!(spend_per_day >= 3_455.0, "optimizer should use almost all profitable Wheat budget");
+}
+
+
+fn lightning_crew(level: u32) -> Crew {
+    Crew {
+        members: vec![RosterAniimo {
+            count: 1,
+            abilities: [("Lightning".to_string(), level)].into_iter().collect(),
+            personalities: Vec::new(),
+        }],
+        residents: Default::default(),
+        environment: Default::default(),
+        personalities: Default::default(),
+    }
+}
+
+#[test]
+fn rated_generator_power_requires_the_recommended_lightning_level() {
+    let mut items = vec![item("widget", "Crafting Table", 100.0, 100.0)];
+    add_e_mode_variants(&mut items, "name,production_time\nwidget,10\n").unwrap();
+    let modules = ModuleLevels { power_module: 3, ..ModuleLevels::default() };
+
+    let mut weak = FacilityCounts::only(&[
+        ("Crafting Table", 1, 3),
+        ("Crackle Generator", 1, 3),
+    ]);
+    weak.set_crew(lightning_crew(1));
+    let weak_plan = solve(&items, &weak, &modules);
+    assert!(!weak_plan.recipe_rates.contains_key("widget__electric"));
+    assert_eq!(weak_plan.generators_used, 0);
+
+    let mut suitable = FacilityCounts::only(&[
+        ("Crafting Table", 1, 3),
+        ("Crackle Generator", 1, 3),
+    ]);
+    suitable.set_crew(lightning_crew(3));
+    let powered = solve(&items, &suitable, &modules);
+    assert!(powered.recipe_rates.contains_key("widget__electric"));
+    assert_eq!(powered.generators_used, 1);
+    assert!(powered.staffing.iter().any(|(building, member, share)|
+        building == "Crackle Generator Lv.3" && *member == 0 && (*share - 1.0).abs() < 1e-9));
 }
