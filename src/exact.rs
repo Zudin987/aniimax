@@ -196,6 +196,10 @@ pub struct AniimoWork {
     pub seconds: f64,
 }
 
+// A positive amount of real E-Mode work, well above solver rounding noise. Requiring only an
+// electric machine or generator would allow an idle allocation that vanishes during cleanup.
+const MIN_FORCED_E_MODE_WORK: f64 = 1e-3;
+
 /// What an RV level-up costs and what's already in stock, as `(item, amount)` with `"coins"` for
 /// coins, e.g. cost `[("coins", 69000.0), ("rough_lumber", 290.0), ("coarse_sifted_ore", 360.0)]`.
 /// Stock can hold anything, including Wood Blocks and Mineral Sand (`wood_block`, `mineral_sand`)
@@ -453,6 +457,15 @@ fn build_model<'a>(
             units_of.push((recipe, units));
         }
         rate_of.push((recipe, rate));
+    }
+
+    if facility_counts.force_e_mode() {
+        model.constrain(
+            rate_of.iter().filter(|(recipe, _)| crate::models::is_electric_item(&recipe.name))
+                .map(|(recipe, rate)| (*rate, recipe.production_time)).collect(),
+            ComparisonOp::Ge,
+            MIN_FORCED_E_MODE_WORK,
+        );
     }
 
     // Crackle Generators are explicit whole units so roster plans can reserve a Lightning Aniimo
@@ -1729,6 +1742,17 @@ pub fn check_plan(
         return Err(format!("E-Mode power says {} but powered machines draw {checked_power}", plan.power_used));
     }
     let available_power = crate::models::grid_power_capacity(facility_counts, module_levels);
+    if facility_counts.force_e_mode() {
+        let powered_work: f64 = plan.recipe_rates.iter().filter_map(|(name, rate)| {
+            all.get(name.as_str()).filter(|recipe| crate::models::is_electric_item(&recipe.name))
+                .map(|recipe| rate * recipe.production_time)
+        }).sum();
+        // Canonicalizing a low-draw 100% allocation to 120% shortens its timer. The positive
+        // busy floor is only for numerical stability; the user's requirement is real work.
+        if plan.power_used == 0 || powered_work <= TOLERANCE {
+            return Err("Force E-Mode requires a station actually producing with power".to_string());
+        }
+    }
     if plan.power_capacity != available_power {
         return Err(format!("grid capacity says {} but setup provides {available_power}", plan.power_capacity));
     }

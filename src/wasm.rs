@@ -738,12 +738,17 @@ pub struct JsPlanInput {
     #[serde(default)]
     pub aniimo_levels: std::collections::HashMap<String, u32>,
     /// See `crate::optimizer::find_production_plan`'s doc comment on `prioritize_byproducts`;
-    /// defaults to `true` (checked by default in the UI) since Wood Blocks/Mineral Sand can be a
-    /// real in-game constraint players can't just buy their way around.
+    /// defaults to `true` for API callers. The UI sends `false` and uses the selected priorities
+    /// or RV costs instead.
     #[serde(default = "default_true")]
     pub prioritize_byproducts: bool,
+    /// Require E-Mode even if the unrestricted production optimum uses only normal workers.
+    /// In RV plans, the browser minimizes the team after finding the best pace with power.
+    #[serde(default)]
+    pub force_e_mode: bool,
     /// Set for the level-up strategy: the next RV level-up's cost and what's in stock. The exact
-    /// planner then finds the soonest level-up, earning as much as it leaves room for.
+    /// planner then finds the soonest level-up. With forced power, the browser minimizes the
+    /// team at that pace; otherwise it earns as much as the pace leaves room for.
     #[serde(default)]
     pub level_up: Option<crate::exact::LevelUp>,
     /// Recipes the plan may not use, for comparing against a plan someone suggests. Not on the page.
@@ -822,6 +827,7 @@ impl JsPlanInput {
             if self.season { self.season_currency_per_day } else { None },
             if self.season { self.harvest_mutation_plots } else { 0 },
         );
+        fc.set_force_e_mode(self.force_e_mode);
         fc
     }
 }
@@ -1358,6 +1364,11 @@ pub fn find_plan(input_json: &str, on_progress: Option<js_sys::Function>) -> Str
         Ok(p) => p,
         Err(error) => return error,
     };
+    if prepared.input.force_e_mode {
+        return serde_json::to_string(&empty_production_plan(false,
+            Some("Force E-Mode needs the exact planner. Please calculate again or turn off Force E-Mode.".to_string())))
+            .unwrap_or_default();
+    }
     // The backup heuristic does not model grid power. If the exact planner falls back here, strip
     // powered variants so it can never return a fake E-Mode plan.
     prepared.items.retain(|item| !crate::models::is_electric_item(&item.name));
@@ -1382,6 +1393,19 @@ pub fn find_plan(input_json: &str, on_progress: Option<js_sys::Function>) -> Str
     ) {
         Some(plan) => serde_json::to_string(&prepared.to_js(plan, None)).unwrap_or_default(),
         None => no_plan(),
+    }
+}
+
+/// A JSON error string for invalid or conflicting settings, or `null` when they are valid.
+/// Such errors must be shown to the player instead of being hidden by a backup plan.
+#[wasm_bindgen]
+pub fn plan_input_error(input_json: &str) -> String {
+    match PreparedInput::from_json(input_json) {
+        Ok(_) => "null".to_string(),
+        Err(error) => {
+            let result: serde_json::Value = serde_json::from_str(&error).unwrap_or_default();
+            serde_json::to_string(result["error"].as_str().unwrap_or("Invalid planner inputs")).unwrap_or_default()
+        }
     }
 }
 
@@ -1763,6 +1787,22 @@ impl PreparedInput {
             (None, Some(setup)) => requirements.apply(setup, &mut items),
             (None, None) => workers_from(&input.workers).apply(&requirements, &mut items),
         }
+        if let Some(budget) = facility_counts.season_currency_per_day() {
+            let crops: Option<Vec<_>> = ["moondew_radish", "waxing_moon_pepper"].iter()
+                .map(|name| items.iter().find(|item| item.name == *name)).collect();
+            if let Some(crops) = crops {
+                let plots = facility_counts.harvest_mutation_plots();
+                let minimum: f64 = crops.iter().map(|crop|
+                    plots as f64 * crop.season.map_or(0.0, |season| season.seed_cost)
+                        * 86_400.0 / crop.production_time).sum();
+                if budget + 1e-6 < minimum {
+                    return Err(serde_json::to_string(&empty_production_plan(false, Some(format!(
+                        "Harvest Moon: {plots} mutation plots per crop need at least {:.0} Moonray Wheat/day with this setup, but your budget is {budget}. Increase the Wheat budget or reduce mutation plots per crop.",
+                        (minimum - 1e-6).ceil(),
+                    )))).unwrap_or_default());
+                }
+            }
+        }
         Ok(PreparedInput { input, facility_counts, module_levels, items, setup, crew, requirements, grower_steps })
     }
 
@@ -2105,6 +2145,26 @@ pub fn get_all_items() -> String {
 #[cfg(test)]
 mod tests {
     use super::{embedded_aniimo_requirements, embedded_grower_steps, get_embedded_items};
+
+    #[test]
+    fn harvest_budget_validation_uses_the_prepared_crop_timers() {
+        let input = serde_json::json!({ "season": true, "aniimo": "minimum",
+            "season_currency_per_day": 600, "harvest_mutation_plots": 2 });
+        let error: String = serde_json::from_str(&super::plan_input_error(&input.to_string())).unwrap();
+        assert!(error.contains("768 Moonray Wheat/day"), "{error}");
+        for (budget, plots) in [(768, 2), (600, 1), (0, 2)] {
+            let mut valid = input.clone();
+            valid["season_currency_per_day"] = budget.into();
+            valid["harvest_mutation_plots"] = plots.into();
+            assert_eq!(super::plan_input_error(&valid.to_string()), "null");
+        }
+        // A roster without a Water worker grows unwatered: four 40-minute plots spend 576/day.
+        let mut unwatered = input;
+        unwatered["aniimo"] = "roster".into();
+        unwatered["roster"] = serde_json::json!({ "members": [{ "count": 1,
+            "abilities": { "Earth": 1, "Grass": 1, "Dark": 1 }, "personalities": [] }] });
+        assert_eq!(super::plan_input_error(&unwatered.to_string()), "null");
+    }
 
     // Every crop and tree the web build knows has its Aniimo jobs listed.
     #[test]

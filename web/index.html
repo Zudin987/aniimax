@@ -136,7 +136,7 @@
                     </div>
 
                     <div id="level-up-config">
-                        <p class="hint">Gets everything your next RV level costs as soon as possible, then earns as many Home Coins as that leaves room for.</p>
+                        <p class="hint" id="level-up-strategy-hint">Gets everything your next RV level costs as soon as possible, then earns as many Home Coins as that leaves room for.</p>
                         <div class="input-row" id="level-up-target-row">
                             <div class="input-field">
                                 <label for="level-up-target">Level up to RV</label>
@@ -149,6 +149,14 @@
                             <p class="hint small">Counts toward the level-up. Wood Blocks, Mineral Sand and lower tiers get processed up.</p>
                             <div class="stock-grid" id="level-up-stock-grid"></div>
                         </details>
+                    </div>
+                </div>
+
+                <div class="emode-auto-note">
+                    <div>
+                        <label><input type="checkbox" id="force-e-mode"> <strong>Force E-Mode (free Aniimo slots)</strong></label>
+                        <p class="hint small">Requires at least one station running with power. With Level up, finds the fastest RV pace with E-Mode, then reduces the team instead of maximizing extra Home Coins, leaving Aniimo slots for star stations. The level-up may take longer than Automatic.</p>
+                        <p class="hint small">Requires a Power Module and Crackle Generator. One Lightning Aniimo can power many E-Mode stations; use repeaters to connect distant stations within the generator's power capacity.</p>
                     </div>
                 </div>
 
@@ -169,10 +177,10 @@
                             <div class="input-field">
                                 <label for="season-mutation-plots">Mutation plots / crop</label>
                                 <input type="number" id="season-mutation-plots" value="2" min="0" max="10" step="1">
-                                <span class="hint small">Keeps this many Moondew Radish and Waxing Moon Pepper plots cycling even when another crop pays better.</span>
+                                <span class="hint small">Keeps this many plots of each event crop cycling. With watering, 1 plot each needs 384 Wheat/day; 2 each needs 768.</span>
                             </div>
                         </div>
-                        <p class="harvest-mutation-note"><strong>Tip:</strong> mutation rolls are RNG. Use 1 plot each to conserve Wheat, 2 each for the balanced default, or more only if mutations are your priority.</p>
+                        <p class="harvest-mutation-note"><strong>Tip:</strong> mutation rolls are RNG. The 600 Wheat/day budget supports 1 watered plot of each crop. For 2 each, budget at least 768 from daily rewards plus other sources.</p>
                         <p class="assume-title">Recipe Notes</p>
                         <div class="special-grid" id="season-notes"></div>
                     </div>
@@ -270,8 +278,8 @@
                     </div>
 
                     <div class="card production-steps" id="power-card" style="display: none;">
-                        <h2 class="emode-card-title"><span aria-hidden="true">⚡</span> E-Mode <span class="emode-auto-badge">Automatic</span></h2>
-                        <p class="hint">Powered rows do not need a production Aniimo. After finding your production targets, the planner checks E-Mode to free Aniimo slots for other Homeland stations. Each active generator needs one Lightning Aniimo. It uses the verified 120% and 100% grid bands.</p>
+                        <h2 class="emode-card-title"><span aria-hidden="true">⚡</span> E-Mode <span class="emode-auto-badge" id="emode-plan-kind">Automatic</span></h2>
+                        <p class="hint">One Lightning Aniimo runs each active generator, which can power many connected stations. Powered rows do not need their own production Aniimo. Repeaters extend coverage; total station demand must fit the generator's power capacity. Grid efficiency describes production speed.</p>
                         <div id="power-summary"></div>
                         <p class="power-spare-note" id="power-spare-note"></p>
                     </div>

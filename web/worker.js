@@ -94,6 +94,13 @@ function tiebreakOf(problem, values) {
 // as it stands, so they take it from here.
 async function exactPlanJson(pkg, payload, step = () => {}, first = () => {}) {
     const { exact_byproduct_problems, exact_priority_problem, exact_level_up_problem, exact_problem, exact_plan } = pkg;
+    const input = JSON.parse(payload);
+    const inputError = pkg.plan_input_error && JSON.parse(pkg.plan_input_error(payload));
+    if (inputError) throw Object.assign(new Error(inputError), { noFallback: true });
+    if (input.force_e_mode && (!(input.modules?.power_module > 0) ||
+        !(input.facilities?.['Crackle Generator'] || []).some(tier => tier.count > 0))) {
+        throw Object.assign(new Error('Force E-Mode requires a Power Module and at least one Crackle Generator. Configure them or turn off Force E-Mode.'), { noFallback: true });
+    }
     const stage = { floors: [] };
     let allProven = true;
     for (const problem of JSON.parse(exact_byproduct_problems(payload))) {
@@ -132,6 +139,13 @@ async function exactPlanJson(pkg, payload, step = () => {}, first = () => {}) {
             levelUpNote = 'unreachable';
         }
     }
+    // With forced power, RV pace comes first and staffing comes next. Preserving the maximum
+    // *extra* coin income here would rehire workers the player wants to use at star stations.
+    const staffingFirst = !!(input.force_e_mode && stage.pace);
+    if (staffingFirst) {
+        stage.free_aniimo = true;
+        stage.coins = 0;
+    }
     let stageJson = JSON.stringify(stage);
     let problem = JSON.parse(exact_problem(payload, stageJson));
     if (!problem.lp) throw new Error('this setup isn\'t covered by the exact planner');
@@ -141,8 +155,8 @@ async function exactPlanJson(pkg, payload, step = () => {}, first = () => {}) {
     if (!solved) throw new Error('the solver found no plan');
     if (alone) first({ measure: 'coins', objective: solved.objective, proven: solved.proven });
     let proven = solved.proven && allProven;
-    let bound = solved.objective;
-    if (!proven) {
+    let bound = staffingFirst ? 0 : solved.objective;
+    if (!proven && !staffingFirst) {
         // The same model without whole units: the most any plan could earn.
         const relaxed = (await newHighs()).solve(problem.lp.replace(/\nGeneral\n[\s\S]*\nEnd/, '\nEnd'), {});
         if (Number.isFinite(relaxed.ObjectiveValue)) {
@@ -164,7 +178,7 @@ async function exactPlanJson(pkg, payload, step = () => {}, first = () => {}) {
     }
     if (!plan.success) throw new Error(plan.error || 'the plan failed its check');
 
-    if (plan.power_capacity > 0) {
+    if (plan.power_capacity > 0 && !staffingFirst) {
         // Preserve coins, priorities and the RV pace, then minimize the Aniimo team. This is
         // deliberately separate from maximizing production: slower E-Mode can still cover a
         // material-limited station and free its worker for a star-generating station.
@@ -176,7 +190,6 @@ async function exactPlanJson(pkg, payload, step = () => {}, first = () => {}) {
             freed = await solveModel(freeProblem, { ...SOLVE_OPTIONS, time_limit: STAFFING_TIME_LIMIT });
             const candidate = freed && JSON.parse(exact_plan(payload, freeJson,
                 JSON.stringify({ values: freed.values, proven: proven && freed.proven, bound })));
-            const input = JSON.parse(payload);
             if (candidate?.success && aniimoTeamCount(candidate, input) <= aniimoTeamCount(plan, input)) {
                 candidate.aniimo_slots_saved = aniimoTeamCount(plan, input) - aniimoTeamCount(candidate, input);
                 candidate.workforce_optimized = true;
@@ -199,6 +212,18 @@ async function exactPlanJson(pkg, payload, step = () => {}, first = () => {}) {
         if (stockedPlan?.success) plan = stockedPlan;
     }
     step('check', 'done');
+    if (input.force_e_mode && !(plan.power_used > 0)) {
+        throw new Error('No working E-Mode station was found. Check your generators, Lightning Aniimo and available recipes, or turn off Force E-Mode.');
+    }
+    plan.e_mode_forced = !!input.force_e_mode;
+    if (staffingFirst) {
+        plan.staffing_first = true;
+        plan.workforce_optimized = true;
+        plan.staffing_proven = proven;
+        // This solve minimizes workers; its objective/bound are not a coin-income proof.
+        plan.proven_optimal = false;
+        delete plan.upper_bound;
+    }
     plan.level_up_note = levelUpNote;
     return JSON.stringify(plan);
 }
@@ -286,7 +311,11 @@ self.onmessage = async (event) => {
             } catch (error) {
                 fallbackReason = error && error.message ? error.message : String(error);
                 // The backup planner doesn't know the player's roster, so a roster plan stops here.
-                if (JSON.parse(payload).aniimo?.startsWith('roster')) {
+                if (error?.noFallback) {
+                    result = JSON.stringify({ success: false, error: fallbackReason });
+                } else if (JSON.parse(payload).force_e_mode) {
+                    result = JSON.stringify({ success: false, error: `No forced E-Mode plan found: ${fallbackReason}. Check your power setup and Lightning Aniimo, or turn off Force E-Mode.` });
+                } else if (JSON.parse(payload).aniimo?.startsWith('roster')) {
                     console.warn('Exact planner failed on a roster:', error);
                     result = JSON.stringify({ success: false, error: `No plan found with these Aniimo: ${fallbackReason}.` });
                 } else {
