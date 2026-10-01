@@ -1047,8 +1047,12 @@ function tripsPerUnit(step, input = lastPlanInput) {
     const batches = batchRatePerUnit(step);
     if (batches <= 0) return 0;
     const recipe = recipeIndex.find(r => r.name === basePlanItem(step.item_name));
-    const yieldAmount = recipe?.yieldAmount || 1;
-    return batches * yieldAmount / outputLimitForStep(step, input) * 3600;
+    const yieldAmount = Math.max(1, recipe?.yieldAmount || 1);
+    const outputLimit = Math.max(1, outputLimitForStep(step, input));
+    // A completed batch lands as one output event. If a batch itself exceeds the nominal stack
+    // cap (Quick crops can), it still needs one pickup, not yield/cap fractional or repeated trips.
+    const batchesPerPickup = Math.max(1, Math.ceil(outputLimit / yieldAmount));
+    return batches / batchesPerPickup * 3600;
 }
 
 // Whether a crop needs a growing environment: grown without one, a building's temperature
