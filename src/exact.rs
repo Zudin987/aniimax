@@ -1554,6 +1554,64 @@ pub fn check_plan(
                 rate * recipe.production_time
             };
         }
+        // Re-check every crop/tree tending assignment and fold its actual worker time into
+        // the same member-day budget used for processors and resident facilities.
+        if let Some(grower_steps) = facility_counts.grower_steps() {
+            let mut worked: HashMap<(String, String), f64> = HashMap::new();
+            for (item, step_name, member, share) in &plan.grower_staffing {
+                let aniimo = crew.members.get(*member).ok_or(format!(
+                    "{item} {step_name} is worked by roster member {member}, who isn't there"
+                ))?;
+                let Some(job) = grower_steps.get(item).iter().find(|job| job.step == *step_name) else {
+                    return Err(format!("{item} has no grower job named {step_name}"));
+                };
+                if aniimo.level(&job.ability) < job.min_level {
+                    return Err(format!(
+                        "{item} {step_name} is assigned to roster member {member}, whose {} level {} is below {}",
+                        job.ability,
+                        aniimo.level(&job.ability),
+                        job.min_level
+                    ));
+                }
+                let seconds = crate::models::Worker::new(aniimo.level(&job.ability), false)
+                    .seconds_for(job.workload, job.min_level, true);
+                if seconds <= 0.0 {
+                    return Err(format!("{item} {step_name} has invalid worker time"));
+                }
+                busy[*member] += *share;
+                *worked.entry((item.clone(), step_name.clone())).or_default() += *share / seconds;
+            }
+
+            for (name, &rate) in &plan.recipe_rates {
+                let item = crate::models::base_item_name(name);
+                let jobs = grower_steps.get(item);
+                if jobs.is_empty() {
+                    continue;
+                }
+                let mut required: HashMap<&str, u32> = HashMap::new();
+                for job in jobs {
+                    let can = crew.members.iter().any(|aniimo|
+                        aniimo.count > 0 && aniimo.level(&job.ability) >= job.min_level);
+                    if job.step == "Watering" && !can {
+                        continue;
+                    }
+                    *required.entry(job.step.as_str()).or_default() += 1;
+                }
+                for (step_name, times) in required {
+                    let have = worked
+                        .get(&(item.to_string(), step_name.to_string()))
+                        .copied()
+                        .unwrap_or(0.0);
+                    let need = rate * times as f64;
+                    if have + TOLERANCE < need {
+                        return Err(format!(
+                            "{item} {step_name} needs {need}/s of tending but roster assignments cover {have}/s"
+                        ));
+                    }
+                }
+            }
+        }
+
         let mut staffed: HashMap<&str, f64> = HashMap::new();
         for (building, member, share) in &plan.staffing {
             let aniimo = crew.members.get(*member).ok_or(format!("{building} staffed by roster member {member}, who isn't there"))?;
