@@ -296,8 +296,10 @@ const BUILDING_TIE_BREAK: f64 = 1e-5;
 const EMODE_UNIT_TIE_BREAK: f64 = 5e-6;
 /// Then prefer less normal Aniimo busy time among plans using the same number of normal machines.
 const EMODE_BUSY_TIE_BREAK: f64 = 1e-8;
-/// Do not switch on extra generators when they are not needed.
-const GENERATOR_TIE_BREAK: f64 = 1e-7;
+/// Each active Crackle Generator also occupies one Lightning Aniimo, so count it at the
+/// same whole-worker scale as the normal machine E-Mode can free. This also keeps HiGHS from
+/// treating redundant generators as numerically irrelevant.
+const GENERATOR_TIE_BREAK: f64 = EMODE_UNIT_TIE_BREAK;
 
 impl<'a> Model<'a> {
     fn add(&mut self, objective: f64, bounds: (f64, f64), integer: bool, kind: VarKind<'a>) -> usize {
@@ -589,9 +591,20 @@ fn build_model<'a>(
                 true,
                 VarKind::ElectricMachines { facility, tier_level: level },
             );
-            let mut terms = shares;
+            let mut terms = shares.clone();
             terms.push((machines, -1.0));
             model.constrain(terms, ComparisonOp::Le, 0.0);
+
+            // A powered machine is physical: don't let the solver switch on spare E-Mode
+            // machines that no electric recipe actually uses. For non-turn-taking recipes the
+            // shares are whole units, so this makes machines == shares. Bench/Kiln recipes may
+            // time-share, so the pair of constraints makes machines == ceil(total share).
+            //
+            // Without this upper bound HiGHS can leave zero-value ElectricMachines variables
+            // arbitrarily high, inflating power draw and even activating extra generators.
+            let mut no_idle: Vec<(usize, f64)> = shares.into_iter().map(|(v, c)| (v, -c)).collect();
+            no_idle.push((machines, 1.0));
+            model.constrain(no_idle, ComparisonOp::Le, 1.0 - INTEGRAL);
             powered_tiers.push((facility, level, machines));
         }
 

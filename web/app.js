@@ -3948,7 +3948,10 @@ function displayPlan(plan) {
         explored.textContent = `Best plan found in the time allowed; the best possible is at most ${gap.toFixed(1)}% higher.`;
     } else {
         const reason = plan.fallback_reason ? ` (${plan.fallback_reason})` : '';
-        explored.textContent = `The exact planner couldn't run${reason}, so this plan comes from the backup planner and may not be the very best. Reloading the page usually fixes this.`;
+        const emode = (plan.power_capacity || 0) > 0
+            ? ' The backup planner does not model E-Mode, so this fallback result is Normal Mode only.'
+            : '';
+        explored.textContent = `The exact planner couldn't run${reason}, so this plan comes from the backup planner and may not be the very best.${emode} Reloading the page usually fixes this.`;
     }
 
     const unverifiedEl = document.getElementById('plan-unverified');
