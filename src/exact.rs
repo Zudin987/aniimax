@@ -1987,8 +1987,14 @@ pub fn to_production_plan(
         let used = used.min(owned);
         for (recipe, units, rate) in rows {
             let mut reason = uses_of(recipe);
-            if matches!(crate::models::base_item_name(&recipe.name), "moondew_radish" | "waxing_moon_pepper") {
-                reason = format!("{reason}; keep at least 2 plots planted for Harvest Moon mutation rolls");
+            let mutation_plots = facility_counts.harvest_mutation_plots();
+            if mutation_plots > 0
+                && matches!(crate::models::base_item_name(&recipe.name), "moondew_radish" | "waxing_moon_pepper")
+            {
+                let plot_word = if mutation_plots == 1 { "plot" } else { "plots" };
+                reason = format!(
+                    "{reason}; keep at least {mutation_plots} {plot_word} planted for Harvest Moon mutation rolls"
+                );
             }
             if crate::models::is_electric_item(&recipe.name) {
                 reason = format!("{reason}; E-Mode at full grid supply");
