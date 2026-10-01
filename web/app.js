@@ -18,7 +18,10 @@ const pendingWorkerRequests = new Map();
 
 // Tags this page load's worker (and, through it, the wasm solver; see worker.js) so the browser
 // never runs a cached older solver next to newer page code.
-const WORKER_URL = `./worker.js?load=${Date.now()}`;
+const workerUrl = new URL('./worker.js', import.meta.url);
+workerUrl.search = new URL(import.meta.url).search;
+workerUrl.searchParams.set('load', Date.now());
+const WORKER_URL = workerUrl.href;
 
 function initWorker() {
     worker = new Worker(WORKER_URL, { type: 'module' });

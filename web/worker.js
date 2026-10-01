@@ -6,14 +6,15 @@
 import highsModule from './vendor/highs/highs.mjs';
 import { aniimoTeamCount } from './aniimo-team.js';
 
-// The page starts this worker as `worker.js?load=<page load time>` (see app.js), and the wasm
-// module is loaded with the same query and a revalidated fetch, so a page never pairs new page
-// code with an older cached solver.
+// Deployed pages carry the commit's version through the worker, JS modules and both WASM
+// binaries. Each build has distinct cache keys; reloads can reuse the same build's bytes.
 // The message handler below is installed right away and waits on this, so no request can arrive
 // before there's a handler for it.
-const load = new URL(import.meta.url).search;
+const source = new URL(import.meta.url);
+const revision = source.searchParams.get('v');
+const load = revision ? `?v=${encodeURIComponent(revision)}` : source.search;
 const ready = import('./pkg/aniimax.js' + load).then(async (pkg) => {
-    await pkg.default({ module_or_path: fetch(new URL('./pkg/aniimax_bg.wasm', import.meta.url), { cache: 'no-cache' }) });
+    await pkg.default({ module_or_path: fetch(new URL('./pkg/aniimax_bg.wasm' + load, import.meta.url), { cache: revision ? 'default' : 'no-cache' }) });
     return pkg;
 });
 
@@ -26,7 +27,7 @@ const HANDLER_NAMES = ['time_to_reach', 'get_version', 'get_all_items'];
 let highsBytes = null;
 async function newHighs() {
     if (!highsBytes) {
-        highsBytes = fetch(new URL('./vendor/highs/highs.wasm', import.meta.url)).then(r => {
+        highsBytes = fetch(new URL('./vendor/highs/highs.wasm' + load, import.meta.url)).then(r => {
             if (!r.ok) throw new Error(`Could not load HiGHS (${r.status})`);
             return r.arrayBuffer();
         });
