@@ -16,8 +16,8 @@
 //! - Woodland and Mine byproducts (Wood Blocks, Mineral Sand) balance like any other item, so the
 //!   Woodworking Bench and Chimney Kiln can use them.
 //! - During a season, its items also earn points when sold, which a priority or floor can name
-//!   as [`crate::models::SEASON_POINTS`]. Season seeds cost the season currency, which plans treat
-//!   as unlimited (see [`crate::models::SeasonTerms`]).
+//!   as [`crate::models::SEASON_POINTS`]. Season seeds cost the season currency; a caller may cap
+//!   that spend per day through [`crate::models::FacilityCounts::set_season_limits`].
 //! - The objective is the target currency per second from everything sold; for coins, minus seed
 //!   costs (seeds are paid in coins, so they don't come off an Aniimo EXP total). A floor can
 //!   name another currency, so a plan keeps up the Aniimo EXP or Aniipods an earlier solve found
