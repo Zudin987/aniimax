@@ -98,9 +98,8 @@ pub struct ProductionItem {
 pub const SEASON_POINTS: &str = "season_points";
 
 /// A season item's terms, e.g. for the Harvest Moon Festival an Umbral Hot Pot sells for 2150
-/// coins and 8 points, and a Moondew Radish's seeds cost 4 Moonray Wheat. Season orders pay out
-/// far more of the season currency than seeds cost, so plans treat it as unlimited and only
-/// report what the seeds take.
+/// coins and 8 points, and a Moondew Radish's seeds cost 4 Moonray Wheat. Plans may either leave
+/// that event currency uncapped or apply the player's per-day Moonray Wheat budget.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct SeasonTerms {
     /// Season points per unit sold, on top of its coins.
