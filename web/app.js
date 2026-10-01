@@ -1789,7 +1789,7 @@ function startProgress(input, runId) {
 }
 
 // The worker's solves that make up the card's 'plan' step; it's done once the plan is checked.
-const PLAN_SOLVES = ['level_up', 'final', 'stock_up', 'check'];
+const PLAN_SOLVES = ['level_up', 'final', 'free_aniimo', 'stock_up', 'check'];
 
 // Moves step `key` on: 'start', 'done', 'skip' or 'fail', with an optional note such as
 // "3 of 12", and for a solve, whether HiGHS proved its answer. The backup planner only appears
@@ -3326,6 +3326,7 @@ function renderAniimoSummary(plan) {
             </table>
         </div>
         ${capNote}
+        ${cap && total < cap ? `<p class="hint">${cap - total} Aniimo slot${cap - total === 1 ? '' : 's'} available for other Homeland stations, including stations that earn stars for decorations.</p>` : ''}
         <p class="hint small">The shown minimum team consumes about <strong>${formatNumber(minimumFood)} food Energy/day</strong> at 10 Energy/min per Aniimo. Every extra resident also eats even while idle. Production assumes the food bowl stays stocked; an empty bowl drops Aniimo work to 20%.</p>
     `;
 }
@@ -3913,9 +3914,12 @@ function renderPowerSummary(plan) {
         </div>`;
     const note = document.getElementById('power-spare-note');
     if (note) {
+        const staffing = plan.workforce_optimized
+            ? `The planner also checked E-Mode to reduce the Aniimo team while keeping your production targets.${plan.aniimo_slots_saved > 0 ? ` Freed ${plan.aniimo_slots_saved} additional Aniimo slot${plan.aniimo_slots_saved === 1 ? '' : 's'} for other stations.` : ''} `
+            : '';
         note.textContent = used <= 0
-            ? 'No facility needs E-Mode in this plan.'
-            : `The solver chose the verified ${efficiency}% grid band: ${formatNumber(used)} / ${formatNumber(bandLimit)} usable power. Aniimax models the verified 120% and 100% bands; it does not use the below-100% overload region because its exact scaling is not reliably known. Active rated spare: ${formatNumber(activeSpare)}; total configured spare: ${formatNumber(configuredSpare)}.`;
+            ? `${staffing}This plan uses Normal Mode. Each active generator also needs one Lightning Aniimo, so E-Mode must save enough production workers to help.`
+            : `${staffing}The selected ${efficiency}% grid band uses ${formatNumber(used)} / ${formatNumber(bandLimit)} power. ${generators} Lightning Aniimo ${generators === 1 ? 'is' : 'are'} included in the team for the active generators. Active rated spare: ${formatNumber(activeSpare)}; total configured spare: ${formatNumber(configuredSpare)}.`;
     }
 }
 
@@ -4579,4 +4583,3 @@ document.addEventListener('focusin', (e) => {
 });
 document.addEventListener('focusout', hideTip);
 window.addEventListener('scroll', hideTip, { passive: true, capture: true });
-

@@ -40,3 +40,6 @@ jobs:
 
       - name: Homeland layout smoke test
         run: node --experimental-default-type=module tests/layout_smoke.mjs
+
+      - name: Aniimo staffing smoke test
+        run: node --experimental-default-type=module tests/aniimo_team_smoke.mjs
