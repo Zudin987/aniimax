@@ -1231,6 +1231,11 @@ pub struct FacilityCounts {
     default_tier: (u32, u32),
     /// The Aniimo the player has, when planning with them (see [`Crew`]).
     crew: Option<Crew>,
+    /// Optional Harvest Moon seed-currency budget, per real day. Kept here with the rest of the
+    /// plan setup so every exact-solver entry point applies the same limit.
+    season_currency_per_day: Option<f64>,
+    /// Minimum Moondew Radish and Waxing Moon Pepper plots to keep cycling during the festival.
+    harvest_mutation_plots: u32,
 }
 
 impl Default for FacilityCounts {
@@ -1239,6 +1244,8 @@ impl Default for FacilityCounts {
             facilities: std::collections::HashMap::new(),
             default_tier: (1, 1),
             crew: None,
+            season_currency_per_day: None,
+            harvest_mutation_plots: 2,
         }
     }
 }
@@ -1253,6 +1260,23 @@ impl FacilityCounts {
     /// The Aniimo the player has, if planning with them.
     pub fn crew(&self) -> Option<&Crew> {
         self.crew.as_ref()
+    }
+
+    /// Sets seasonal plan limits. A non-positive or non-finite budget means unlimited.
+    pub fn set_season_limits(&mut self, currency_per_day: Option<f64>, mutation_plots: u32) -> &mut Self {
+        self.season_currency_per_day = currency_per_day.filter(|v| v.is_finite() && *v > 0.0);
+        self.harvest_mutation_plots = mutation_plots;
+        self
+    }
+
+    /// Maximum season seed currency the plan may spend per day, if capped.
+    pub fn season_currency_per_day(&self) -> Option<f64> {
+        self.season_currency_per_day
+    }
+
+    /// Minimum plots of EACH Harvest Moon crop kept cycling for mutation attempts.
+    pub fn harvest_mutation_plots(&self) -> u32 {
+        self.harvest_mutation_plots
     }
 
     /// Creates an empty `FacilityCounts` (every facility defaults to count=1, level=1).
@@ -1289,6 +1313,8 @@ impl FacilityCounts {
             facilities: std::collections::HashMap::new(),
             default_tier: (0, 1),
             crew: None,
+            season_currency_per_day: None,
+            harvest_mutation_plots: 2,
         };
         for (name, count, level) in pairs {
             fc.set(name, *count, *level);
@@ -1303,6 +1329,8 @@ impl FacilityCounts {
             facilities: std::collections::HashMap::new(),
             default_tier: (1, 99),
             crew: None,
+            season_currency_per_day: None,
+            harvest_mutation_plots: 2,
         }
     }
 
