@@ -107,7 +107,7 @@
                         </div>
 
                         <div class="module-card">
-                            <h4>Power Module <span class="info-icon" data-tooltip="Unlocks E-Mode at RV 12.&#10;Lv.1–5 raises Crackle Generator output: 600 / 800 / 1000 / 1200 / 1500 power.">?</span></h4>
+                            <h4>Power Module <span class="info-icon" data-tooltip="Unlocks E-Mode at RV 12.&#10;Generator Lv.1–5 rated output: 600 / 800 / 1000 / 1200 / 1500.&#10;Verified 120% efficiency band: up to 500 / 660 / 800 / 1000 / 1200 draw.">?</span></h4>
                             <div class="input-field">
                                 <label for="power-module-level">Level</label>
                                 <input type="number" id="power-module-level" value="0" min="0" max="5">
@@ -118,7 +118,7 @@
                         <span class="emode-bolt" aria-hidden="true">⚡</span>
                         <div>
                             <strong>E-Mode is automatic</strong>
-                            <span>Configure your Power Module and Crackle Generator. The planner compares powered and Aniimo production automatically and prefers E-Mode when the main result is tied.</span>
+                            <span>Configure your Power Module and Crackle Generator. The planner compares Aniimo work with the verified 120% and 100% E-Mode grid bands automatically.</span>
                         </div>
                     </div>
                 </div>
@@ -271,7 +271,7 @@
 
                     <div class="card production-steps" id="power-card" style="display: none;">
                         <h2 class="emode-card-title"><span aria-hidden="true">⚡</span> E-Mode <span class="emode-auto-badge">Automatic</span></h2>
-                        <p class="hint">Powered rows do not need a production Aniimo. The planner maximizes your selected goal first, then prefers E-Mode when the result is tied. Spare power is not a target to fill.</p>
+                        <p class="hint">Powered rows do not need a production Aniimo. The planner can use the verified 120% low-draw band or the 100% rated-output band, whichever gives the better plan. The below-100% overload curve is not guessed.</p>
                         <div id="power-summary"></div>
                         <p class="power-spare-note" id="power-spare-note"></p>
                     </div>
