@@ -1248,6 +1248,9 @@ pub struct FacilityCounts {
     season_currency_per_day: Option<f64>,
     /// Minimum Moondew Radish and Waxing Moon Pepper plots to keep cycling during the festival.
     harvest_mutation_plots: u32,
+    /// Growing jobs used by custom-roster planning so reclaiming/sowing/watering/harvesting
+    /// consume real Aniimo time instead of merely checking that an ability exists somewhere.
+    grower_steps: Option<GrowerSteps>,
 }
 
 impl Default for FacilityCounts {
@@ -1258,6 +1261,7 @@ impl Default for FacilityCounts {
             crew: None,
             season_currency_per_day: None,
             harvest_mutation_plots: 2,
+            grower_steps: None,
         }
     }
 }
@@ -1272,6 +1276,17 @@ impl FacilityCounts {
     /// The Aniimo the player has, if planning with them.
     pub fn crew(&self) -> Option<&Crew> {
         self.crew.as_ref()
+    }
+
+    /// Supplies Farmland/Woodland job data for roster-aware capacity planning.
+    pub fn set_grower_steps(&mut self, steps: GrowerSteps) -> &mut Self {
+        self.grower_steps = Some(steps);
+        self
+    }
+
+    /// Farmland/Woodland jobs used by the exact roster solver.
+    pub fn grower_steps(&self) -> Option<&GrowerSteps> {
+        self.grower_steps.as_ref()
     }
 
     /// Sets seasonal plan limits. A non-positive or non-finite budget means unlimited.
@@ -1327,6 +1342,7 @@ impl FacilityCounts {
             crew: None,
             season_currency_per_day: None,
             harvest_mutation_plots: 2,
+            grower_steps: None,
         };
         for (name, count, level) in pairs {
             fc.set(name, *count, *level);
@@ -1343,6 +1359,7 @@ impl FacilityCounts {
             crew: None,
             season_currency_per_day: None,
             harvest_mutation_plots: 2,
+            grower_steps: None,
         }
     }
 
