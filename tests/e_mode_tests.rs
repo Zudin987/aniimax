@@ -49,10 +49,14 @@ fn e_mode_loader_adds_fixed_timer_variant() {
     )
     .expect("valid E-Mode data");
     assert_eq!(added, 1);
-    let electric = items.iter().find(|i| i.name == "widget__electric").expect("electric variant");
+    let electric = items.iter().find(|i| i.name == "widget__electric").expect("100% electric variant");
     assert_eq!(electric.production_time, 10.0);
     assert!(electric.workload.is_none());
     assert!(electric.crew.is_none());
+    let boosted = items.iter().find(|i| i.name == "widget__electric_boost").expect("120% electric variant");
+    assert!((boosted.production_time - 10.0 / 1.2).abs() < 1e-9);
+    assert!(boosted.workload.is_none());
+    assert!(boosted.crew.is_none());
 }
 
 #[test]
@@ -67,11 +71,13 @@ fn e_mode_is_used_when_it_improves_output() {
     let modules = ModuleLevels { power_module: 1, ..ModuleLevels::default() };
     let plan = solve(&items, &counts, &modules);
 
-    assert!(plan.recipe_rates.contains_key("widget__electric"));
+    assert!(plan.recipe_rates.contains_key("widget__electric_boost"));
+    assert!(!plan.recipe_rates.contains_key("widget__electric"));
     assert!(!plan.recipe_rates.contains_key("widget"));
     assert_eq!(plan.power_used, 75); // 15 power x actual Crafting Table Lv.5.
     assert_eq!(plan.power_capacity, 600);
     assert_eq!(plan.generators_used, 1);
+    assert_eq!(plan.power_efficiency, 120);
 }
 
 #[test]
@@ -238,7 +244,7 @@ fn rated_generator_power_requires_the_recommended_lightning_level() {
     ]);
     weak.set_crew(lightning_crew(1));
     let weak_plan = solve(&items, &weak, &modules);
-    assert!(!weak_plan.recipe_rates.contains_key("widget__electric"));
+    assert!(!weak_plan.recipe_rates.keys().any(|name| aniimax::models::is_electric_item(name)));
     assert_eq!(weak_plan.generators_used, 0);
 
     let mut suitable = FacilityCounts::only(&[
@@ -247,12 +253,57 @@ fn rated_generator_power_requires_the_recommended_lightning_level() {
     ]);
     suitable.set_crew(lightning_crew(3));
     let powered = solve(&items, &suitable, &modules);
-    assert!(powered.recipe_rates.contains_key("widget__electric"));
+    assert!(powered.recipe_rates.contains_key("widget__electric_boost"));
     assert_eq!(powered.generators_used, 1);
+    assert_eq!(powered.power_efficiency, 120);
     assert!(powered.staffing.iter().any(|(building, member, share)|
         building == "Crackle Generator Lv.3" && *member == 0 && (*share - 1.0).abs() < 1e-9));
 }
 
+
+#[test]
+fn e_mode_uses_100_percent_band_when_it_beats_the_120_percent_threshold() {
+    let mut items = vec![item("widget", "Crafting Table", 100.0, 100.0)];
+    add_e_mode_variants(&mut items, "name,production_time\nwidget,10\n").unwrap();
+
+    // Lv.5 Crafting Tables draw 75 each. A Lv.1 Generator keeps 120% only through 500 draw,
+    // so six boosted machines make 0.72/s; eight machines at 100% draw exactly 600 and make
+    // 0.8/s. The optimizer must choose the 100% grid-wide band.
+    let counts = FacilityCounts::only(&[
+        ("Crafting Table", 8, 5),
+        ("Crackle Generator", 1, 1),
+    ]);
+    let modules = ModuleLevels { power_module: 1, ..ModuleLevels::default() };
+    let plan = solve(&items, &counts, &modules);
+
+    assert!(plan.recipe_rates.contains_key("widget__electric"));
+    assert!(!plan.recipe_rates.contains_key("widget__electric_boost"));
+    assert_eq!(plan.power_used, 600);
+    assert_eq!(plan.power_supply, 600);
+    assert_eq!(plan.power_efficiency, 100);
+}
+
+#[test]
+fn generic_best_lightning_level_gates_rated_generator_output() {
+    let mut items = vec![item("widget", "Crafting Table", 100.0, 100.0)];
+    add_e_mode_variants(&mut items, "name,production_time\nwidget,10\n").unwrap();
+    let modules = ModuleLevels { power_module: 3, ..ModuleLevels::default() };
+
+    let mut weak = FacilityCounts::only(&[
+        ("Crafting Table", 1, 3),
+        ("Crackle Generator", 1, 3),
+    ]);
+    weak.set_generator_lightning_level(Some(1));
+    let weak_plan = solve(&items, &weak, &modules);
+    assert!(!weak_plan.recipe_rates.keys().any(|name| aniimax::models::is_electric_item(name)));
+    assert_eq!(weak_plan.generators_used, 0);
+
+    let mut suitable = weak.clone();
+    suitable.set_generator_lightning_level(Some(3));
+    let powered = solve(&items, &suitable, &modules);
+    assert!(powered.recipe_rates.keys().any(|name| aniimax::models::is_electric_item(name)));
+    assert_eq!(powered.generators_used, 1);
+}
 
 #[test]
 fn grower_jobs_consume_custom_roster_time() {

@@ -92,6 +92,16 @@ pub fn add_e_mode_variants(items: &mut Vec<ProductionItem>, csv_text: &str) -> R
         electric.workload = None;
         electric.crew = None;
         items.push(electric);
+
+        // The game's verified low-draw power band runs E-Mode at 120% efficiency. Keep this as a
+        // distinct internal recipe so the mixed-integer model can choose one grid-wide band
+        // without inventing the still-unknown below-100% overload curve.
+        let mut boosted = base.clone();
+        boosted.name = format!("{}{}", row.name, crate::models::ELECTRIC_BOOST_SUFFIX);
+        boosted.production_time = row.production_time / 1.2;
+        boosted.workload = None;
+        boosted.crew = None;
+        items.push(boosted);
         added += 1;
     }
     Ok(added)

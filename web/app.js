@@ -2787,11 +2787,15 @@ function getPlanInputValues() {
 // "quick_aromathyst" -> "Quick Aromathyst": the data uses snake_case names.
 function basePlanItem(name) {
     if (!name) return name;
-    return name.replace(/__electric$/, '').replace(/__uncovered$/, '').replace(/__by\d+$/, '');
+    return name
+        .replace(/__electric_boost$/, '')
+        .replace(/__electric$/, '')
+        .replace(/__uncovered$/, '')
+        .replace(/__by\d+$/, '');
 }
 
 function isElectricItem(name) {
-    return !!name && name.endsWith('__electric');
+    return !!name && (name.endsWith('__electric') || name.endsWith('__electric_boost'));
 }
 
 function prettyItem(name) {
@@ -3885,23 +3889,33 @@ function renderPowerSummary(plan) {
     const configuredSpare = Math.max(0, capacity - used);
     const activeSpare = Math.max(0, activeSupply - used);
     const generators = plan.generators_used || 0;
+    const efficiency = plan.power_efficiency || 0;
     const generatorMix = (plan.generator_tiers || [])
         .filter(([, count]) => count > 0)
         .map(([tier, count]) => `${count}×Lv.${tier}`)
         .join(' + ');
+    const boostLimit = { 1: 500, 2: 660, 3: 800, 4: 1000, 5: 1200 };
+    const ratedLimit = { 1: 600, 2: 800, 3: 1000, 4: 1200, 5: 1500 };
+    const moduleLevel = Math.max(1, Number(lastPlanInput?.modules?.power_module || 1));
+    const bandLimit = (plan.generator_tiers || []).reduce((sum, [tier, count]) => {
+        const operating = Math.min(Number(tier) || 1, moduleLevel);
+        const table = efficiency === 120 ? boostLimit : ratedLimit;
+        return sum + (table[operating] || table[5]) * count;
+    }, 0);
     el.innerHTML = `
         <div class="summary-grid">
             <div class="summary-item"><span class="summary-label">E-Mode draw</span><span class="summary-value">${formatNumber(used)}</span></div>
-            <div class="summary-item"><span class="summary-label">Active supply</span><span class="summary-value">${formatNumber(activeSupply)}</span></div>
+            <div class="summary-item"><span class="summary-label">Grid efficiency</span><span class="summary-value">${efficiency ? efficiency + '%' : '—'}</span></div>
+            <div class="summary-item"><span class="summary-label">Active rated supply</span><span class="summary-value">${formatNumber(activeSupply)}</span></div>
+            <div class="summary-item"><span class="summary-label">Current band limit</span><span class="summary-value">${formatNumber(bandLimit)}</span></div>
             <div class="summary-item"><span class="summary-label">Configured capacity</span><span class="summary-value">${formatNumber(capacity)}</span></div>
             <div class="summary-item"><span class="summary-label">Generators active</span><span class="summary-value">${generators}</span><span class="hint small">${generatorMix || '—'}</span></div>
         </div>`;
     const note = document.getElementById('power-spare-note');
     if (note) {
-        const canReach120 = used > 0 && capacity >= used * 1.2 - 1e-9;
         note.textContent = used <= 0
             ? 'No facility needs E-Mode in this plan.'
-            : `The solver conservatively uses the documented base E-Mode timers at full supply. The game can speed a well-supplied grid up to 120%; ${canReach120 ? 'your configured generators have at least 20% nominal headroom' : 'this setup does not have 20% configured headroom'}. Active spare: ${formatNumber(activeSpare)}; total configured spare: ${formatNumber(configuredSpare)}.`;
+            : `The solver chose the verified ${efficiency}% grid band: ${formatNumber(used)} / ${formatNumber(bandLimit)} usable power. Aniimax models the verified 120% and 100% bands; it does not use the below-100% overload region because its exact scaling is not reliably known. Active rated spare: ${formatNumber(activeSpare)}; total configured spare: ${formatNumber(configuredSpare)}.`;
     }
 }
 

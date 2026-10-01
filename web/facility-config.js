@@ -97,7 +97,7 @@ export const FACILITIES = [
         hasWorker: true, ability: 'Lightning',
         unlocks: { 1: 12, 2: 14, 3: 16, 4: 18, 5: 20 },
         counts: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3],
-        tooltip: "Powers full-supply E-Mode from RV 12.&#10;Lv.1: 600 power&#10;Lv.2: 800 power&#10;Lv.3: 1000 power&#10;Lv.4: 1200 power&#10;Lv.5: 1500 power&#10;Each generator needs a Lightning Aniimo."
+        tooltip: "Powers E-Mode from RV 12.&#10;Rated output Lv.1–5: 600 / 800 / 1000 / 1200 / 1500.&#10;120% efficiency draw limit: 500 / 660 / 800 / 1000 / 1200.&#10;Each generator needs a suitable Lightning Aniimo."
     },
     {
         name: 'Carousel Mill', slug: 'carousel-mill', defaultCount: 1, category: 'Materials Processing', hasWorker: true, ability: 'Wind', personality: 'Tenacious',
