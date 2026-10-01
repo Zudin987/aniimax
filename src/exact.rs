@@ -794,13 +794,12 @@ fn build_model<'a>(
                 busy[member].push((rate, recipe.production_time));
             }
         }
-        // The environment buildings of each kind the plan sets up; a pair counts each of its two.
+        // Environment buildings of each kind the plan sets up; a pair counts each of its two.
         let mut set_up: BTreeMap<String, BTreeMap<usize, f64>> = BTreeMap::new();
         for (v, kind) in model.kinds.iter().enumerate() {
             let named: Vec<&str> = match kind {
                 VarKind::Environment { building, .. } => vec![building],
                 VarKind::EnvironmentPair { buildings: (a, b), .. } => vec![a, b],
-                VarKind::Generator { .. } => vec!["Crackle Generator"],
                 _ => continue,
             };
             for building in named {
@@ -808,20 +807,47 @@ fn build_model<'a>(
             }
         }
         for (building, used) in set_up {
-            // Environment buildings use the roster's configured ability; every active Crackle
-            // Generator always needs one Lightning Aniimo.
-            let ability = if building == "Crackle Generator" {
-                "Lightning"
-            } else {
-                let Some(ability) = crew.environment.get(&building) else { continue };
-                ability.as_str()
-            };
+            let Some(ability) = crew.environment.get(&building) else { continue };
             let mut staffed: Vec<(usize, f64)> = used.into_iter().map(|(v, n)| (v, -n)).collect();
             for (member, aniimo) in crew.members.iter().enumerate() {
                 if aniimo.count == 0 || aniimo.level(ability) == 0 {
                     continue;
                 }
-                let staff = model.add(0.0, (0.0, aniimo.count as f64), false, VarKind::Staff { building: building.clone(), member });
+                let staff = model.add(
+                    0.0,
+                    (0.0, aniimo.count as f64),
+                    false,
+                    VarKind::Staff { building: building.clone(), member },
+                );
+                staffed.push((staff, 1.0));
+                busy[member].push((staff, 1.0));
+            }
+            model.constrain(staffed, ComparisonOp::Ge, 0.0);
+        }
+
+        // An active Crackle Generator uses one resident Lightning Aniimo. To claim the tier's
+        // rated power, require the recommended Lightning level for that generator tier; weaker
+        // workers can run it in game, but would generate power more slowly than this model assumes.
+        let mut generator_set_up: BTreeMap<u32, BTreeMap<usize, f64>> = BTreeMap::new();
+        for (v, kind) in model.kinds.iter().enumerate() {
+            if let VarKind::Generator { tier_level, .. } = kind {
+                *generator_set_up.entry(*tier_level).or_default().entry(v).or_default() += 1.0;
+            }
+        }
+        for (tier_level, used) in generator_set_up {
+            let required = crate::models::generator_required_lightning_level(tier_level);
+            let label = format!("Crackle Generator Lv.{tier_level}");
+            let mut staffed: Vec<(usize, f64)> = used.into_iter().map(|(v, n)| (v, -n)).collect();
+            for (member, aniimo) in crew.members.iter().enumerate() {
+                if aniimo.count == 0 || aniimo.level("Lightning") < required {
+                    continue;
+                }
+                let staff = model.add(
+                    0.0,
+                    (0.0, aniimo.count as f64),
+                    false,
+                    VarKind::Staff { building: label.clone(), member },
+                );
                 staffed.push((staff, 1.0));
                 busy[member].push((staff, 1.0));
             }
@@ -1465,16 +1491,25 @@ pub fn check_plan(
         let mut staffed: HashMap<&str, f64> = HashMap::new();
         for (building, member, share) in &plan.staffing {
             let aniimo = crew.members.get(*member).ok_or(format!("{building} staffed by roster member {member}, who isn't there"))?;
-            let ability = if building == "Crackle Generator" {
-                "Lightning"
+            let (ability, required, usage_key): (&str, u32, &str) = if let Some(level) =
+                building.strip_prefix("Crackle Generator Lv.").and_then(|s| s.parse::<u32>().ok())
+            {
+                ("Lightning", crate::models::generator_required_lightning_level(level), "Crackle Generator")
             } else {
-                crew.environment.get(building).ok_or(format!("{building} needs no Aniimo"))?.as_str()
+                (
+                    crew.environment.get(building).ok_or(format!("{building} needs no Aniimo"))?.as_str(),
+                    1,
+                    building.as_str(),
+                )
             };
-            if aniimo.level(ability) == 0 {
-                return Err(format!("{building} staffed by roster member {member}, who has no {ability}"));
+            if aniimo.level(ability) < required {
+                return Err(format!(
+                    "{building} staffed by roster member {member}, whose {ability} level {} is below {required}",
+                    aniimo.level(ability)
+                ));
             }
             busy[*member] += share;
-            *staffed.entry(building.as_str()).or_default() += share;
+            *staffed.entry(usage_key).or_default() += share;
         }
         for (&building, &used) in &buildings_used {
             let have = staffed.get(building).copied().unwrap_or(0.0);
