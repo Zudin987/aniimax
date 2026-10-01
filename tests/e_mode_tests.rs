@@ -75,6 +75,50 @@ fn e_mode_is_used_when_it_improves_output() {
 }
 
 #[test]
+fn e_mode_does_not_switch_on_unused_powered_machines() {
+    let mut raw = item("raw", "Farmland", 100.0, 0.0);
+    raw.yield_amount = 1;
+
+    let mut widget = item("widget", "Crafting Table", 100.0, 1_000.0);
+    widget.raw_materials = Some(vec!["raw".to_string()]);
+    widget.required_amount = Some(vec![1]);
+
+    let mut items = vec![raw, widget];
+    add_e_mode_variants(&mut items, "name,production_time\nwidget,10\n").unwrap();
+
+    let counts = FacilityCounts::only(&[
+        ("Farmland", 1, 1),
+        ("Crafting Table", 3, 1),
+        ("Crackle Generator", 1, 1),
+    ]);
+    let modules = ModuleLevels { power_module: 1, ..ModuleLevels::default() };
+    let plan = solve(&items, &counts, &modules);
+
+    // The raw-material bottleneck only feeds 0.01 widget/s; one E-Mode machine has 0.1/s
+    // capacity, so the other two Crafting Tables must stay unpowered rather than consuming grid.
+    assert_eq!(plan.electric_machines.get("Crafting Table"), Some(&vec![(1, 1)]));
+    assert_eq!(plan.power_used, 15);
+    assert_eq!(plan.generators_used, 1);
+}
+
+#[test]
+fn e_mode_does_not_activate_redundant_generators() {
+    let mut items = vec![item("widget", "Crafting Table", 100.0, 100.0)];
+    add_e_mode_variants(&mut items, "name,production_time\nwidget,10\n").unwrap();
+
+    let counts = FacilityCounts::only(&[
+        ("Crafting Table", 1, 5),
+        ("Crackle Generator", 2, 1),
+    ]);
+    let modules = ModuleLevels { power_module: 1, ..ModuleLevels::default() };
+    let plan = solve(&items, &counts, &modules);
+
+    assert_eq!(plan.power_used, 75);
+    assert_eq!(plan.generators_used, 1);
+    assert_eq!(plan.power_supply, 600);
+}
+
+#[test]
 fn e_mode_cannot_run_without_grid_capacity() {
     let mut items = vec![item("widget", "Crafting Table", 100.0, 100.0)];
     add_e_mode_variants(&mut items, "name,production_time\nwidget,10\n").unwrap();
