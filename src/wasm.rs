@@ -695,6 +695,10 @@ fn default_true() -> bool {
     true
 }
 
+fn default_harvest_mutation_plots() -> u32 {
+    2
+}
+
 /// JavaScript-friendly input for the plan solver; everything needed to know the best achievable
 /// rate and facility plan, with no goal amount (see [`JsGoalInput`] for that).
 #[derive(Debug, Clone, Deserialize)]
@@ -754,6 +758,12 @@ pub struct JsPlanInput {
     /// `"season_points"` (see [`crate::models::SEASON_POINTS`]).
     #[serde(default)]
     pub season: bool,
+    /// Maximum Moonray Wheat the plan may spend on event seeds per day. None/0 means unlimited.
+    #[serde(default)]
+    pub season_currency_per_day: Option<f64>,
+    /// Minimum plots of each event crop kept continuously cycling for mutation attempts.
+    #[serde(default = "default_harvest_mutation_plots")]
+    pub harvest_mutation_plots: u32,
 }
 
 /// The player's Aniimo, and what the page knows of the facilities they work (see
@@ -808,6 +818,10 @@ impl JsPlanInput {
         for (name, tiers) in &self.facilities {
             fc.set_tiers(name, tiers.iter().map(|t| (t.count, t.level)).collect());
         }
+        fc.set_season_limits(
+            if self.season { self.season_currency_per_day } else { None },
+            if self.season { self.harvest_mutation_plots } else { 0 },
+        );
         fc
     }
 }
@@ -1221,10 +1235,19 @@ pub struct JsProductionPlan {
     pub power_capacity: u32,
     #[serde(default)]
     pub generators_used: u32,
-    /// With the player's roster, `[building, member, share of its day]` for each environment
-    /// building kind a member staffs.
+    /// Active Crackle Generator tiers as `[tier level, count]`.
+    #[serde(default)]
+    pub generator_tiers: Vec<(u32, u32)>,
+    /// Power supplied by the generators the solver actually switches on.
+    #[serde(default)]
+    pub power_supply: u32,
+    /// With the player's roster, `[building, member, share of its day]` for resident,
+    /// environment and power facilities.
     #[serde(default)]
     pub staffing: Vec<(String, usize, f64)>,
+    /// Custom-roster grower jobs as `[item, job, member, share of its day]`.
+    #[serde(default)]
+    pub grower_staffing: Vec<(String, String, usize, f64)>,
 }
 
 /// What a plan makes of one priority.
@@ -1289,7 +1312,10 @@ fn empty_production_plan(success: bool, error: Option<String>) -> JsProductionPl
         power_used: 0,
         power_capacity: 0,
         generators_used: 0,
+        generator_tiers: Vec::new(),
+        power_supply: 0,
         staffing: Vec::new(),
+        grower_staffing: Vec::new(),
     }
 }
 
@@ -1536,9 +1562,12 @@ pub fn exact_plan(input_json: &str, stage_json: &str, solution_json: &str) -> St
     let mut js = prepared.to_js(plan, Some(proof));
     js.level_up = report;
     js.staffing = exact.staffing.clone();
+    js.grower_staffing = exact.grower_staffing.clone();
     js.power_used = exact.power_used;
     js.power_capacity = exact.power_capacity;
     js.generators_used = exact.generators_used;
+    js.generator_tiers = exact.generators.clone();
+    js.power_supply = exact.power_supply;
     if prepared.input.season {
         js.season_points = Some(crate::exact::target_rate(&exact, &prepared.items, crate::models::SEASON_POINTS));
     }
@@ -1653,6 +1682,7 @@ impl PreparedInput {
         let requirements = embedded_aniimo_requirements();
         let grower_steps = embedded_grower_steps();
         let mut facility_counts = facility_counts;
+        facility_counts.set_grower_steps(grower_steps.clone());
         let crew = match (input.aniimo.as_deref(), &input.roster) {
             (Some(name), Some(roster)) if name.starts_with("roster") => Some(roster.crew()),
             _ => None,
@@ -1756,7 +1786,10 @@ impl PreparedInput {
             power_used: 0,
             power_capacity: crate::models::grid_power_capacity(&self.facility_counts, &self.module_levels),
             generators_used: 0,
+            generator_tiers: Vec::new(),
+            power_supply: 0,
             staffing: Vec::new(),
+            grower_staffing: Vec::new(),
         }
     }
 }

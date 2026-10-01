@@ -1,6 +1,6 @@
 use aniimax::data::add_e_mode_variants;
 use aniimax::exact::{check_plan, solve_exact, Goal};
-use aniimax::models::{FacilityCounts, ModuleLevels, ProductionItem};
+use aniimax::models::{Crew, FacilityCounts, GrowerStep, GrowerSteps, ModuleLevels, ProductionItem, RosterAniimo, SeasonTerms};
 use std::time::Duration;
 
 fn item(name: &str, facility: &str, seconds: f64, sell_value: f64) -> ProductionItem {
@@ -105,4 +105,118 @@ fn harvest_moon_keeps_two_plots_of_each_mutation_crop_when_unprofitable() {
     assert_eq!(plan.units.get("profitable_crop"), Some(&2));
     assert!(plan.recipe_rates["moondew_radish"] * 100.0 >= 2.0 - 1e-9);
     assert!(plan.recipe_rates["waxing_moon_pepper"] * 100.0 >= 2.0 - 1e-9);
+}
+
+
+#[test]
+fn harvest_mutation_minimum_is_configurable() {
+    let items = vec![
+        item("moondew_radish", "Farmland", 100.0, 0.0),
+        item("waxing_moon_pepper", "Farmland", 100.0, 0.0),
+        item("profitable_crop", "Farmland", 100.0, 1_000.0),
+    ];
+    let mut counts = FacilityCounts::only(&[("Farmland", 7, 1)]);
+    counts.set_season_limits(None, 1);
+    let plan = solve(&items, &counts, &ModuleLevels::default());
+
+    assert_eq!(plan.units.get("moondew_radish"), Some(&1));
+    assert_eq!(plan.units.get("waxing_moon_pepper"), Some(&1));
+    assert_eq!(plan.units.get("profitable_crop"), Some(&5));
+}
+
+#[test]
+fn harvest_moon_wheat_budget_caps_planting_rate() {
+    let mut radish = item("moondew_radish", "Farmland", 100.0, 1_000.0);
+    radish.season = Some(SeasonTerms { points: 1.0, seed_cost: 4.0 });
+    let mut pepper = item("waxing_moon_pepper", "Farmland", 100.0, 900.0);
+    pepper.season = Some(SeasonTerms { points: 1.0, seed_cost: 4.0 });
+    let items = vec![radish, pepper];
+
+    let mut counts = FacilityCounts::only(&[("Farmland", 10, 1)]);
+    // 3,456 Wheat/day permits 0.01 combined batches/sec at 4 Wheat per planting.
+    counts.set_season_limits(Some(3_456.0), 0);
+    let plan = solve(&items, &counts, &ModuleLevels::default());
+
+    let spend_per_day: f64 = plan
+        .recipe_rates
+        .iter()
+        .filter_map(|(name, rate)| items.iter().find(|i| i.name == *name).map(|i| rate * i.season.unwrap().seed_cost))
+        .sum::<f64>()
+        * 86_400.0;
+    assert!(spend_per_day <= 3_456.0 + 1e-5, "spent {spend_per_day}");
+    assert!(spend_per_day >= 3_455.0, "optimizer should use almost all profitable Wheat budget");
+}
+
+
+fn lightning_crew(level: u32) -> Crew {
+    Crew {
+        members: vec![RosterAniimo {
+            count: 1,
+            abilities: [("Lightning".to_string(), level)].into_iter().collect(),
+            personalities: Vec::new(),
+        }],
+        residents: Default::default(),
+        environment: Default::default(),
+        personalities: Default::default(),
+    }
+}
+
+#[test]
+fn rated_generator_power_requires_the_recommended_lightning_level() {
+    let mut items = vec![item("widget", "Crafting Table", 100.0, 100.0)];
+    add_e_mode_variants(&mut items, "name,production_time\nwidget,10\n").unwrap();
+    let modules = ModuleLevels { power_module: 3, ..ModuleLevels::default() };
+
+    let mut weak = FacilityCounts::only(&[
+        ("Crafting Table", 1, 3),
+        ("Crackle Generator", 1, 3),
+    ]);
+    weak.set_crew(lightning_crew(1));
+    let weak_plan = solve(&items, &weak, &modules);
+    assert!(!weak_plan.recipe_rates.contains_key("widget__electric"));
+    assert_eq!(weak_plan.generators_used, 0);
+
+    let mut suitable = FacilityCounts::only(&[
+        ("Crafting Table", 1, 3),
+        ("Crackle Generator", 1, 3),
+    ]);
+    suitable.set_crew(lightning_crew(3));
+    let powered = solve(&items, &suitable, &modules);
+    assert!(powered.recipe_rates.contains_key("widget__electric"));
+    assert_eq!(powered.generators_used, 1);
+    assert!(powered.staffing.iter().any(|(building, member, share)|
+        building == "Crackle Generator Lv.3" && *member == 0 && (*share - 1.0).abs() < 1e-9));
+}
+
+
+#[test]
+fn grower_jobs_consume_custom_roster_time() {
+    let crop = item("test_crop", "Farmland", 10.0, 100.0);
+    let mut steps = GrowerSteps::default();
+    steps.insert("test_crop", GrowerStep {
+        step: "Reclaiming".to_string(),
+        ability: "Earth".to_string(),
+        min_level: 1,
+        workload: 100.0,
+    });
+
+    let mut counts = FacilityCounts::only(&[("Farmland", 10, 1)]);
+    counts.set_crew(Crew {
+        members: vec![RosterAniimo {
+            count: 1,
+            abilities: [("Earth".to_string(), 1)].into_iter().collect(),
+            personalities: Vec::new(),
+        }],
+        residents: Default::default(),
+        environment: Default::default(),
+        personalities: Default::default(),
+    });
+    counts.set_grower_steps(steps);
+
+    let plan = solve(&[crop], &counts, &ModuleLevels::default());
+    let rate = plan.recipe_rates.get("test_crop").copied().unwrap_or(0.0);
+    assert!(rate <= 0.010001, "one Earth worker should cap 100s reclaiming work, got {rate}/s");
+    assert!(!plan.grower_staffing.is_empty());
+    let busy: f64 = plan.grower_staffing.iter().map(|(_, _, _, share)| *share).sum();
+    assert!(busy <= 1.0 + 1e-6, "grower work used {busy} Aniimo-days per day");
 }

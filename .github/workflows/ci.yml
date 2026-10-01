@@ -37,3 +37,6 @@ jobs:
           node --check web/worker.js
           node --check web/layout.js
           node --check web/layout-worker.js
+
+      - name: Homeland layout smoke test
+        run: node --experimental-default-type=module tests/layout_smoke.mjs

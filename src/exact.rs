@@ -16,8 +16,8 @@
 //! - Woodland and Mine byproducts (Wood Blocks, Mineral Sand) balance like any other item, so the
 //!   Woodworking Bench and Chimney Kiln can use them.
 //! - During a season, its items also earn points when sold, which a priority or floor can name
-//!   as [`crate::models::SEASON_POINTS`]. Season seeds cost the season currency, which plans treat
-//!   as unlimited (see [`crate::models::SeasonTerms`]).
+//!   as [`crate::models::SEASON_POINTS`]. Season seeds cost the season currency; a caller may cap
+//!   that spend per day through [`crate::models::FacilityCounts::set_season_limits`].
 //! - The objective is the target currency per second from everything sold; for coins, minus seed
 //!   costs (seeds are paid in coins, so they don't come off an Aniimo EXP total). A floor can
 //!   name another currency, so a plan keeps up the Aniimo EXP or Aniipods an earlier solve found
@@ -136,6 +136,8 @@ pub struct ExactPlan {
     pub power_capacity: u32,
     /// Crackle Generators the chosen plan actually switches on.
     pub generators_used: u32,
+    /// Power supplied by the generators actually switched on.
+    pub power_supply: u32,
     /// Active generator tiers as `(tier level, count)`.
     pub generators: Vec<(u32, u32)>,
     /// Units/sec sold of each item.
@@ -146,8 +148,12 @@ pub struct ExactPlan {
     /// Level-ups per day, for a level-up goal (see [`PACE_UNIT`]).
     pub pace: Option<f64>,
     /// When planning with the player's roster, `(building, member, share of its day)` for each
-    /// environment building kind a member staffs (see [`crate::models::Crew`]).
+    /// resident/environment/power building a member staffs (see [`crate::models::Crew`]).
     pub staffing: Vec<(String, usize, f64)>,
+    /// Custom-roster Farmland/Woodland work: (item, job, member, share of one Aniimo's day).
+    /// Unlike crop grow time itself, these short reclaim/sow/water/harvest jobs compete with the
+    /// same Aniimo's Mine, Well and processor work.
+    pub grower_staffing: Vec<(String, String, usize, f64)>,
 }
 
 /// What a plan optimizes.
@@ -237,8 +243,8 @@ enum VarKind<'a> {
     ElectricUnits { recipe: &'a ProductionItem, tier_level: u32 },
     /// A physical machine of an exact tier switched into E-Mode.
     ElectricMachines { facility: &'a str, tier_level: u32 },
-    /// A Crackle Generator of an exact tier switched on.
-    Generator { tier_level: u32 },
+    /// A Crackle Generator of an exact tier switched on, with the power this setup gets from it.
+    Generator { tier_level: u32, power: u32 },
     Sold(&'a str),
     Pace,
     /// Made beyond what the level-up needs, of one of its costs.
@@ -251,9 +257,11 @@ enum VarKind<'a> {
         types: Vec<&'a str>,
         option: PairOption,
     },
-    /// How much of a roster member's day goes to staffing environment buildings of one kind
-    /// (see [`crate::models::Crew`]).
+    /// How much of a roster member's day goes to staffing a resident/environment/power building.
     Staff { building: String, member: usize },
+    /// Harvests/sec of one Farmland/Woodland job assigned to one roster member. `seconds` turns
+    /// it into that member's share of a day in the common busy-time constraint.
+    GrowerStaff { item: String, step: String, member: usize, seconds: f64 },
 }
 
 /// One linear constraint: `(variable, coefficient)` terms, comparison, right-hand side.
@@ -411,24 +419,45 @@ fn build_model<'a>(
             if power == 0 {
                 continue;
             }
-            let var = model.add(0.0, (0.0, count as f64), true, VarKind::Generator { tier_level });
+            let var = model.add(0.0, (0.0, count as f64), true, VarKind::Generator { tier_level, power });
             generator_vars.push((tier_level, power, var));
         }
     }
 
-    // Harvest Moon mutation farming is a gameplay requirement rather than a profitability choice.
-    // When the season is enabled both crop recipes are present, so always keep 2 plots of each
-    // actively cycling to keep mutation rolls going.
+    // Harvest Moon has two finite-resource concerns the normal economy does not: players may want
+    // a few plots continuously cycling for mutation rolls, while Moonray Wheat itself is daily
+    // limited. Both are user-controlled rather than hard-coded.
     const HARVEST_MUTATION_CROPS: [&str; 2] = ["moondew_radish", "waxing_moon_pepper"];
     let harvest_enabled = HARVEST_MUTATION_CROPS
         .iter()
         .all(|name| recipes.iter().any(|recipe| recipe.name == *name));
-    if harvest_enabled {
+    let mutation_plots = facility_counts.harvest_mutation_plots();
+    if harvest_enabled && mutation_plots > 0 {
         for name in HARVEST_MUTATION_CROPS {
             let Some((recipe, rate)) = rate_of.iter().find(|(recipe, _)| recipe.name == name).copied() else { continue };
             let Some((_, units)) = units_of.iter().find(|(recipe, _)| recipe.name == name).copied() else { continue };
-            model.constrain(vec![(units, 1.0)], ComparisonOp::Ge, 2.0);
-            model.constrain(vec![(rate, recipe.production_time)], ComparisonOp::Ge, 2.0);
+            model.constrain(vec![(units, 1.0)], ComparisonOp::Ge, mutation_plots as f64);
+            model.constrain(
+                vec![(rate, recipe.production_time)],
+                ComparisonOp::Ge,
+                mutation_plots as f64,
+            );
+        }
+    }
+    if harvest_enabled {
+        if let Some(per_day) = facility_counts.season_currency_per_day() {
+            let wheat_terms: Vec<(usize, f64)> = rate_of
+                .iter()
+                .filter_map(|(recipe, rate)| {
+                    recipe
+                        .season
+                        .filter(|season| season.seed_cost > 0.0)
+                        .map(|season| (*rate, season.seed_cost))
+                })
+                .collect();
+            if !wheat_terms.is_empty() {
+                model.constrain(wheat_terms, ComparisonOp::Le, per_day / PACE_UNIT);
+            }
         }
     }
 
@@ -771,13 +800,67 @@ fn build_model<'a>(
                 busy[member].push((rate, recipe.production_time));
             }
         }
-        // The environment buildings of each kind the plan sets up; a pair counts each of its two.
+
+        // Crops/trees only occupy a plot for their grow timer; the Aniimo work is a series of
+        // short jobs each harvest. Model those jobs explicitly so Reclaiming (Earth) can become
+        // the real bottleneck instead of merely checking that one Earth Aniimo exists somewhere.
+        if let Some(grower_steps) = facility_counts.grower_steps() {
+            for &(recipe, rate) in &rate_of {
+                if crate::models::is_electric_item(&recipe.name) {
+                    continue;
+                }
+                let jobs = grower_steps.get(crate::models::base_item_name(&recipe.name));
+                if jobs.is_empty() {
+                    continue;
+                }
+                for job in jobs {
+                    let eligible: Vec<(usize, f64)> = crew
+                        .members
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, aniimo)| aniimo.count > 0 && aniimo.level(&job.ability) >= job.min_level)
+                        .map(|(member, aniimo)| {
+                            let seconds = crate::models::Worker::new(aniimo.level(&job.ability), false)
+                                .seconds_for(job.workload, job.min_level, true);
+                            (member, seconds)
+                        })
+                        .collect();
+                    // No Water worker is a valid configuration: crew_variants already lengthens
+                    // the crop's timer to its unwatered version. Other jobs were filtered out
+                    // before the solver if nobody can do them.
+                    if eligible.is_empty() && job.step == "Watering" {
+                        continue;
+                    }
+                    if eligible.is_empty() {
+                        continue;
+                    }
+                    let mut covered = vec![(rate, -1.0)];
+                    for (member, seconds) in eligible {
+                        let staff = model.add(
+                            0.0,
+                            (0.0, f64::INFINITY),
+                            false,
+                            VarKind::GrowerStaff {
+                                item: crate::models::base_item_name(&recipe.name).to_string(),
+                                step: job.step.clone(),
+                                member,
+                                seconds,
+                            },
+                        );
+                        covered.push((staff, 1.0));
+                        busy[member].push((staff, seconds));
+                    }
+                    model.constrain(covered, ComparisonOp::Ge, 0.0);
+                }
+            }
+        }
+
+        // Environment buildings of each kind the plan sets up; a pair counts each of its two.
         let mut set_up: BTreeMap<String, BTreeMap<usize, f64>> = BTreeMap::new();
         for (v, kind) in model.kinds.iter().enumerate() {
             let named: Vec<&str> = match kind {
                 VarKind::Environment { building, .. } => vec![building],
                 VarKind::EnvironmentPair { buildings: (a, b), .. } => vec![a, b],
-                VarKind::Generator { .. } => vec!["Crackle Generator"],
                 _ => continue,
             };
             for building in named {
@@ -785,20 +868,47 @@ fn build_model<'a>(
             }
         }
         for (building, used) in set_up {
-            // Environment buildings use the roster's configured ability; every active Crackle
-            // Generator always needs one Lightning Aniimo.
-            let ability = if building == "Crackle Generator" {
-                "Lightning"
-            } else {
-                let Some(ability) = crew.environment.get(&building) else { continue };
-                ability.as_str()
-            };
+            let Some(ability) = crew.environment.get(&building) else { continue };
             let mut staffed: Vec<(usize, f64)> = used.into_iter().map(|(v, n)| (v, -n)).collect();
             for (member, aniimo) in crew.members.iter().enumerate() {
                 if aniimo.count == 0 || aniimo.level(ability) == 0 {
                     continue;
                 }
-                let staff = model.add(0.0, (0.0, aniimo.count as f64), false, VarKind::Staff { building: building.clone(), member });
+                let staff = model.add(
+                    0.0,
+                    (0.0, aniimo.count as f64),
+                    false,
+                    VarKind::Staff { building: building.clone(), member },
+                );
+                staffed.push((staff, 1.0));
+                busy[member].push((staff, 1.0));
+            }
+            model.constrain(staffed, ComparisonOp::Ge, 0.0);
+        }
+
+        // An active Crackle Generator uses one resident Lightning Aniimo. To claim the tier's
+        // rated power, require the recommended Lightning level for that generator tier; weaker
+        // workers can run it in game, but would generate power more slowly than this model assumes.
+        let mut generator_set_up: BTreeMap<u32, BTreeMap<usize, f64>> = BTreeMap::new();
+        for (v, kind) in model.kinds.iter().enumerate() {
+            if let VarKind::Generator { tier_level, .. } = kind {
+                *generator_set_up.entry(*tier_level).or_default().entry(v).or_default() += 1.0;
+            }
+        }
+        for (tier_level, used) in generator_set_up {
+            let required = crate::models::generator_required_lightning_level(tier_level);
+            let label = format!("Crackle Generator Lv.{tier_level}");
+            let mut staffed: Vec<(usize, f64)> = used.into_iter().map(|(v, n)| (v, -n)).collect();
+            for (member, aniimo) in crew.members.iter().enumerate() {
+                if aniimo.count == 0 || aniimo.level("Lightning") < required {
+                    continue;
+                }
+                let staff = model.add(
+                    0.0,
+                    (0.0, aniimo.count as f64),
+                    false,
+                    VarKind::Staff { building: label.clone(), member },
+                );
                 staffed.push((staff, 1.0));
                 busy[member].push((staff, 1.0));
             }
@@ -1109,15 +1219,20 @@ fn plan_from(model: &Model, value: f64, upper_bound: f64, proven_optimal: bool, 
     let mut sold = BTreeMap::new();
     let mut power_used = 0u32;
     let mut generators_used = 0u32;
+    let mut power_supply = 0u32;
     let mut generators: Vec<(u32, u32)> = Vec::new();
     let mut environment = Vec::new();
     let mut pairs: Vec<ExactPair> = Vec::new();
     let mut pace = None;
     let mut staffing = Vec::new();
+    let mut grower_staffing = Vec::new();
     for (kind, &v) in model.kinds.iter().zip(values) {
         match kind {
             VarKind::Pace => pace = Some(v),
             VarKind::Staff { building, member } if v > 1e-9 => staffing.push((building.clone(), *member, v)),
+            VarKind::GrowerStaff { item, step, member, seconds } if v > 1e-9 => {
+                grower_staffing.push((item.clone(), step.clone(), *member, v * *seconds));
+            }
             VarKind::Rate(recipe) if v > 1e-9 => {
                 recipe_rates.insert(recipe.name.clone(), v);
             }
@@ -1145,9 +1260,10 @@ fn plan_from(model: &Model, value: f64, upper_bound: f64, proven_optimal: bool, 
                     count * crate::models::e_mode_power_per_unit(facility, *tier_level),
                 );
             }
-            VarKind::Generator { tier_level } if v > 0.5 => {
+            VarKind::Generator { tier_level, power } if v > 0.5 => {
                 let count = v.round() as u32;
                 generators_used = generators_used.saturating_add(count);
+                power_supply = power_supply.saturating_add(count.saturating_mul(*power));
                 generators.push((*tier_level, count));
             }
             VarKind::Sold(name) if v > 1e-9 => {
@@ -1205,12 +1321,14 @@ fn plan_from(model: &Model, value: f64, upper_bound: f64, proven_optimal: bool, 
         power_used,
         power_capacity: model.power_capacity,
         generators_used,
+        power_supply,
         generators,
         sold,
         environment,
         pairs,
         pace,
         staffing,
+        grower_staffing,
     }
 }
 
@@ -1228,6 +1346,7 @@ pub fn check_plan(
     const TOLERANCE: f64 = 1e-6;
     let all: HashMap<&str, &ProductionItem> = items.iter().map(|i| (i.name.as_str(), i)).collect();
     let mut earned = 0.0;
+    let mut season_currency_per_second = 0.0;
     let mut made: HashMap<&str, f64> = HashMap::new();
     let mut plots_needing: HashMap<(&str, &str), u32> = HashMap::new();
     // Units in use per facility and level; a recipe taking turns counts only its share of time.
@@ -1274,7 +1393,36 @@ pub fn check_plan(
         if currency == "coins" {
             earned -= rate * recipe.cost.unwrap_or(0.0);
         }
+        if let Some(season) = recipe.season.filter(|season| season.seed_cost > 0.0) {
+            season_currency_per_second += rate * season.seed_cost;
+        }
     }
+
+    if let Some(per_day) = facility_counts.season_currency_per_day() {
+        if season_currency_per_second * PACE_UNIT > per_day + TOLERANCE {
+            return Err(format!(
+                "Harvest Moon seeds spend {:.3}/day, above the configured {:.3}/day limit",
+                season_currency_per_second * PACE_UNIT,
+                per_day
+            ));
+        }
+    }
+    let mutation_plots = facility_counts.harvest_mutation_plots();
+    if mutation_plots > 0 {
+        for name in ["moondew_radish", "waxing_moon_pepper"] {
+            if all.contains_key(name) {
+                let units = plan.units.get(name).copied().unwrap_or(0);
+                let rate = plan.recipe_rates.get(name).copied().unwrap_or(0.0);
+                let recipe = all[name];
+                if units < mutation_plots || rate * recipe.production_time + TOLERANCE < mutation_plots as f64 {
+                    return Err(format!(
+                        "{name} needs at least {mutation_plots} continuously cycling plots for the configured mutation minimum"
+                    ));
+                }
+            }
+        }
+    }
+
     for (name, &sold) in &plan.sold {
         let item = all.get(name.as_str()).ok_or(format!("unknown item {name}"))?;
         *made.entry(item.name.as_str()).or_default() -= sold;
@@ -1327,6 +1475,9 @@ pub fn check_plan(
         .sum();
     if plan.generators.iter().map(|(_, count)| *count).sum::<u32>() != plan.generators_used {
         return Err("generator count does not match its tier assignments".to_string());
+    }
+    if plan.power_supply != active_generator_power {
+        return Err(format!("active generator supply says {} but tiers provide {active_generator_power}", plan.power_supply));
     }
     if plan.power_used > active_generator_power {
         return Err(format!("E-Mode draws {} power but active generators provide {active_generator_power}", plan.power_used));
@@ -1403,19 +1554,86 @@ pub fn check_plan(
                 rate * recipe.production_time
             };
         }
+        // Re-check every crop/tree tending assignment and fold its actual worker time into
+        // the same member-day budget used for processors and resident facilities.
+        if let Some(grower_steps) = facility_counts.grower_steps() {
+            let mut worked: HashMap<(String, String), f64> = HashMap::new();
+            for (item, step_name, member, share) in &plan.grower_staffing {
+                let aniimo = crew.members.get(*member).ok_or(format!(
+                    "{item} {step_name} is worked by roster member {member}, who isn't there"
+                ))?;
+                let Some(job) = grower_steps.get(item).iter().find(|job| job.step == *step_name) else {
+                    return Err(format!("{item} has no grower job named {step_name}"));
+                };
+                if aniimo.level(&job.ability) < job.min_level {
+                    return Err(format!(
+                        "{item} {step_name} is assigned to roster member {member}, whose {} level {} is below {}",
+                        job.ability,
+                        aniimo.level(&job.ability),
+                        job.min_level
+                    ));
+                }
+                let seconds = crate::models::Worker::new(aniimo.level(&job.ability), false)
+                    .seconds_for(job.workload, job.min_level, true);
+                if seconds <= 0.0 {
+                    return Err(format!("{item} {step_name} has invalid worker time"));
+                }
+                busy[*member] += *share;
+                *worked.entry((item.clone(), step_name.clone())).or_default() += *share / seconds;
+            }
+
+            for (name, &rate) in &plan.recipe_rates {
+                let item = crate::models::base_item_name(name);
+                let jobs = grower_steps.get(item);
+                if jobs.is_empty() {
+                    continue;
+                }
+                let mut required: HashMap<&str, u32> = HashMap::new();
+                for job in jobs {
+                    let can = crew.members.iter().any(|aniimo|
+                        aniimo.count > 0 && aniimo.level(&job.ability) >= job.min_level);
+                    if job.step == "Watering" && !can {
+                        continue;
+                    }
+                    *required.entry(job.step.as_str()).or_default() += 1;
+                }
+                for (step_name, times) in required {
+                    let have = worked
+                        .get(&(item.to_string(), step_name.to_string()))
+                        .copied()
+                        .unwrap_or(0.0);
+                    let need = rate * times as f64;
+                    if have + TOLERANCE < need {
+                        return Err(format!(
+                            "{item} {step_name} needs {need}/s of tending but roster assignments cover {have}/s"
+                        ));
+                    }
+                }
+            }
+        }
+
         let mut staffed: HashMap<&str, f64> = HashMap::new();
         for (building, member, share) in &plan.staffing {
             let aniimo = crew.members.get(*member).ok_or(format!("{building} staffed by roster member {member}, who isn't there"))?;
-            let ability = if building == "Crackle Generator" {
-                "Lightning"
+            let (ability, required, usage_key): (&str, u32, &str) = if let Some(level) =
+                building.strip_prefix("Crackle Generator Lv.").and_then(|s| s.parse::<u32>().ok())
+            {
+                ("Lightning", crate::models::generator_required_lightning_level(level), "Crackle Generator")
             } else {
-                crew.environment.get(building).ok_or(format!("{building} needs no Aniimo"))?.as_str()
+                (
+                    crew.environment.get(building).ok_or(format!("{building} needs no Aniimo"))?.as_str(),
+                    1,
+                    building.as_str(),
+                )
             };
-            if aniimo.level(ability) == 0 {
-                return Err(format!("{building} staffed by roster member {member}, who has no {ability}"));
+            if aniimo.level(ability) < required {
+                return Err(format!(
+                    "{building} staffed by roster member {member}, whose {ability} level {} is below {required}",
+                    aniimo.level(ability)
+                ));
             }
             busy[*member] += share;
-            *staffed.entry(building.as_str()).or_default() += share;
+            *staffed.entry(usage_key).or_default() += share;
         }
         for (&building, &used) in &buildings_used {
             let have = staffed.get(building).copied().unwrap_or(0.0);

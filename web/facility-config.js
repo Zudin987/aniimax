@@ -201,8 +201,8 @@ export const SPECIAL_RECIPES = [
 ];
 
 // The Harvest Moon Festival, from RV 10: season crops' seeds cost Moonray Wheat, which season
-// orders pay out, and every season item sold counts points on top of its coins. Wheat is taken as
-// unlimited; plans show how much their seeds use. The recipes and seed costs are in
+// orders pay out, and every season item sold counts points on top of its coins. The planner can
+// cap Wheat spend per day; the recipes and seed costs are in
 // data/harvest_moon_festival.csv.
 export const SEASON = {
     name: 'Harvest Moon Festival',
@@ -280,8 +280,41 @@ export const FACILITY_FOOTPRINTS = {
     'Chimney Kiln': [5.5, 5.5],
     'Dance Pad Polisher': [2.5, 2.5],
     'Aniipod Maker': [4.5, 4.5],
+    // Verified launch footprint. Its direct power effect is an 11x11 square; Power Pole reach is
+    // intentionally not guessed because public sources disagree on the exact extension geometry.
+    'Crackle Generator': [1, 1],
     'Storage Unit': [2, 2],
 };
+
+// How much finished output one facility can hold before Hauling moves it to Storage. Layout
+// walking is based on these full-stack pickups rather than pretending every finished batch causes
+// a trip. Values are the launch data's per-level output caps.
+export const FACILITY_OUTPUT_LIMITS = {
+    'Aniipod Maker': [20, 20, 20],
+    'Dance Pad Polisher': [20, 20, 20],
+    'Blazing Stove': [20, 20, 20, 20, 20],
+    'Bouncy Brew Keg': [20, 20, 20, 20, 20],
+    'Carousel Mill': [20, 20, 20, 20, 20, 20],
+    'Chimney Kiln': [20, 20, 20, 20],
+    'Claw Game Cooker': [20, 20, 20, 20, 20, 20, 20],
+    'Crafting Table': [20, 20, 20, 20, 20, 20, 20, 20],
+    'Joy Wheel Loom': [20, 20, 20, 20],
+    'Jukebox Dryer': [20, 20, 20, 20, 20, 20, 20],
+    'Phonolfactory Table': [20, 20, 20, 20, 20, 20],
+    'Pickling Jar': [20, 20, 20, 20, 20],
+    'Simmering Pot': [20, 20, 20, 20, 20, 20],
+    'Woodworking Bench': [20, 20, 20, 20],
+    'Dewy House': [80, 240],
+    'Farmland': [5, 10, 15, 20, 25, 30, 35],
+    'Floral Windmill': [240],
+    'Mine': [120, 200, 200, 200, 200, 200],
+    'Nimbus Bed': [80, 120, 120],
+    'Starfall Hammock': [40],
+    'Tidewhisper Sandcastle': [200, 460, 460],
+    'Well': [300, 300, 340, 340, 340],
+    'Woodland': [8, 12, 16, 20, 24, 28],
+};
+
 
 // The homeland: a 4x4 grid of plots, each 20 tiles wide and 15 tall, plot n opening at RV n (and
 // all of them from RV 16). Rows from the top, by plot number; the first opens bottom middle.

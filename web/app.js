@@ -1,7 +1,7 @@
 // Aniimax Web Application
 
 import {
-    FACILITIES, FACILITY_CATEGORIES, FACILITY_CATEGORY_BY_NAME, FACILITY_FOOTPRINTS, HOMELAND_PLOTS, HOMELAND_PLOT_SIZE,
+    FACILITIES, FACILITY_CATEGORIES, FACILITY_CATEGORY_BY_NAME, FACILITY_FOOTPRINTS, FACILITY_OUTPUT_LIMITS, HOMELAND_PLOTS, HOMELAND_PLOT_SIZE,
     MAX_HOME_LEVEL, ANIIMO_MAX, simpleSetup,
     LEVEL_UP_COSTS, LEVEL_UP_CHAINS, SPECIAL_RECIPES, SEASON, ANIIPOD_TIERS, PERSONALITY_PAIRS, personalityLetter, opposedPersonality,
 } from './facility-config.js';
@@ -360,7 +360,8 @@ function getPersistedFieldIds() {
         'mode-simple', 'mode-advanced', 'home-level',
         'ecological-module-level', 'kitchen-module-level',
         'resource-detector-level', 'crafting-module-level', 'power-module-level',
-        'rate-unit', 'season-on', 'layout-sim-on'
+        'rate-unit', 'season-on', 'season-wheat-budget', 'season-mutation-plots',
+        'layout-sim-on', 'layout-storage-count'
     ];
 }
 
@@ -1020,11 +1021,38 @@ function improvementsChecked(best, status, open) {
 // there, so the busiest facilities sit closest. Environment buildings keep the plots they cover
 // exactly as planned, moving as one block. Facilities with no known size are left out and named.
 
-// Trips per hour for each unit of a plan row: one per finished batch.
-function tripsPerUnit(step) {
+// Hauling starts when a facility's finished-output stack reaches its cap, not after every batch.
+// Use the lowest owned tier that can run this recipe (conservative for mixed-level Advanced
+// setups); Simple mode owns one tier per facility so this is exact there.
+function outputLimitForStep(step, input = lastPlanInput) {
+    const limits = FACILITY_OUTPUT_LIMITS[step.facility];
+    if (!limits?.length) return 1;
+    const recipe = recipeIndex.find(r => r.name === basePlanItem(step.item_name));
+    const required = recipe?.facilityLevel || 1;
+    const tiers = (input?.facilities?.[step.facility] || [])
+        .filter(t => (t.count || 0) > 0 && (t.level || 1) >= required)
+        .map(t => t.level || 1);
+    const level = tiers.length ? Math.min(...tiers) : required;
+    return limits[Math.min(Math.max(1, level), limits.length) - 1] || limits[limits.length - 1] || 1;
+}
+
+function batchRatePerUnit(step) {
     if (step.status !== 'producing' || !step.cycle_time || !step.facility_count) return 0;
     const busy = step.busy_units ?? step.facility_count;
-    return (busy / step.cycle_time / step.facility_count) * 3600;
+    return busy / step.cycle_time / step.facility_count;
+}
+
+// Estimated full-stack pickups per hour for each physical unit in a plan row.
+function tripsPerUnit(step, input = lastPlanInput) {
+    const batches = batchRatePerUnit(step);
+    if (batches <= 0) return 0;
+    const recipe = recipeIndex.find(r => r.name === basePlanItem(step.item_name));
+    const yieldAmount = Math.max(1, recipe?.yieldAmount || 1);
+    const outputLimit = Math.max(1, outputLimitForStep(step, input));
+    // A completed batch lands as one output event. If a batch itself exceeds the nominal stack
+    // cap (Quick crops can), it still needs one pickup, not yield/cap fractional or repeated trips.
+    const batchesPerPickup = Math.max(1, Math.ceil(outputLimit / yieldAmount));
+    return batches / batchesPerPickup * 3600;
 }
 
 // Whether a crop needs a growing environment: grown without one, a building's temperature
@@ -1075,11 +1103,24 @@ function homelandPieces(plan, input) {
             // Each plot in this zone gets one of the crops planned for its facility here.
             const crops = {};
             rows.forEach(r => {
-                for (let n = 0; n < r.facility_count; n++) (crops[r.facility] ||= []).push({ crop: r.item_name, trips: tripsPerUnit(r), cycle: r.cycle_time });
+                const job = {
+                    item: r.item_name,
+                    cycle: r.cycle_time,
+                    rate: batchRatePerUnit(r),
+                    outputLimit: outputLimitForStep(r, input),
+                };
+                for (let n = 0; n < r.facility_count; n++) {
+                    (crops[r.facility] ||= []).push({
+                        crop: r.item_name,
+                        trips: tripsPerUnit(r, input),
+                        cycle: r.cycle_time,
+                        job,
+                    });
+                }
             });
             layout.forEach(p => {
-                const crop = (crops[p.facility] || []).shift() || { crop: null, trips: 0 };
-                plots.push({ w: p.size, h: p.size, weight: crop.trips, cycle: crop.cycle, zone: unit.partner ? zone : 0, facility: p.facility, crop: crop.crop });
+                const crop = (crops[p.facility] || []).shift() || { crop: null, trips: 0, job: null };
+                plots.push({ w: p.size, h: p.size, weight: crop.trips, cycle: crop.cycle, jobs: crop.job ? [crop.job] : [], zone: unit.partner ? zone : 0, facility: p.facility, crop: crop.crop });
                 planned.push({ x: p.x, y: p.y });
                 count(p.facility);
                 placedInBlocks[`${p.facility}|${crop.crop}`] = (placedInBlocks[`${p.facility}|${crop.crop}`] || 0) + 1;
@@ -1092,8 +1133,14 @@ function homelandPieces(plan, input) {
     // units as their busy time together needs, each running every tier in turn at its share.
     const takesTurns = step => step.status === 'producing' && !!recipeIndex.find(r => r.name === basePlanItem(step.item_name))?.turns;
     const turnGroups = new Map();
-    steps.filter(takesTurns).forEach(step => turnGroups.set(step.facility, [...(turnGroups.get(step.facility) || []), step]));
-    turnGroups.forEach((rows, facility) => {
+    steps.filter(takesTurns).forEach(step => {
+        const key = `${step.facility}|${isElectricItem(step.item_name) ? 'electric' : 'normal'}`;
+        turnGroups.set(key, [...(turnGroups.get(key) || []), step]);
+    });
+    turnGroups.forEach((rows, key) => {
+        const split = key.lastIndexOf('|');
+        const facility = key.slice(0, split);
+        const electric = key.slice(split + 1) === 'electric';
         const footprint = FACILITY_FOOTPRINTS[facility];
         if (!footprint) {
             unplaced.add(facility);
@@ -1101,10 +1148,15 @@ function homelandPieces(plan, input) {
         }
         const busy = rows.reduce((sum, r) => sum + (r.busy_units ?? r.facility_count), 0);
         const n = Math.max(1, Math.ceil(busy - 1e-6));
-        const jobs = rows.filter(r => r.cycle_time > 0).map(r => ({ item: r.item_name, cycle: r.cycle_time, rate: (r.busy_units ?? r.facility_count) / r.cycle_time / n }));
-        const weight = jobs.reduce((sum, j) => sum + j.rate * 3600, 0);
+        const jobs = rows.filter(r => r.cycle_time > 0).map(r => ({
+            item: r.item_name,
+            cycle: r.cycle_time,
+            rate: (r.busy_units ?? r.facility_count) / r.cycle_time / n,
+            outputLimit: outputLimitForStep(r, input),
+        }));
+        const weight = rows.reduce((sum, r) => sum + tripsPerUnit(r, input) * r.facility_count / n, 0);
         for (let i = 0; i < n; i++) {
-            pieces.push({ members: [{ x: 0, y: 0, w: footprint[0], h: footprint[1], weight, jobs, cycle: jobs[0]?.cycle, facility, crop: jobs[0]?.item ?? null, sensitive: false }] });
+            pieces.push({ members: [{ x: 0, y: 0, w: footprint[0], h: footprint[1], weight, jobs, cycle: jobs[0]?.cycle, facility, crop: jobs[0]?.item ?? null, sensitive: false, electric }] });
         }
         count(facility, n);
     });
@@ -1127,14 +1179,20 @@ function homelandPieces(plan, input) {
             // A crop that needs an environment but is grown without one stays out of every
             // coverage square, so no building's temperature changes it.
             const growing = step.status === 'producing';
-            pieces.push({ members: [{ x: 0, y: 0, w: footprint[0], h: footprint[1], weight: tripsPerUnit(step), cycle: step.cycle_time, facility: step.facility, crop: growing ? step.item_name : null, sensitive: growing && needsEnvironment(step.item_name) }] });
+            const jobs = growing && step.cycle_time > 0 ? [{
+                item: step.item_name,
+                cycle: step.cycle_time,
+                rate: batchRatePerUnit(step),
+                outputLimit: outputLimitForStep(step, input),
+            }] : [];
+            pieces.push({ members: [{ x: 0, y: 0, w: footprint[0], h: footprint[1], weight: tripsPerUnit(step, input), cycle: step.cycle_time, jobs, facility: step.facility, crop: growing ? step.item_name : null, sensitive: growing && needsEnvironment(step.item_name), electric: isElectricItem(step.item_name) }] });
         }
         count(step.facility, n);
     });
 
     // What's owned but not in the plan at all, such as environment buildings it didn't need.
     FACILITIES.forEach(f => {
-        if (f.name === 'Crackle Generator') return; // footprint not verified; omit from the placement diagram
+        if (f.name === 'Crackle Generator') return; // active generators are placed by verified 11x11 power coverage
         const owned = tierCount(input.facilities[f.name]);
         const extra = owned - (placed[f.name] || 0);
         if (extra <= 0) return;
@@ -1188,9 +1246,61 @@ function attachLayoutHandlers() {
     document.getElementById('layout-sim-on').addEventListener('change', () => {
         if (lastLayout) drawLayout(lastLayout);
     });
+    document.getElementById('layout-storage-count').addEventListener('change', () => {
+        saveInputsToStorage();
+        if (lastPlan?.success && lastPlanInput) renderHomelandLayout(lastPlan);
+    });
     document.getElementById('layout-replay').addEventListener('click', () => {
         if (layoutSim) resetLayoutSim(layoutSim);
     });
+    document.getElementById('layout-copy-code').addEventListener('click', async () => {
+        if (!lastLayout) return;
+        const code = encodeLayoutCode(lastLayout);
+        const hint = document.getElementById('layout-share-hint');
+        try {
+            await navigator.clipboard.writeText(code);
+            hint.textContent = 'Aniimax layout code copied. It can be imported with the button beside it; it is not an in-game Combo Code.';
+        } catch {
+            window.prompt('Copy this Aniimax layout code:', code);
+        }
+    });
+    document.getElementById('layout-import-code').addEventListener('click', () => {
+        const raw = window.prompt('Paste an Aniimax layout code:');
+        if (!raw) return;
+        try {
+            const imported = decodeLayoutCode(raw.trim());
+            lastLayout = imported;
+            document.getElementById('layout-card').style.display = 'block';
+            document.getElementById('layout-summary').textContent =
+                `Imported Aniimax layout with ${(imported.layout.storages || [imported.layout.storage]).length} Storage Unit(s).`;
+            drawLayout(lastLayout);
+            document.getElementById('layout-share-hint').textContent =
+                'Imported successfully. This is an Aniimax share code, not the game\'s server-side Combo Code.';
+        } catch (error) {
+            window.alert(`That Aniimax layout code is invalid: ${error.message || error}`);
+        }
+    });
+}
+
+function encodeLayoutCode(drawn) {
+    const payload = JSON.stringify({ v: 1, homeLevel: drawn.homeLevel, layout: drawn.layout });
+    const bytes = new TextEncoder().encode(payload);
+    let binary = '';
+    bytes.forEach(byte => { binary += String.fromCharCode(byte); });
+    return 'ANIIMAX1.' + btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+function decodeLayoutCode(code) {
+    if (!code.startsWith('ANIIMAX1.')) throw new Error('unsupported code version');
+    const body = code.slice('ANIIMAX1.'.length).replace(/-/g, '+').replace(/_/g, '/');
+    const padded = body + '='.repeat((4 - body.length % 4) % 4);
+    const binary = atob(padded);
+    const bytes = Uint8Array.from(binary, ch => ch.charCodeAt(0));
+    const parsed = JSON.parse(new TextDecoder().decode(bytes));
+    if (parsed?.v !== 1 || !parsed.layout || !Array.isArray(parsed.layout.pieces)) {
+        throw new Error('missing layout data');
+    }
+    return { homeLevel: Number(parsed.homeLevel) || 1, layout: parsed.layout };
 }
 
 function drawLayout(drawn) {
@@ -1227,11 +1337,15 @@ function renderHomelandLayout(plan) {
         layoutWorker = null;
         if (runId !== layoutRunId) return;
         const layout = event.data;
-        const at = layout.storageAt;
-        // Buildings carry nothing themselves.
+        const storages = layout.storages?.length ? layout.storages : [layout.storage];
+        // Buildings carry nothing themselves. Each delivery goes to the nearest Storage Unit.
         const members = layout.pieces.flatMap(p => p.members).map(m => ({ ...m, weight: m.weight || 0 }));
         const trips = members.reduce((sum, m) => sum + m.weight, 0);
-        const walked = members.reduce((sum, m) => sum + m.weight * Math.hypot(m.x + m.w / 2 - at.x, m.y + m.h / 2 - at.y), 0);
+        const distanceToStorage = m => Math.min(...storages.map(s => Math.hypot(
+            m.x + m.w / 2 - (s.x + s.w / 2),
+            m.y + m.h / 2 - (s.y + s.h / 2),
+        )));
+        const walked = members.reduce((sum, m) => sum + m.weight * distanceToStorage(m), 0);
         const noRoom = [...new Set(layout.unplaced.map(i => {
             const piece = pieces[i];
             return piece.cluster ? `${piece.buildings[0].facility} and its plots` : piece.members[0].facility;
@@ -1239,10 +1353,12 @@ function renderHomelandLayout(plan) {
         const notes = [
             noRoom.length ? `No room found in RV ${homeLevel}'s plots for: ${noRoom.join(', ')}.` : '',
             unplaced.length ? `Not placed, size unknown: ${unplaced.join(', ')}.` : '',
+            layout.unplacedGenerators ? `${layout.unplacedGenerators} active Crackle Generator(s) could not be fitted.` : '',
+            layout.needsPowerPole ? `${layout.needsPowerPole} E-Mode machine(s) sit outside direct 11×11 generator coverage; connect them with Crackle Power Poles in game.` : '',
         ].filter(Boolean).join(' ');
         document.getElementById('layout-summary').textContent = `${trips > 0
-            ? `${formatNumber(Math.round(trips))} trips/hour to the Storage Unit, ${(walked / trips).toFixed(1)} tiles each on average, in the ${cells.length} plot${cells.length === 1 ? '' : 's'} open at RV ${homeLevel}.`
-            : 'Nothing in this plan is carried to the Storage Unit.'}${notes ? ` ${notes}` : ''}`;
+            ? `${formatNumber(Math.round(trips))} batch deliveries/hour before Hauling batching, to ${storages.length} Storage Unit${storages.length === 1 ? '' : 's'}, ${(walked / trips).toFixed(1)} tiles each on average, in the ${cells.length} plot${cells.length === 1 ? '' : 's'} open at RV ${homeLevel}.`
+            : 'Nothing in this plan needs hauling to storage.'}${notes ? ` ${notes}` : ''}`;
         lastLayout = { layout, homeLevel };
         drawLayout(lastLayout);
         setStep('layout', 'done');
@@ -1254,7 +1370,12 @@ function renderHomelandLayout(plan) {
         document.getElementById('layout-summary').textContent = 'The layout couldn\'t be worked out.';
         setStep('layout', 'fail');
     };
-    layoutWorker.postMessage({ pieces, cells: cells.map(({ x, y, w, h }) => ({ x, y, w, h })) });
+    layoutWorker.postMessage({
+        pieces,
+        cells: cells.map(({ x, y, w, h }) => ({ x, y, w, h })),
+        storageCount: Math.max(1, Math.min(24, Math.round(numberOrDefault(document.getElementById('layout-storage-count').value, 2)))),
+        generatorCount: plan.generators_used || 0,
+    });
 }
 
 // Stops a layout still being worked out, so it can't land over a newer plan.
@@ -1279,7 +1400,9 @@ function homelandSvg(layout, homeLevel) {
     // The whole homeland, its plots marked out and the ones not open yet shaded.
     const plots = homelandPlots();
     // Zoomed to what's placed, a couple of tiles around it, unless the whole homeland is asked for.
-    const placed = [layout.storage, ...layout.pieces.flatMap(p => p.members)];
+    const storages = layout.storages?.length ? layout.storages : [layout.storage];
+    const generators = layout.generators || [];
+    const placed = [...storages, ...generators.flatMap(g => [g, g.coverage]), ...layout.pieces.flatMap(p => p.members)];
     const whole = layoutShowsWhole;
     const minX = whole ? -1 : Math.floor(Math.min(...placed.map(r => r.x))) - 2;
     const minY = whole ? -1 : Math.floor(Math.min(...placed.map(r => r.y))) - 2;
@@ -1298,10 +1421,18 @@ function homelandSvg(layout, homeLevel) {
     const maxTrips = Math.max(...layout.pieces.flatMap(p => p.members.map(m => m.weight || 0)), 1e-9);
     const shapes = layout.pieces.flatMap(p => p.members).map(m => {
         const color = layoutColor(m);
-        const away = Math.hypot(m.x + m.w / 2 - (layout.storage.x + layout.storage.w / 2), m.y + m.h / 2 - (layout.storage.y + layout.storage.h / 2));
+        const away = Math.min(...storages.map(s => Math.hypot(
+            m.x + m.w / 2 - (s.x + s.w / 2),
+            m.y + m.h / 2 - (s.y + s.h / 2),
+        )));
+        const directPower = !m.electric || generators.some(g => {
+            const q = g.coverage;
+            return m.x < q.x + q.w && m.x + m.w > q.x && m.y < q.y + q.h && m.y + m.h > q.y;
+        });
+        const detail = m.jobs ? m.jobs.map(j => prettyItem(j.item)).join(', ') : m.crop ? prettyItem(m.crop) : m.building && m.mode ? m.mode : 'Idle';
         const tip = tipAttrs(m.facility, {
-            detail: m.jobs ? m.jobs.map(j => prettyItem(j.item)).join(', ') : m.crop ? prettyItem(m.crop) : m.building && m.mode ? m.mode : 'Idle',
-            stats: m.weight > 0 ? `${formatRate(m.weight)} trips/hour · ${away.toFixed(1)} tiles from storage` : '',
+            detail: `${detail}${m.electric ? directPower ? ' · E-Mode · direct generator coverage' : ' · E-Mode · needs Power Pole coverage' : ''}`,
+            stats: m.weight > 0 ? `${formatRate(m.weight)} batch deliveries/hour · ${away.toFixed(1)} tiles from storage` : '',
             color,
         });
         const label = Math.min(m.w, m.h) >= 1.5 ? `<text x="${m.x + m.w / 2}" y="${m.y + m.h / 2}" font-size="${Math.min(0.8, m.w / 3)}">${initialsOf(m.facility)}</text>` : '';
@@ -1313,7 +1444,7 @@ function homelandSvg(layout, homeLevel) {
                 fill="${color}" fill-opacity="${m.mode ? 1 : 0.25}" stroke="currentColor" stroke-opacity="0.6" stroke-width="0.08" />
                 ${m.mode ? environmentBuildingIcon(m.facility, m.mode, m.x + m.w / 2, m.y + m.h / 2) : ''}</g>`;
         }
-        return `<g class="layout-piece" ${tip}><rect x="${m.x + 0.04}" y="${m.y + 0.04}" width="${m.w - 0.08}" height="${m.h - 0.08}" rx="0.2"
+        return `<g class="layout-piece${m.electric ? directPower ? ' electric' : ' electric needs-pole' : ''}" ${tip}><rect x="${m.x + 0.04}" y="${m.y + 0.04}" width="${m.w - 0.08}" height="${m.h - 0.08}" rx="0.2"
             fill="${color}" fill-opacity="${fill.toFixed(2)}" stroke="${color}" stroke-width="0.06" />${label}</g>`;
     }).join('');
     const coverageShapes = coverage.map(c => {
@@ -1327,9 +1458,14 @@ function homelandSvg(layout, homeLevel) {
         return `<rect x="${c.x}" y="${c.y}" width="${c.w}" height="${c.h}" fill="none"
             stroke="${tint}" stroke-opacity="0.8" stroke-dasharray="0.35,0.25" stroke-width="0.08" />`;
     }).join('');
-    const s = layout.storage;
-    // A line from everything carried to the Storage Unit, each drawn once its first batch is in,
-    // and a ring for the batch it's on (see "Deliveries"), in the same order as `layoutFlows`.
+    const powerCoverage = generators.map(g => `<rect x="${g.coverage.x}" y="${g.coverage.y}" width="${g.coverage.w}" height="${g.coverage.h}" class="layout-power-coverage" />`).join('');
+    const generatorShapes = generators.map((g, i) => `
+        <g class="layout-piece layout-generator" ${tipAttrs('Crackle Generator', { detail: 'Active E-Mode generator', stats: '11×11 direct power coverage' })}>
+            <rect x="${g.x + 0.04}" y="${g.y + 0.04}" width="${g.w - 0.08}" height="${g.h - 0.08}" rx="0.15" />
+            <text x="${g.x + g.w / 2}" y="${g.y + g.h / 2}" font-size="0.55">CG${generators.length > 1 ? i + 1 : ''}</text>
+        </g>`).join('');
+    // A line from everything carried to its nearest Storage Unit, each drawn once its first
+    // batch is in, and a ring for the batch it's on (see "Deliveries").
     const flowList = layoutFlows(layout);
     const flows = flowList.map(f => `<line x1="${f.x1}" y1="${f.y1}" x2="${f.x2}" y2="${f.y2}" class="layout-flow-line" />`).join('');
     const rings = flowList.map(f => `<g class="layout-ring" transform="translate(${f.rx.toFixed(2)} ${f.ry.toFixed(2)})">
@@ -1341,12 +1477,17 @@ function homelandSvg(layout, homeLevel) {
         <g class="env-grid">${lines.join('')}</g>
         <g class="layout-plots">${plotShapes}</g>
         <g class="layout-coverage">${coverageShapes}</g>
+        <g class="layout-power-ranges" pointer-events="none">${powerCoverage}</g>
         ${shapes}
+        ${generatorShapes}
         <g class="layout-coverage-edges" pointer-events="none">${coverageEdges}</g>
         <g class="layout-rings" pointer-events="none">${rings}</g>
         <g class="layout-flows" pointer-events="none">${flows}<g class="layout-dots"></g></g>
-        <g class="layout-piece layout-storage-unit" ${tipAttrs('Storage Unit', { detail: 'Where everything is carried', stats: totalTrips > 0 ? `${formatRate(totalTrips)} trips/hour` : '' })}><rect x="${s.x + 0.04}" y="${s.y + 0.04}" width="${s.w - 0.08}" height="${s.h - 0.08}" rx="0.2" class="layout-storage" />
-        <text x="${s.x + s.w / 2}" y="${s.y + s.h / 2}" font-size="0.8" class="layout-storage-text">SU</text></g>
+        <g class="layout-storages">${storages.map((s, i) => `
+            <g class="layout-piece layout-storage-unit" ${tipAttrs(`Storage Unit ${i + 1}`, { detail: 'Haulers use the nearest Storage Unit', stats: totalTrips > 0 ? `${formatRate(totalTrips)} total trips/hour` : '' })}>
+                <rect x="${s.x + 0.04}" y="${s.y + 0.04}" width="${s.w - 0.08}" height="${s.h - 0.08}" rx="0.2" class="layout-storage" />
+                <text x="${s.x + s.w / 2}" y="${s.y + s.h / 2}" font-size="0.8" class="layout-storage-text">SU${storages.length > 1 ? i + 1 : ''}</text>
+            </g>`).join('')}</g>
     </svg>`;
 }
 
@@ -1375,12 +1516,16 @@ let layoutSim = null;
 // long a batch takes and its pace in the plan (batches a second). Most pieces have one; a Bench
 // or Kiln unit has one per tier it takes turns on (see `homelandPieces`).
 function layoutFlows(layout) {
-    const s = layout.storage;
-    const x2 = s.x + s.w / 2;
-    const y2 = s.y + s.h / 2;
+    const storages = layout.storages?.length ? layout.storages : [layout.storage];
     return layout.pieces.flatMap(p => p.members).filter(m => m.weight > 0 && m.crop && m.cycle > 0).map(m => {
         const x1 = m.x + m.w / 2;
         const y1 = m.y + m.h / 2;
+        const s = storages.reduce((best, candidate) => {
+            const d = Math.hypot(x1 - (candidate.x + candidate.w / 2), y1 - (candidate.y + candidate.h / 2));
+            return !best || d < best.d ? { s: candidate, d } : best;
+        }, null).s;
+        const x2 = s.x + s.w / 2;
+        const y2 = s.y + s.h / 2;
         const ring = Math.min(0.45, Math.min(m.w, m.h) * 0.22);
         return {
             x1, y1, x2, y2, length: Math.hypot(x2 - x1, y2 - y1),
@@ -1393,10 +1538,11 @@ function layoutFlows(layout) {
 // What a recipe takes and gives, from the recipe list: ingredients with amounts, its item and
 // yield (a quick variant makes the regular item), and its byproduct.
 function recipeTerms(name) {
-    const r = recipeIndex.find(r => r.name === name);
+    const base = basePlanItem(name);
+    const r = recipeIndex.find(r => r.name === base);
     return {
         takes: (r?.ingredients || []).map((ingredient, i) => [ingredient, r.amounts?.[i] ?? 1]),
-        makes: name.replace(/^quick_/, ''),
+        makes: base.replace(/^quick_/, ''),
         yield: r?.yieldAmount || 1,
         byproduct: r?.byproduct ? [r.byproduct, r.byproductAmount || 0] : null,
     };
@@ -1448,6 +1594,8 @@ function startLayoutSim(svg, flows, stock) {
         flow,
         jobs: flow.jobs.map(job => ({ ...job, terms: recipeTerms(job.item) })),
         line: lines[k], ring: rings[k], fill: rings[k]?.querySelector('.ring-fill'),
+        held: new Map(),
+        heldCount: 0,
     }));
     // Something no piece here makes, and no stock covers, is taken as always there, so a recipe
     // using it isn't held up forever.
@@ -1474,6 +1622,8 @@ function resetLayoutSim(sim) {
         unit.job = null;
         unit.until = null;
         unit.free = 0;
+        unit.held = new Map();
+        unit.heldCount = 0;
         unit.lastDot = -Infinity;
         unit.line?.classList.remove('live');
         showRing(unit, 0, false);
@@ -1513,6 +1663,27 @@ function simStart(sim, unit, at) {
     unit.until = at + job.cycle;
 }
 
+// Finished output sits at the facility until its local output stack reaches the station cap.
+// A Hauling pickup then exposes that stack to the shared Home storage. Hauler travel/carry time is
+// still not modeled because no reliable movement/carry-capacity data is available.
+function simFinishBatch(sim, unit, job, age) {
+    const { makes, byproduct, yield: amount } = job.terms;
+    unit.held.set(makes, (unit.held.get(makes) || 0) + amount);
+    unit.heldCount += amount;
+    if (byproduct) {
+        unit.held.set(byproduct[0], (unit.held.get(byproduct[0]) || 0) + byproduct[1]);
+        unit.heldCount += byproduct[1];
+    }
+
+    const limit = Math.max(1, job.outputLimit || 1);
+    if (unit.heldCount + 1e-9 < limit) return;
+
+    unit.held.forEach((n, item) => sim.store.set(item, (sim.store.get(item) || 0) + n));
+    unit.held.clear();
+    unit.heldCount = 0;
+    deliver(sim, unit, age);
+}
+
 function stepLayoutSim(sim, dt) {
     const from = sim.game;
     sim.game += dt;
@@ -1526,10 +1697,7 @@ function stepLayoutSim(sim, dt) {
         unit.jobs.forEach(job => { job.pace = Math.min(1 + job.rate * SIM_STEP, job.pace + job.rate * dt); });
         // Each batch finished within the step is delivered then, and the next starts right away.
         while (unit.until != null && unit.until <= sim.game) {
-            const { makes, byproduct, yield: amount } = unit.job.terms;
-            sim.store.set(makes, (sim.store.get(makes) || 0) + amount);
-            if (byproduct) sim.store.set(byproduct[0], (sim.store.get(byproduct[0]) || 0) + byproduct[1]);
-            deliver(sim, unit, (sim.game - unit.until) / sim.speed);
+            simFinishBatch(sim, unit, unit.job, (sim.game - unit.until) / sim.speed);
             unit.free = unit.until;
             unit.until = null;
             unit.job = null;
@@ -1867,21 +2035,13 @@ function renderRosterSummary(plan) {
         busy[member] += share;
         where[member].set(building, (where[member].get(building) || 0) + share);
     });
-    // The growing jobs (sowing, reaping and the like) take seconds a harvest, so they don't count
-    // as busy time, but someone has to do them: each goes to the least busy Aniimo able to.
-    const jobs = new Map();
-    (plan.coin_items || []).forEach(step => {
-        if (step.status !== 'producing' || !(step.facility === 'Farmland' || step.facility === 'Woodland')) return;
-        (recipeIndex.find(r => r.name === basePlanItem(step.item_name))?.jobs || []).forEach(([job, ability, level]) => {
-            jobs.set(`${job}|${ability}|${level}|${step.facility}`, { job, ability, level, facility: step.facility });
-        });
-    });
-    jobs.forEach(({ job, ability, level, facility }) => {
-        const able = roster.map((a, i) => i).filter(i => (roster[i].abilities[ability] || 0) >= level);
-        if (!able.length) return;
-        const pick = able.reduce((a, b) => (busy[b] / roster[b].count < busy[a] / roster[a].count ? b : a));
-        const place = `${job} on ${facility}`;
-        if (!where[pick].has(place)) where[pick].set(place, 1);
+    // The exact solver now assigns every Reclaiming/Sowing/Watering/harvest job too, so a busy
+    // Earth worker at the Mine cannot be reused for unlimited soil reclamation.
+    (plan.grower_staffing || []).forEach(([item, job, member, share]) => {
+        if (!roster[member]) return;
+        busy[member] += share;
+        const place = `${job} (${prettyItem(item)})`;
+        where[member].set(place, (where[member].get(place) || 0) + share);
     });
     const have = roster.reduce((sum, a) => sum + a.count, 0);
     const working = roster.reduce((sum, a, i) => sum + Math.min(a.count, Math.ceil(busy[i] - 1e-6)), 0);
@@ -1891,9 +2051,10 @@ function renderRosterSummary(plan) {
         const letters = aniimo.personalities.map(personalityLetter).join('');
         return `<tr><td data-label="Aniimo">${rosterLabel(aniimo, i)}<div class="hint small">${abilities} · ${letters}</div></td><td data-label="How many">${aniimo.count}</td><td data-label="Busy on average">${busy[i].toFixed(1)}</td><td data-label="Where">${places || '<span class="hint small">idle</span>'}</td></tr>`;
     }).join('');
+    const dailyFood = have * 10 * 60 * 24;
     document.getElementById('aniimo-summary').innerHTML = roster.length
         ? `<table class="aniimo-table"><thead><tr><th>Aniimo</th><th>How many</th><th>Busy on average</th><th>Where</th></tr></thead><tbody>${rows}</tbody></table>
-           <p class="hint small">${working} of your ${have} Aniimo have work in this plan.</p>`
+           <p class="hint small">${working} of your ${have} Aniimo have work in this plan. All ${have} residents still eat: about <strong>${formatNumber(dailyFood)} food Energy/day</strong> at 10 Energy/min each. The calculator assumes the food bowl stays stocked; an empty bowl drops Aniimo work to 20%.</p>`
         : '<p class="hint">Add the Aniimo you have under My Aniimo to plan with them.</p>';
     document.getElementById('aniimo-collapsed-summary').textContent = '';
     document.getElementById('aniimo-abilities').innerHTML = '';
@@ -1918,6 +2079,16 @@ function seasonAvailable() {
 
 function seasonActive() {
     return seasonAvailable() && document.getElementById('season-on').checked;
+}
+
+function seasonWheatBudget() {
+    const value = Number(document.getElementById('season-wheat-budget')?.value);
+    return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function seasonMutationPlots() {
+    const value = Number(document.getElementById('season-mutation-plots')?.value);
+    return Number.isFinite(value) ? Math.max(0, Math.round(value)) : 2;
 }
 
 function renderSeason() {
@@ -1965,7 +2136,7 @@ function recipeLabel(recipe) {
 async function loadRecipeIndex() {
     try {
         recipeIndex = JSON.parse(await callWorker('get_all_items'))
-            .map(r => ({ name: r.name, facility: r.facility, cost: r.cost || 0, seasonSeedCost: r.season_seed_cost || 0, environment: r.environment || null, jobs: r.jobs || [], ingredients: r.raw_materials || [], amounts: r.required_amount || [], yieldAmount: r.yield_amount || 1, byproduct: r.byproduct_item || null, byproductAmount: r.byproduct?.[1] || 0, turns: r.sell_currency === 'none' }))
+            .map(r => ({ name: r.name, facility: r.facility, facilityLevel: r.facility_level || 1, cost: r.cost || 0, seasonSeedCost: r.season_seed_cost || 0, environment: r.environment || null, jobs: r.jobs || [], ingredients: r.raw_materials || [], amounts: r.required_amount || [], yieldAmount: r.yield_amount || 1, byproduct: r.byproduct_item || null, byproductAmount: r.byproduct?.[1] || 0, turns: r.sell_currency === 'none' }))
             .sort((a, b) => a.facility.localeCompare(b.facility) || a.name.localeCompare(b.name));
         document.getElementById('skip-options').innerHTML =
             recipeIndex.map(r => `<option value="${recipeLabel(r)}"></option>`).join('');
@@ -2573,6 +2744,8 @@ function getPlanInputValues() {
             level_up: levelUpInput(),
             exclude: excludedRecipes(),
             season: seasonActive(),
+            season_currency_per_day: seasonActive() ? seasonWheatBudget() : null,
+            harvest_mutation_plots: seasonActive() ? seasonMutationPlots() : 0,
             facilities,
             modules
         };
@@ -2601,6 +2774,8 @@ function getPlanInputValues() {
         level_up: levelUpInput(),
         exclude: excludedRecipes(),
         season: seasonActive(),
+        season_currency_per_day: seasonActive() ? seasonWheatBudget() : null,
+        harvest_mutation_plots: seasonActive() ? seasonMutationPlots() : 0,
         facilities,
         modules
     };
@@ -2999,23 +3174,32 @@ function renderAniimoSummary(plan) {
         needsAniimo(building, units, `${building} (${modes[0]})`);
         needsAniimo(partner, units, `${partner} (${modes[1]})`);
     });
-    // Every Crackle Generator actually switched on needs its own Lightning Aniimo. Keep these
-    // workers resident like environment-building workers, so generic team planning never merges
-    // them into a processor's spare time.
-    if ((plan.generators_used || 0) > 0) {
+    // Every active Crackle Generator keeps one Lightning Aniimo resident. Rated generator
+    // output assumes the station's recommended Lightning level: Lv.1 / Lv.2 / Lv.3+ generators
+    // need Lightning 1 / 2 / 3 respectively. Keep levels separate so the team summary does not
+    // overstate a low-level worker's power output.
+    const generatorRequirement = tier => tier <= 1 ? 1 : tier === 2 ? 2 : 3;
+    (plan.generator_tiers || []).forEach(([tier, count]) => {
+        if (!count) return;
         const ability = 'Lightning';
-        const key = `${ability} (power)`;
-        groups.set(key, {
-            label: `${ability} any level`,
-            ability,
-            level: 1,
-            bonus: false,
-            busy: plan.generators_used,
-            where: new Map([['Crackle Generator (E-Mode power)', plan.generators_used]]),
-            jobs: new Map(),
-            environment: true,
-        });
-    }
+        const level = generatorRequirement(tier);
+        const key = `${ability} (power ${level})`;
+        if (!groups.has(key)) {
+            groups.set(key, {
+                label: `${ability} Lv.${level} (generator)`,
+                ability,
+                level,
+                bonus: false,
+                busy: 0,
+                where: new Map(),
+                jobs: new Map(),
+                environment: true,
+            });
+        }
+        const g = groups.get(key);
+        g.busy += count;
+        g.where.set(`Crackle Generator Lv.${tier}`, (g.where.get(`Crackle Generator Lv.${tier}`) || 0) + count);
+    });
     const collapsedSummary = document.getElementById('aniimo-collapsed-summary');
     if (groups.size === 0) {
         container.innerHTML = '<p class="hint">Nothing in this plan needs an Aniimo.</p>';
@@ -3129,6 +3313,7 @@ function renderAniimoSummary(plan) {
                 <span class="ability-count">${n}</span><span class="ability-name">${a.name}</span>
             </div>${stack}</div>`;
     }).join('');
+    const minimumFood = total * 10 * 60 * 24;
     container.innerHTML = `
         <div class="table-wrapper">
             <table class="facility-plan-table">
@@ -3137,6 +3322,7 @@ function renderAniimoSummary(plan) {
             </table>
         </div>
         ${capNote}
+        <p class="hint small">The shown minimum team consumes about <strong>${formatNumber(minimumFood)} food Energy/day</strong> at 10 Energy/min per Aniimo. Every extra resident also eats even while idle. Production assumes the food bowl stays stocked; an empty bowl drops Aniimo work to 20%.</p>
     `;
 }
 
@@ -3695,19 +3881,27 @@ function renderPowerSummary(plan) {
     }
     card.style.display = 'block';
     const used = plan.power_used || 0;
-    const spare = Math.max(0, capacity - used);
+    const activeSupply = plan.power_supply || 0;
+    const configuredSpare = Math.max(0, capacity - used);
+    const activeSpare = Math.max(0, activeSupply - used);
     const generators = plan.generators_used || 0;
+    const generatorMix = (plan.generator_tiers || [])
+        .filter(([, count]) => count > 0)
+        .map(([tier, count]) => `${count}×Lv.${tier}`)
+        .join(' + ');
     el.innerHTML = `
         <div class="summary-grid">
-            <div class="summary-item"><span class="summary-label">Power in use</span><span class="summary-value">${formatNumber(used)} / ${formatNumber(capacity)}</span></div>
-            <div class="summary-item"><span class="summary-label">Available headroom</span><span class="summary-value">${formatNumber(spare)}</span></div>
-            <div class="summary-item"><span class="summary-label">Generators active</span><span class="summary-value">${generators}</span></div>
+            <div class="summary-item"><span class="summary-label">E-Mode draw</span><span class="summary-value">${formatNumber(used)}</span></div>
+            <div class="summary-item"><span class="summary-label">Active supply</span><span class="summary-value">${formatNumber(activeSupply)}</span></div>
+            <div class="summary-item"><span class="summary-label">Configured capacity</span><span class="summary-value">${formatNumber(capacity)}</span></div>
+            <div class="summary-item"><span class="summary-label">Generators active</span><span class="summary-value">${generators}</span><span class="hint small">${generatorMix || '—'}</span></div>
         </div>`;
     const note = document.getElementById('power-spare-note');
     if (note) {
-        note.textContent = spare > 0
-            ? `${formatNumber(spare)} power remains available. Extra E-Mode is used only when it improves the selected goal or frees Aniimo without changing the main result.`
-            : 'The current plan uses all available full-power capacity.';
+        const canReach120 = used > 0 && capacity >= used * 1.2 - 1e-9;
+        note.textContent = used <= 0
+            ? 'No facility needs E-Mode in this plan.'
+            : `The solver conservatively uses the documented base E-Mode timers at full supply. The game can speed a well-supplied grid up to 120%; ${canReach120 ? 'your configured generators have at least 20% nominal headroom' : 'this setup does not have 20% configured headroom'}. Active spare: ${formatNumber(activeSpare)}; total configured spare: ${formatNumber(configuredSpare)}.`;
     }
 }
 
