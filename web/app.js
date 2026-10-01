@@ -3108,23 +3108,32 @@ function renderAniimoSummary(plan) {
         needsAniimo(building, units, `${building} (${modes[0]})`);
         needsAniimo(partner, units, `${partner} (${modes[1]})`);
     });
-    // Every Crackle Generator actually switched on needs its own Lightning Aniimo. Keep these
-    // workers resident like environment-building workers, so generic team planning never merges
-    // them into a processor's spare time.
-    if ((plan.generators_used || 0) > 0) {
+    // Every active Crackle Generator keeps one Lightning Aniimo resident. Rated generator
+    // output assumes the station's recommended Lightning level: Lv.1 / Lv.2 / Lv.3+ generators
+    // need Lightning 1 / 2 / 3 respectively. Keep levels separate so the team summary does not
+    // overstate a low-level worker's power output.
+    const generatorRequirement = tier => tier <= 1 ? 1 : tier === 2 ? 2 : 3;
+    (plan.generator_tiers || []).forEach(([tier, count]) => {
+        if (!count) return;
         const ability = 'Lightning';
-        const key = `${ability} (power)`;
-        groups.set(key, {
-            label: `${ability} any level`,
-            ability,
-            level: 1,
-            bonus: false,
-            busy: plan.generators_used,
-            where: new Map([['Crackle Generator (E-Mode power)', plan.generators_used]]),
-            jobs: new Map(),
-            environment: true,
-        });
-    }
+        const level = generatorRequirement(tier);
+        const key = `${ability} (power ${level})`;
+        if (!groups.has(key)) {
+            groups.set(key, {
+                label: `${ability} Lv.${level} (generator)`,
+                ability,
+                level,
+                bonus: false,
+                busy: 0,
+                where: new Map(),
+                jobs: new Map(),
+                environment: true,
+            });
+        }
+        const g = groups.get(key);
+        g.busy += count;
+        g.where.set(`Crackle Generator Lv.${tier}`, (g.where.get(`Crackle Generator Lv.${tier}`) || 0) + count);
+    });
     const collapsedSummary = document.getElementById('aniimo-collapsed-summary');
     if (groups.size === 0) {
         container.innerHTML = '<p class="hint">Nothing in this plan needs an Aniimo.</p>';
@@ -3808,12 +3817,16 @@ function renderPowerSummary(plan) {
     const configuredSpare = Math.max(0, capacity - used);
     const activeSpare = Math.max(0, activeSupply - used);
     const generators = plan.generators_used || 0;
+    const generatorMix = (plan.generator_tiers || [])
+        .filter(([, count]) => count > 0)
+        .map(([tier, count]) => `${count}×Lv.${tier}`)
+        .join(' + ');
     el.innerHTML = `
         <div class="summary-grid">
             <div class="summary-item"><span class="summary-label">E-Mode draw</span><span class="summary-value">${formatNumber(used)}</span></div>
             <div class="summary-item"><span class="summary-label">Active supply</span><span class="summary-value">${formatNumber(activeSupply)}</span></div>
             <div class="summary-item"><span class="summary-label">Configured capacity</span><span class="summary-value">${formatNumber(capacity)}</span></div>
-            <div class="summary-item"><span class="summary-label">Generators active</span><span class="summary-value">${generators}</span></div>
+            <div class="summary-item"><span class="summary-label">Generators active</span><span class="summary-value">${generators}</span><span class="hint small">${generatorMix || '—'}</span></div>
         </div>`;
     const note = document.getElementById('power-spare-note');
     if (note) {
