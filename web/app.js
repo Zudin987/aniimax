@@ -1099,11 +1099,24 @@ function homelandPieces(plan, input) {
             // Each plot in this zone gets one of the crops planned for its facility here.
             const crops = {};
             rows.forEach(r => {
-                for (let n = 0; n < r.facility_count; n++) (crops[r.facility] ||= []).push({ crop: r.item_name, trips: tripsPerUnit(r), cycle: r.cycle_time });
+                const job = {
+                    item: r.item_name,
+                    cycle: r.cycle_time,
+                    rate: batchRatePerUnit(r),
+                    outputLimit: outputLimitForStep(r, input),
+                };
+                for (let n = 0; n < r.facility_count; n++) {
+                    (crops[r.facility] ||= []).push({
+                        crop: r.item_name,
+                        trips: tripsPerUnit(r, input),
+                        cycle: r.cycle_time,
+                        job,
+                    });
+                }
             });
             layout.forEach(p => {
-                const crop = (crops[p.facility] || []).shift() || { crop: null, trips: 0 };
-                plots.push({ w: p.size, h: p.size, weight: crop.trips, cycle: crop.cycle, zone: unit.partner ? zone : 0, facility: p.facility, crop: crop.crop });
+                const crop = (crops[p.facility] || []).shift() || { crop: null, trips: 0, job: null };
+                plots.push({ w: p.size, h: p.size, weight: crop.trips, cycle: crop.cycle, jobs: crop.job ? [crop.job] : [], zone: unit.partner ? zone : 0, facility: p.facility, crop: crop.crop });
                 planned.push({ x: p.x, y: p.y });
                 count(p.facility);
                 placedInBlocks[`${p.facility}|${crop.crop}`] = (placedInBlocks[`${p.facility}|${crop.crop}`] || 0) + 1;
@@ -1131,8 +1144,13 @@ function homelandPieces(plan, input) {
         }
         const busy = rows.reduce((sum, r) => sum + (r.busy_units ?? r.facility_count), 0);
         const n = Math.max(1, Math.ceil(busy - 1e-6));
-        const jobs = rows.filter(r => r.cycle_time > 0).map(r => ({ item: r.item_name, cycle: r.cycle_time, rate: (r.busy_units ?? r.facility_count) / r.cycle_time / n }));
-        const weight = jobs.reduce((sum, j) => sum + j.rate * 3600, 0);
+        const jobs = rows.filter(r => r.cycle_time > 0).map(r => ({
+            item: r.item_name,
+            cycle: r.cycle_time,
+            rate: (r.busy_units ?? r.facility_count) / r.cycle_time / n,
+            outputLimit: outputLimitForStep(r, input),
+        }));
+        const weight = rows.reduce((sum, r) => sum + tripsPerUnit(r, input) * r.facility_count / n, 0);
         for (let i = 0; i < n; i++) {
             pieces.push({ members: [{ x: 0, y: 0, w: footprint[0], h: footprint[1], weight, jobs, cycle: jobs[0]?.cycle, facility, crop: jobs[0]?.item ?? null, sensitive: false, electric }] });
         }
@@ -1157,7 +1175,13 @@ function homelandPieces(plan, input) {
             // A crop that needs an environment but is grown without one stays out of every
             // coverage square, so no building's temperature changes it.
             const growing = step.status === 'producing';
-            pieces.push({ members: [{ x: 0, y: 0, w: footprint[0], h: footprint[1], weight: tripsPerUnit(step), cycle: step.cycle_time, facility: step.facility, crop: growing ? step.item_name : null, sensitive: growing && needsEnvironment(step.item_name), electric: isElectricItem(step.item_name) }] });
+            const jobs = growing && step.cycle_time > 0 ? [{
+                item: step.item_name,
+                cycle: step.cycle_time,
+                rate: batchRatePerUnit(step),
+                outputLimit: outputLimitForStep(step, input),
+            }] : [];
+            pieces.push({ members: [{ x: 0, y: 0, w: footprint[0], h: footprint[1], weight: tripsPerUnit(step, input), cycle: step.cycle_time, jobs, facility: step.facility, crop: growing ? step.item_name : null, sensitive: growing && needsEnvironment(step.item_name), electric: isElectricItem(step.item_name) }] });
         }
         count(step.facility, n);
     });
