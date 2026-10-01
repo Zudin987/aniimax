@@ -286,6 +286,36 @@ export const FACILITY_FOOTPRINTS = {
     'Storage Unit': [2, 2],
 };
 
+// How much finished output one facility can hold before Hauling moves it to Storage. Layout
+// walking is based on these full-stack pickups rather than pretending every finished batch causes
+// a trip. Values are the launch data's per-level output caps.
+export const FACILITY_OUTPUT_LIMITS = {
+    'Aniipod Maker': [12, 12, 12],
+    'Dance Pad Polisher': [12, 12, 12],
+    'Blazing Stove': [10, 10, 10, 10, 10],
+    'Bouncy Brew Keg': [10, 10, 10, 10, 10],
+    'Carousel Mill': [10, 10, 10, 10, 10, 10],
+    'Chimney Kiln': [10, 10, 10, 10],
+    'Claw Game Cooker': [10, 10, 10, 10, 10, 10, 10],
+    'Crafting Table': [10, 10, 10, 10, 10, 10, 10, 10],
+    'Joy Wheel Loom': [10, 10, 10, 10],
+    'Jukebox Dryer': [10, 10, 10, 10, 10, 10, 10],
+    'Phonolfactory Table': [10, 10, 10, 10, 10, 10],
+    'Pickling Jar': [10, 10, 10, 10, 10],
+    'Simmering Pot': [10, 10, 10, 10, 10, 10],
+    'Woodworking Bench': [10, 10, 10, 10],
+    'Dewy House': [10, 12],
+    'Farmland': [5, 10, 15, 20, 25, 30, 35],
+    'Floral Windmill': [10],
+    'Mine': [6, 12, 18, 24, 30, 36],
+    'Nimbus Bed': [10, 12, 14],
+    'Starfall Hammock': [10],
+    'Tidewhisper Sandcastle': [10, 20, 30],
+    'Well': [10, 10, 20, 20, 30],
+    'Woodland': [8, 12, 16, 20, 24, 28],
+};
+
+
 // The homeland: a 4x4 grid of plots, each 20 tiles wide and 15 tall, plot n opening at RV n (and
 // all of them from RV 16). Rows from the top, by plot number; the first opens bottom middle.
 export const HOMELAND_PLOT_SIZE = { w: 20, h: 15 };
