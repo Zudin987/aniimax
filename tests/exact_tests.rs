@@ -83,7 +83,7 @@ fn exact_handles_environments_and_aniimo_speeds() {
         ("Dewy House", 1, 1),
         ("Tidewhisper Sandcastle", 1, 1),
     ]);
-    let modules = ModuleLevels { ecological_module: 2, kitchen_module: 2, resource_detector: 1, crafting_module: 2 };
+    let modules = ModuleLevels { ecological_module: 2, kitchen_module: 2, resource_detector: 1, crafting_module: 2, power_module: 0 };
     let plan = solve_and_check(&items, &counts, &modules);
     let shown = to_production_plan(&plan, &items, "coins", &counts);
     for facility in ["Farmland", "Woodland", "Mine", "Crafting Table", "Jukebox Dryer"] {
