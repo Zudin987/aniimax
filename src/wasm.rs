@@ -1635,6 +1635,7 @@ impl PreparedInput {
             kitchen_module: input.modules.kitchen_module,
             resource_detector: input.modules.resource_detector,
             crafting_module: input.modules.crafting_module,
+            power_module: input.modules.power_module,
         };
         let mut items = get_embedded_items();
         if input.season {
