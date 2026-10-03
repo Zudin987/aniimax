@@ -98,6 +98,13 @@ try {
     assert.match(await page.locator('#season-budget-note').innerText(), /Unlimited seed spend/);
     await page.locator('#season-mutation-plots').fill('0');
     assert.match(await page.locator('#season-budget-note').innerText(), /No mutation reserve/);
+    await page.locator('#season-wheat-budget').fill('');
+    await page.locator('#season-mutation-plots').fill('');
+    await page.locator('#setup-copy-code').click();
+    await page.waitForFunction(() => !document.getElementById('setup-export-panel').hidden);
+    await load(await page.locator('#setup-export-value').inputValue());
+    assert.equal(await page.locator('#season-wheat-budget').inputValue(), '0');
+    assert.equal(await page.locator('#season-mutation-plots').inputValue(), '0');
 
     // Legacy layout can open on a fresh calculator without changing setup values.
     const layout = encodeLayoutCode({ homeLevel: 13, layout: {

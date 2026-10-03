@@ -51,8 +51,11 @@ test('older names and missing fields use clean defaults, independently of previo
     assert.match(warnings.join(' '), /Older setup/);
     assert.equal(legacy['mode-simple'], undefined, 'validation must not mutate input');
     assert.deepEqual(defaults.facilityTiers.Mine, [{ count: 0, level: 1 }]);
-    assert.equal(normalizeSetupSettings({ 'home-level': '13', 'season-wheat-budget': '' }, defaults)
-        .settings['season-wheat-budget'], '600', 'blank form fields must remain portable');
+    const blank = normalizeSetupSettings({ 'home-level': '13', 'season-wheat-budget': '',
+        'season-mutation-plots': '', 'target-amount': '' }, { ...defaults, 'target-amount': '1000' }).settings;
+    assert.equal(blank['season-wheat-budget'], '0', 'cleared cap still means unlimited after import');
+    assert.equal(blank['season-mutation-plots'], '0', 'cleared reserve still means no minimum');
+    assert.equal(blank['target-amount'], '0', 'cleared goal still means zero rather than the default target');
 });
 
 test('invalid structures, non-finite values and conflicting modes are rejected before application', () => {

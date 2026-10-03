@@ -68,7 +68,7 @@ export function normalizeSetupSettings(input, defaults = {}) {
     for (const [key, limits] of Object.entries(NUMBER_FIELDS)) {
         if (!own(data, key)) continue;
         const value = typeof data[key] === 'string' && data[key].trim() === ''
-            ? defaults[key] ?? limits[0] : data[key];
+            ? (limits[0] === 0 ? 0 : defaults[key] ?? limits[0]) : data[key];
         settings[key] = String(number(value, key, ...limits));
     }
     if (own(data, 'rate-unit')) {
