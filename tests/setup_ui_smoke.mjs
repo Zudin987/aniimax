@@ -14,7 +14,7 @@ const server = createServer(async (request, response) => {
         const file = path.resolve(root, '.' + (pathname === '/' ? '/index.html' : pathname));
         if (!file.startsWith(root)) { response.writeHead(403).end(); return; }
         const content = await readFile(file);
-        const type = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css',
+        const type = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css',
             '.wasm': 'application/wasm', '.json': 'application/json', '.svg': 'image/svg+xml' }[path.extname(file)];
         response.writeHead(200, { 'Content-Type': type || 'application/octet-stream' }).end(content);
     } catch { response.writeHead(404).end(); }
@@ -26,7 +26,8 @@ const browser = await chromium.launch({ headless: true,
 const context = await browser.newContext({ viewport: { width: 1000, height: 900 } });
 const page = await context.newPage();
 const errors = [];
-page.on('pageerror', error => errors.push(error.message));
+page.on('pageerror', error => { errors.push(error.message); console.error('Browser exception:', error.message); });
+page.on('console', message => { if (message.type() === 'error') console.error('Browser console:', message.text()); });
 await page.route('https://cdn.jsdelivr.net/**', route => route.abort());
 const key = 'aniimax-config-v1';
 const saved = { 'mode-simple': true, 'mode-advanced': false, 'home-level': '2' };
@@ -144,6 +145,15 @@ try {
     assert.match(await page.locator('#setup-share-hint').innerText(), /saving is unavailable/);
     assert.deepEqual(errors, [], 'browser/WASM should not raise uncaught errors');
     console.log('Setup UI/WASM smoke passed: pre-plan import/export, full restore, saved mode, invalid/legacy codes, shared links, budget feedback, desktop/mobile and storage denial.');
+} catch (error) {
+    await mkdir(new URL('../test-results/', import.meta.url), { recursive: true });
+    await page.screenshot({ path: 'test-results/setup-failure.png', fullPage: true });
+    console.error('Browser state:', await page.evaluate(() => ({
+        version: document.getElementById('version')?.textContent,
+        error: document.getElementById('error-message')?.textContent,
+        status: document.getElementById('setup-share-hint')?.textContent,
+    })));
+    throw error;
 } finally {
     await context.close();
     await browser.close();
