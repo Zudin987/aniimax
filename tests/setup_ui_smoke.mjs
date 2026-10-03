@@ -42,7 +42,8 @@ const setup = {
     priorities: [{ target: 'season_points', on: true }, { target: 'coins', on: true }],
     skippedRecipes: ['quick_potato'], unlockedSpecial: ['rose_shortbread'],
     'season-on': true, 'season-wheat-budget': '600', 'season-mutation-plots': '1',
-    'force-e-mode': true, 'power-module-level': '1', 'layout-storage-count': '3', 'rate-unit': 'day',
+    'force-e-mode': true, 'power-module-level': '1', 'layout-storage-count': '3', 'layout-whole': false,
+    'rate-unit': 'day', goalTarget: 'season_points', 'target-amount': '123', 'current-amount': '5',
 };
 async function load(raw) {
     await page.locator('#setup-import-code').click();
@@ -71,6 +72,9 @@ try {
     assert.equal((await config()).roster[0].abilities.Ice, 2);
     assert.equal((await config()).facilityTiers.Mine[0].count, 2);
     assert.equal((await config())['force-e-mode'], true);
+    assert.equal((await config()).goalTarget, 'season_points');
+    assert.equal((await config())['layout-whole'], false);
+    assert.equal((await config())['target-amount'], '123');
     assert.deepEqual((await config()).skippedRecipes, ['quick_potato']);
     assert.equal(await page.locator('#results-section').isVisible(), false, 'Import must not calculate');
     await page.reload();
@@ -110,7 +114,14 @@ try {
     const linked = { ...setup, 'mode-simple': true, 'mode-advanced': false, 'home-level': '10',
         'aniimo-best': true, 'aniimo-custom': false, 'force-e-mode': false };
     const savedBeforeLink = await config();
+    await page.goto(base + '#config=v99.invalid');
+    await page.waitForFunction(() => document.getElementById('setup-share-hint').textContent.includes('could not be loaded'));
+    assert.deepEqual(await config(), savedBeforeLink);
     await page.goto(await createShareUrl(base, linked));
+    await page.waitForFunction(() => document.getElementById('setup-share-hint').textContent.includes('Shared setup loaded'));
+    assert.equal(await page.locator('#home-level').inputValue(), '10');
+    assert.deepEqual(await config(), savedBeforeLink);
+    await page.reload();
     await page.waitForFunction(() => document.getElementById('setup-share-hint').textContent.includes('Shared setup loaded'));
     assert.equal(await page.locator('#home-level').inputValue(), '10');
     assert.deepEqual(await config(), savedBeforeLink);
@@ -132,12 +143,14 @@ try {
     assert.equal(await page.locator('#error-message').isVisible(), false);
     // Import another setup after a solve, then switch modes: no old plan may reappear.
     await load(encodeSetupCode({ facilityTiers: {}, 'home-level': '1', 'mode-simple': true, 'mode-advanced': false,
-        'season-on': false, 'force-e-mode': false, 'aniimo-best': false, 'aniimo-minimum': true, 'aniimo-custom': false }));
+        'season-on': false, 'force-e-mode': false, 'aniimo-best': false, 'aniimo-minimum': true,
+        'aniimo-custom': false, goalTarget: 'coins' }));
     assert.equal(await page.locator('#results-section').isVisible(), false);
     await page.locator('label:has(#aniimo-best)').click();
     assert.equal(await page.locator('#aniimo-best').isChecked(), true);
     assert.equal(await page.locator('#results-section').isVisible(), false);
     assert.equal(await page.locator('#season-mutation-plots').inputValue(), '1');
+    assert.equal((await config()).goalTarget, 'coins', 'imported goal must replace the previous plan choice');
     assert.deepEqual((await config()).roster, [], 'partial old setup must not merge with recipient roster');
 
     // Storage denial still permits a reviewed import for this visit.

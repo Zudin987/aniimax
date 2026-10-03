@@ -475,7 +475,7 @@ function showImportedLayout(imported) {
     document.getElementById('imported-layout-card').hidden = false;
 }
 
-function applyImportedSetup(settings) {
+function applyImportedSetup(settings, clearSharedLink = true) {
     // Discard every result/cache so changing Aniimo mode cannot revive a pre-import plan.
     planRunId++;
     stopRanking();
@@ -485,6 +485,9 @@ function applyImportedSetup(settings) {
     rankingsBySetup = {};
     lastPlan = lastPlanInput = lastGoalResult = null;
     lastBestTeam = null;
+    // Goal options belong to the discarded plan. Keep the imported goal preference
+    // until fresh options are created rather than saving the previous plan's choice.
+    document.getElementById('goal-target').replaceChildren();
     document.getElementById('aniimo-count').hidden = true;
     ['aniimo-summary', 'aniimo-abilities', 'aniimo-collapsed-summary'].forEach(id => {
         document.getElementById(id).replaceChildren();
@@ -501,7 +504,11 @@ function applyImportedSetup(settings) {
     applyConfigMode();
     showAniimoSetup();
     rateUnitChosen = true;
-    clearShareHash();
+    if (clearSharedLink) clearShareHash();
+}
+
+function sharedSetupNotice(warnings) {
+    return `Shared setup loaded. Review it before calculating. Your previous saved values are kept until you edit this setup. ${warnings.join(' ')}`;
 }
 
 function attachSetupShareHandlers() {
@@ -576,6 +583,24 @@ function attachSetupShareHandlers() {
     });
     document.getElementById('imported-layout-close').addEventListener('click', () => {
         document.getElementById('imported-layout-card').hidden = true;
+    });
+    // Navigating to a link for this already-open page only changes its fragment;
+    // it does not run DOMContentLoaded again. Review that setup without auto-saving it.
+    window.addEventListener('hashchange', async () => {
+        const hash = window.location.hash;
+        try {
+            const shared = await readShareHash(hash);
+            if (!shared || hash !== window.location.hash) return;
+            if (document.getElementById('optimize-btn').disabled) {
+                throw new Error('Wait for the current calculation to finish, then open the link again');
+            }
+            const { settings, warnings } = normalizeSetupSettings(shared, defaultConfigData);
+            applyImportedSetup(settings, false);
+            hint.textContent = sharedSetupNotice(warnings);
+        } catch (e) {
+            if (hash !== window.location.hash) return;
+            hint.textContent = `This shared link could not be loaded: ${e.message}. Your current setup was kept.`;
+        }
     });
 }
 
@@ -4578,7 +4603,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (shared) {
             const { settings, warnings } = normalizeSetupSettings(shared, defaultConfigData);
             savedData = settings;
-            shareNotice = `Shared setup loaded. Review it before calculating. Your previous saved values are kept until you edit this setup. ${warnings.join(' ')}`;
+            shareNotice = sharedSetupNotice(warnings);
         }
     } catch (e) {
         shareNotice = `This shared link is invalid: ${e.message}. Your saved setup was kept.`;
