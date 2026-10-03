@@ -84,7 +84,8 @@ try {
     await page.locator('#setup-import-cancel').click();
 
     // Review explicit conflict, exact 768 cap, unlimited cap and no reserve.
-    await page.locator('#aniimo-best').check();
+    await page.locator('label:has(#aniimo-best)').click();
+    assert.equal(await page.locator('#aniimo-best').isChecked(), true);
     await page.locator('#season-mutation-plots').fill('2');
     assert.match(await page.locator('#season-budget-note').innerText(), /Budget conflict.*768/);
     await page.locator('#season-wheat-budget').fill('768');
@@ -133,7 +134,8 @@ try {
     await load(encodeSetupCode({ facilityTiers: {}, 'home-level': '1', 'mode-simple': true, 'mode-advanced': false,
         'season-on': false, 'force-e-mode': false, 'aniimo-best': false, 'aniimo-minimum': true, 'aniimo-custom': false }));
     assert.equal(await page.locator('#results-section').isVisible(), false);
-    await page.locator('#aniimo-best').check();
+    await page.locator('label:has(#aniimo-best)').click();
+    assert.equal(await page.locator('#aniimo-best').isChecked(), true);
     assert.equal(await page.locator('#results-section').isVisible(), false);
     assert.equal(await page.locator('#season-mutation-plots').inputValue(), '1');
     assert.deepEqual((await config()).roster, [], 'partial old setup must not merge with recipient roster');
