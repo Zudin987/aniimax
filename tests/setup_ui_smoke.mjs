@@ -126,7 +126,7 @@ try {
     assert.equal(await page.locator('#home-level').inputValue(), '10');
     assert.deepEqual(await config(), savedBeforeLink);
     await page.locator('#season-mutation-plots').fill('2');
-    assert.equal(new URL(page.url()).hash, '');
+    assert.equal(await page.evaluate(() => window.location.hash), '');
     assert.equal((await config())['season-mutation-plots'], '2');
     await page.locator('#season-mutation-plots').fill('1');
     await mkdir(new URL('../test-results/', import.meta.url), { recursive: true });
