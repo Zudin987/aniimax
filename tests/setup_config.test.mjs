@@ -16,7 +16,7 @@ const input = {
     ...defaults, 'home-level': '13', 'mode-simple': false, 'mode-advanced': true,
     'aniimo-best': false, 'aniimo-custom': true,
     facilityTiers: { Mine: [{ count: 4, level: 3 }, { count: 3, level: 4 }] },
-    roster: [{ name: 'Nimbi 雲 ✓', count: 2, abilities: { Leisure: 4, Ice: 2, Light: 1 },
+    roster: [{ name: 'Nimbi 雲 ✓', family: 'Nimbi', count: 2, abilities: { Leisure: 4, Ice: 2, Light: 1 },
         personalities: ['Instinctive', 'Nimble', 'Faithful', 'Playful'] }],
     skippedRecipes: ['quick_potato'], unlockedSpecial: ['rose_shortbread'],
     priorities: [{ target: 'season_points', on: true }, { target: 'coins', on: true }],
@@ -65,9 +65,21 @@ test('invalid structures, non-finite values and conflicting modes are rejected b
         { ...input, facilityTiers: { Mine: [{ count: -2, level: 1 }] } },
         { ...input, levelUpStock: { wood_block: 'Infinity' } },
         { ...input, roster: [{ count: 0, abilities: { Earth: 1 } }] },
+        { ...input, roster: [{ count: 1, family: 'Nimbi" onclick="bad()', abilities: { Leisure: 4 } }] },
         { ...input, priorities: [{ target: 'coins', on: true }, { target: 'coins', on: true }] }]) {
         assert.throws(() => normalizeSetupSettings(bad, defaults));
     }
+});
+
+test('older Leisure rosters load without guessing family from a nickname or ability', () => {
+    const old = { ...input, roster: input.roster.map(({ family, ...member }) => member) };
+    const { settings, warnings } = normalizeSetupSettings(old, defaults);
+    assert.equal(settings.roster[0].name, 'Nimbi 雲 ✓');
+    assert.equal(settings.roster[0].family, undefined);
+    assert.match(warnings.join(' '), /Review Leisure Aniimo families/);
+    assert.equal(normalizeSetupSettings(input, defaults).warnings.length, 0);
+    const cleared = normalizeSetupSettings({ ...input, roster: [{ ...input.roster[0], family: '' }] }, defaults);
+    assert.equal(cleared.settings.roster[0].family, '');
 });
 
 test('unknown fields and prototype keys are ignored with compatibility feedback', () => {

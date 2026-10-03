@@ -1874,6 +1874,10 @@ pub fn check_plan(
             let recipe = all.get(name.as_str()).ok_or(format!("unknown recipe {name}"))?;
             let Some(member) = recipe.crew else { continue };
             let slot = busy.get_mut(member).ok_or(format!("{name} is worked by roster member {member}, who isn't there"))?;
+            if !crew.members[member].can_work_at(&recipe.facility) {
+                return Err(format!("{name} at {} requires the {} family, but roster member {member} has another or unspecified family",
+                    recipe.facility, crate::models::facility_family(&recipe.facility).unwrap_or("required")));
+            }
             *slot += if crew.residents.contains(&recipe.facility) {
                 plan.units.get(name).copied().unwrap_or(0) as f64
             } else {

@@ -1,5 +1,5 @@
 // Validate portable settings before touching the form or the browser's saved setup.
-import { FACILITIES, MAX_HOME_LEVEL, PERSONALITY_PAIRS } from './facility-config.js';
+import { FACILITIES, MAX_HOME_LEVEL, PERSONALITY_PAIRS, ANIIMO_FAMILIES } from './facility-config.js';
 
 const BOOL_FIELDS = [
     'strategy-level-up', 'strategy-priorities', 'force-e-mode', 'mode-simple', 'mode-advanced',
@@ -134,7 +134,14 @@ export function normalizeSetupSettings(input, defaults = {}) {
         settings.roster = data.roster.map(member => {
             if (!record(member) || (member.name !== undefined &&
                 (typeof member.name !== 'string' || member.name.length > 200))) throw new Error('Invalid Aniimo name');
-            return { name: member.name || '', count: number(member.count, 'Aniimo count', 1, 1000, true),
+            if (member.family != null && member.family !== '' && !ANIIMO_FAMILIES.includes(member.family)) {
+                throw new Error('Unsupported Aniimo family. Choose Other / unspecified or a listed family.');
+            }
+            if (member.abilities?.Leisure && !member.family) {
+                warnings.push('Review Leisure Aniimo families: older or unspecified entries cannot work family-specific stations until you choose their family.');
+            }
+            return { name: member.name || '', ...(own(member, 'family') ? { family: member.family || '' } : {}),
+                count: number(member.count, 'Aniimo count', 1, 1000, true),
                 abilities: abilities(member.abilities), personalities: PERSONALITY_PAIRS.map((pair, i) =>
                     pair.names.includes(member.personalities?.[i]) ? member.personalities[i] : pair.names[0]) };
         });

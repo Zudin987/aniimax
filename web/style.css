@@ -2935,6 +2935,24 @@ tr:hover .skip-row,
     font-size: 0.7rem;
 }
 
+.roster-family-label {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+}
+
+.roster-family {
+    max-width: 100%;
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.25rem 0.4rem;
+}
+
 .roster-add-ability {
     background: transparent;
     color: var(--text-muted);

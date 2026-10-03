@@ -10,6 +10,8 @@ assert.equal(aniimoTeamCount({ coin_items: [row('Claw Game Cooker', 'Fire', 0.4)
     'Compatible personalities can share one worker, plus the hauler');
 assert.equal(aniimoTeamCount({ coin_items: [row('Claw Game Cooker', 'Fire', 0.4), row('Blazing Stove', 'Fire', 0.3)] }), 3,
     'Opposite personalities require separate workers');
+assert.equal(aniimoTeamCount({ coin_items: [row('Nimbus Bed', 'Leisure', 0.4), row('Starfall Hammock', 'Leisure', 0.3)] }), 3,
+    'Compatible personalities cannot merge Nimbi and Celestis families');
 assert.equal(aniimoTeamCount({ coin_items: [], generator_tiers: [[1, 1], [3, 2]] }), 4,
     'Every active generator needs its own resident, plus the hauler');
 assert.equal(aniimoTeamCount({ coin_items: [{ crew: 0, status: 'producing', busy_units: 0.1, facility_count: 1 }],

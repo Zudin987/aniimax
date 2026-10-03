@@ -792,6 +792,8 @@ pub struct JsRoster {
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct JsRosterAniimo {
     pub count: u32,
+    #[serde(default)]
+    pub family: Option<String>,
     pub abilities: std::collections::BTreeMap<String, u32>,
     #[serde(default)]
     pub personalities: Vec<String>,
@@ -805,6 +807,7 @@ impl JsRoster {
                 .iter()
                 .map(|m| crate::models::RosterAniimo {
                     count: m.count,
+                    family: m.family.clone(),
                     abilities: m.abilities.clone(),
                     personalities: m.personalities.clone(),
                 })
@@ -1710,7 +1713,11 @@ impl PreparedInput {
                 let worker = self.requirements.worker_for_at(&recipe.name, &recipe.facility, setup);
                 work.push(crate::exact::AniimoWork {
                     recipe: recipe.name.clone(),
-                    group: format!("{ability}:{}:{}", worker.suitability,
+                    // A Nimbi cannot cover a Celestis job, regardless of its Leisure level
+                    // or personalities. Keep family pools separate in staffing refinement.
+                    group: format!("{ability}{}:{}:{}",
+                        crate::models::facility_family(&recipe.facility).map(|f| format!("/{f}")).unwrap_or_default(),
+                        worker.suitability,
                         if worker.personality_bonus {
                             crate::models::facility_personality(&recipe.facility).unwrap_or(&recipe.facility)
                         } else { "" }),
@@ -2087,6 +2094,8 @@ struct RecipeInfo {
     /// The Aniimo ability this recipe uses and the lowest ability level that can run it; `None`
     /// for crops and trees.
     aniimo: Option<(String, u32)>,
+    /// A specific Aniimo family required by the station, in addition to its ability.
+    family: Option<String>,
     /// `false` if the recipe's numbers haven't been checked in game yet (see
     /// `data/unverified.csv`).
     verified: bool,
@@ -2130,6 +2139,7 @@ pub fn get_all_items() -> String {
             module_requirement: item.module_requirement.clone(),
             byproduct: item.byproduct.clone(),
             aniimo: requirements.get(&item.name).map(|(ability, level)| (ability.to_string(), level)),
+            family: crate::models::facility_family(&item.facility).map(str::to_string),
             verified: !unverified.iter().any(|(name, facility)| *name == item.name && *facility == item.facility),
             jobs: grower_steps.get(&item.name).iter().map(|s| (s.step.clone(), s.ability.clone(), s.min_level)).collect(),
             environment: item.environment.clone(),
@@ -2145,6 +2155,31 @@ pub fn get_all_items() -> String {
 #[cfg(test)]
 mod tests {
     use super::{embedded_aniimo_requirements, embedded_grower_steps, get_embedded_items};
+
+    #[test]
+    fn family_metadata_roster_compatibility_and_staffing_pools() {
+        let base = serde_json::json!({ "aniimo": "roster", "roster": { "members": [{
+            "count": 1, "abilities": { "Leisure": 4 }, "personalities": [] }] } });
+        let old: super::JsPlanInput = serde_json::from_value(base.clone()).unwrap();
+        let old_crew = old.roster.unwrap().crew();
+        assert!(old_crew.members[0].family.is_none());
+        assert!(!old_crew.members[0].can_work_at("Nimbus Bed"));
+        let mut new = base;
+        new["roster"]["members"][0]["family"] = "Nimbi".into();
+        let parsed: super::JsPlanInput = serde_json::from_value(new).unwrap();
+        assert!(parsed.roster.unwrap().crew().members[0].can_work_at("Nimbus Bed"));
+        let recipes: serde_json::Value = serde_json::from_str(&super::get_all_items()).unwrap();
+        let star = recipes.as_array().unwrap().iter().find(|r| r["name"] == "star").unwrap();
+        assert_eq!(star["family"], "Celestis");
+        assert_eq!(star["verified"], true);
+        let prepared = super::PreparedInput::from_json(r#"{"aniimo":"best"}"#).unwrap();
+        let work = prepared.aniimo_work();
+        let wool = work.iter().find(|w| w.recipe == "wool").unwrap();
+        let star = work.iter().find(|w| w.recipe == "star").unwrap();
+        assert!(wool.group.starts_with("Leisure/Nimbi:"), "{}", wool.group);
+        assert!(star.group.starts_with("Leisure/Celestis:"), "{}", star.group);
+        assert_ne!(wool.group.split(':').next(), star.group.split(':').next());
+    }
 
     #[test]
     fn harvest_defaults_fit_a_600_wheat_daily_cap() {

@@ -61,7 +61,7 @@
                             <select id="home-level"></select>
                         </div>
                     </div>
-                    <p class="hint">Assumes you've built and upgraded everything your RV level allows.</p>
+                    <p class="hint">Assumes you've built and upgraded everything your RV level allows, including Toolkit module upgrades. If you have not purchased an upgrade, use Advanced and enter the module levels you own.</p>
                     <details class="explain simple-details">
                         <summary id="simple-summary-title">Facilities and modules</summary>
                         <div id="simple-summary"></div>
@@ -91,7 +91,7 @@
                     <div class="facilities-container" id="facilities-grid"></div>
 
                     <h3>Item Upgrade Modules</h3>
-                    <p class="hint">Set the level for each upgrade module you have unlocked (0 = not unlocked).</p>
+                    <p class="hint">Enter the module levels you have actually purchased and upgraded with Toolkits (0 = not owned). Reaching an RV level only makes an upgrade available. Simple mode assumes every available upgrade is owned.</p>
 
                     <div class="modules-grid">
                         <div class="module-card">
@@ -119,7 +119,7 @@
                         </div>
 
                         <div class="module-card">
-                            <h4>Crafting Module <span class="info-icon" data-tooltip="Lv.1: Premium River-Washed Stones&#10;Lv.2: Premium Rose Freshener&#10;Lv.3: Advanced Lemon Incense&#10;Lv.4: Advanced Wind Chime&#10;Lv.5: Premium Soap&#10;Lv.6: Advanced Gemstone Dust&#10;Lv.7: Premium Mixed Perfume">?</span></h4>
+                            <h4>Crafting Module <span class="info-icon" data-tooltip="Lv.1: Premium River-Washed Stones&#10;Lv.2: Premium Rose Freshener&#10;Lv.3: Advanced Lemon Incense&#10;Lv.4: Premium Wind Chime&#10;Lv.5: Premium Soap&#10;Lv.6: Premium Gemstone Dust&#10;Lv.7: Premium Mixed Perfume">?</span></h4>
                             <div class="input-field">
                                 <label for="crafting-module-level">Level</label>
                                 <input type="number" id="crafting-module-level" value="0" min="0" max="10">
@@ -201,7 +201,7 @@
                             </div>
                         </div>
                         <p class="harvest-mutation-note" id="season-budget-note" role="status" aria-live="polite"></p>
-                        <p class="hint small">Mutation outcomes are random. This reserve creates attempts; it does not predict mutation rewards. Turn on Harvest Moon Points under Priorities to favor event points.</p>
+                        <p class="hint small">Mutation outcomes are random. Your Plant Research Module unlocks mutation types and improves their chances; this reserve creates attempts and does not predict mutation rewards. Turn on Harvest Moon Points under Priorities to favor event points.</p>
                         <p class="assume-title">Recipe Notes</p>
                         <div class="special-grid" id="season-notes"></div>
                     </div>
@@ -283,6 +283,7 @@
                         <div class="level-up-card" id="level-up-card" style="display: none;">
                             <span class="summary-label" id="level-up-label">Level-Up</span>
                             <div class="summary-value" id="level-up-time">-</div>
+                            <p class="hint small" id="level-up-prerequisites"></p>
                             <div id="level-up-lines"></div>
                         </div>
                         <div id="rate-block">
@@ -362,6 +363,7 @@
                                 <span class="layout-sim" id="layout-sim" hidden><span id="layout-clock">0h 00m</span><button type="button" class="toggle-button small" id="layout-replay">Replay</button></span>
                             </span>
                         </div>
+                        <p class="hint small" id="layout-storage-hint"></p>
                         <p class="hint small layout-share-hint" id="layout-share-hint">Layout-only codes share this placement, not your calculator settings. Use the setup-code buttons at the top to share/import settings. These are not the game's server-side 8-character Combo Codes.</p>
                         <div class="layout-diagram" id="layout-diagram"></div>
                     </div>

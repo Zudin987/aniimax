@@ -2,8 +2,8 @@
 
 import {
     FACILITIES, FACILITY_CATEGORIES, FACILITY_CATEGORY_BY_NAME, FACILITY_FOOTPRINTS, FACILITY_OUTPUT_LIMITS, HOMELAND_PLOTS, HOMELAND_PLOT_SIZE,
-    MAX_HOME_LEVEL, ANIIMO_MAX, simpleSetup,
-    LEVEL_UP_COSTS, LEVEL_UP_CHAINS, SPECIAL_RECIPES, SEASON, ANIIPOD_TIERS, PERSONALITY_PAIRS, personalityLetter, opposedPersonality,
+    MAX_HOME_LEVEL, ANIIMO_MAX, ANIIMO_FAMILIES, STORAGE_PLACEMENT_LIMITS, simpleSetup,
+    LEVEL_UP_COSTS, LEVEL_UP_TIMERS, LEVEL_UP_CHAINS, SPECIAL_RECIPES, SEASON, ANIIPOD_TIERS, PERSONALITY_PAIRS, personalityLetter, opposedPersonality,
 } from './facility-config.js';
 import {
     encodeLayoutCode, encodeSetupCode, readSetupImport,
@@ -631,6 +631,7 @@ function loadInputsFromStorage(data) {
             .filter(a => a && typeof a === 'object' && a.abilities && typeof a.abilities === 'object')
             .map(a => ({
                 name: typeof a.name === 'string' ? a.name : '',
+                family: ANIIMO_FAMILIES.includes(a.family) ? a.family : '',
                 count: Math.max(1, Math.round(Number(a.count)) || 1),
                 abilities: Object.fromEntries(Object.entries(a.abilities)
                     .filter(([ability, level]) => ABILITY_BY_NAME.has(ability) && Number.isInteger(Number(level)) && level >= 1 && level <= 4)
@@ -1472,6 +1473,12 @@ function renderHomelandLayout(plan) {
     const { pieces, unplaced } = homelandPieces(plan, lastPlanInput);
     const homeLevel = layoutHomeLevel();
     const cells = homelandPlots().filter(p => p.number <= homeLevel);
+    const requestedStorages = Math.max(1, Math.min(24, Math.round(numberOrDefault(document.getElementById('layout-storage-count').value, 2))));
+    const storageLimit = STORAGE_PLACEMENT_LIMITS[homeLevel];
+    const storageCount = Math.min(requestedStorages, storageLimit || 24);
+    document.getElementById('layout-storage-hint').textContent = storageLimit
+        ? `RV ${homeLevel} allows at most ${storageLimit} Storage Units.${requestedStorages > storageLimit ? ` This layout uses ${storageCount} of the ${requestedStorages} requested.` : ''}`
+        : 'Enter the number you can place in game. Storage Unit caps at this RV level have not been verified.';
     if (layoutWorker) layoutWorker.terminate();
     layoutWorker = new Worker(WORKER_URL.replace('worker.js', 'layout-worker.js'), { type: 'module' });
     layoutWorker.onmessage = (event) => {
@@ -1515,7 +1522,7 @@ function renderHomelandLayout(plan) {
     layoutWorker.postMessage({
         pieces,
         cells: cells.map(({ x, y, w, h }) => ({ x, y, w, h })),
-        storageCount: Math.max(1, Math.min(24, Math.round(numberOrDefault(document.getElementById('layout-storage-count').value, 2)))),
+        storageCount,
         generatorCount: plan.generators_used || 0,
     });
 }
@@ -2021,8 +2028,8 @@ let roster = [];
 // The Best plan's team, to start a roster from (see `renderAniimoSummary`).
 let lastBestTeam = null;
 
-function newRosterAniimo(abilities = {}, personalities = null) {
-    return { name: '', count: 1, abilities, personalities: personalities || PERSONALITY_PAIRS.map(pair => pair.names[0]) };
+function newRosterAniimo(abilities = {}, personalities = null, family = '') {
+    return { name: '', family, count: 1, abilities, personalities: personalities || PERSONALITY_PAIRS.map(pair => pair.names[0]) };
 }
 
 // Facilities whose Aniimo lives there: every Aniimo Materials facility.
@@ -2031,7 +2038,7 @@ const RESIDENT_FACILITIES = new Set(FACILITIES.filter(f => f.category === 'Aniim
 // The roster for the solver (see `JsRoster` in wasm.rs).
 function rosterPayload() {
     return {
-        members: roster.map(a => ({ count: a.count, abilities: a.abilities, personalities: a.personalities })),
+        members: roster.map(a => ({ count: a.count, family: a.family || null, abilities: a.abilities, personalities: a.personalities })),
         residents: [...RESIDENT_FACILITIES],
         environment: ENVIRONMENT_BUILDING_ABILITY,
         personalities: Object.fromEntries(FACILITIES.filter(f => f.personality).map(f => [f.name, f.personality])),
@@ -2044,7 +2051,7 @@ const escapeText = text => String(text).replace(/[&<>"]/g, c => ({ '&': '&amp;',
 function rosterLabel(aniimo, i) {
     if (aniimo.name?.trim()) return escapeText(aniimo.name.trim());
     const abilities = Object.entries(aniimo.abilities).map(([ability, level]) => `${ability} ${level}`).join(', ');
-    return abilities || `Aniimo ${i + 1}`;
+    return `${aniimo.family ? `${aniimo.family} · ` : ''}${abilities || `Aniimo ${i + 1}`}`;
 }
 
 function renderRoster() {
@@ -2066,11 +2073,18 @@ function renderRoster() {
                     <span class="roster-count" title="How many you have that are alike"><button type="button" data-count="${i}|-1" aria-label="One fewer">−</button><span>×${aniimo.count}</span><button type="button" data-count="${i}|1" aria-label="One more">+</button></span>
                     <button type="button" class="roster-x" data-remove="${i}" aria-label="Remove this Aniimo" title="Remove">✕</button>
                 </div>
+                <label class="roster-family-label">Family
+                    <select class="roster-family" data-family="${i}" aria-label="Aniimo family">
+                        <option value="">Other / unspecified</option>
+                        ${ANIIMO_FAMILIES.map(family => `<option value="${family}"${aniimo.family === family ? ' selected' : ''}>${family}</option>`).join('')}
+                    </select>
+                </label>
                 <div class="roster-abilities">${abilities}${add}</div>
                 <div class="roster-personalities">${personalities}</div>
             </div>`;
     }).join('');
     editor.innerHTML = `${cards || '<p class="hint small">No Aniimo yet. Add the ones you have, or start from the Best plan\'s team.</p>'}
+        <p class="hint small">Family matters for Leisure stations: Susuta → Sandcastle, Dewy → Dewy House, Nimbi → Nimbus Bed, Celestis → Starfall Hammock. Choose the family for evolved Aniimo too. Other / unspecified can work ordinary jobs, but cannot staff these four stations.</p>
         <div class="roster-actions">
             <button type="button" class="skip-add-btn" data-roster="add">+ Add Aniimo</button>
             ${lastBestTeam?.length ? '<button type="button" class="skip-add-btn" data-roster="from-best">Start from the Best team</button>' : ''}
@@ -2129,9 +2143,9 @@ function attachRosterHandlers() {
             const cards = new Map();
             lastBestTeam.forEach(g => {
                 const personalities = PERSONALITY_PAIRS.map(pair => pair.names.find(name => g.personalities?.has(name)) || pair.names[0]);
-                const key = `${g.ability}|${g.level}|${personalities.join()}`;
+                const key = `${g.ability}|${g.level}|${personalities.join()}|${g.family || ''}`;
                 if (cards.has(key)) cards.get(key).count += g.count;
-                else cards.set(key, { ...newRosterAniimo({ [g.ability]: g.level }, personalities), count: g.count });
+                else cards.set(key, { ...newRosterAniimo({ [g.ability]: g.level }, personalities, g.family || ''), count: g.count });
             });
             roster = [...cards.values()];
         } else {
@@ -2140,7 +2154,7 @@ function attachRosterHandlers() {
         rosterChanged();
     });
     editor.addEventListener('change', (e) => {
-        const { level, personality, add, name } = e.target.dataset;
+        const { level, personality, add, name, family } = e.target.dataset;
         if (level) {
             const [i, ability] = level.split('|');
             roster[Number(i)].abilities[ability] = Number(e.target.value);
@@ -2150,6 +2164,8 @@ function attachRosterHandlers() {
         } else if (add) {
             if (!e.target.value) return;
             roster[Number(add)].abilities[e.target.value] = 1;
+        } else if (family !== undefined) {
+            roster[Number(family)].family = e.target.value;
         } else if (name !== undefined) {
             roster[Number(name)].name = e.target.value;
             saveInputsToStorage();
@@ -2478,6 +2494,9 @@ const ITEM_NAMES = {
     premium_river_washed_stones: 'Premium River-Washed Stones',
     sugar_roasted_chestnuts: 'Sugar-Roasted Chestnuts',
     flowers_in_a_bottle: 'Flowers in a Bottle',
+    // Keep old recipe IDs for saved settings and share codes; use current in-game names.
+    advanced_wind_chime: 'Premium Wind Chime',
+    advanced_gemstone_dust: 'Premium Gemstone Dust',
 };
 
 function isLevelUpStrategy() {
@@ -2764,7 +2783,10 @@ function renderLevelUp(plan) {
     const label = document.getElementById('level-up-label');
     const time = document.getElementById('level-up-time');
     const lines = document.getElementById('level-up-lines');
-    label.textContent = `RV ${context.target} level-up`;
+    label.textContent = `Resources for RV ${context.target}`;
+    const timer = LEVEL_UP_TIMERS[context.target];
+    document.getElementById('level-up-prerequisites').textContent =
+        `This is time to afford the upgrade. Meet placement, habitability, title and quest requirements in game.${timer ? ` RV ${context.target} then has a ${formatDuration(timer)} upgrade timer after you start it.` : ''}`;
     const report = plan.level_up;
     if (context.unavailable) {
         time.textContent = '-';
@@ -3175,11 +3197,11 @@ function abilityTag(name) {
 
 // A colored circle with the Aniimo level in it, for the facility plan's Aniimo column; the
 // tooltip has the ability, level and personality.
-function abilityDot(name, level, note) {
+function abilityDot(name, level, note, bonus = !!note) {
     const a = ABILITY_BY_NAME.get(name);
     const color = a ? a.color : '#888888';
     const tip = `${name} Lv.${level}${note ? ` · ${note}` : ''}`;
-    return `<span class="ability-dot${a && a.dark ? ' dark' : ''}${note ? ' bonus' : ''}" style="--ability:${color}" title="${tip}" aria-label="${tip}">${level}</span>`;
+    return `<span class="ability-dot${a && a.dark ? ' dark' : ''}${bonus ? ' bonus' : ''}" style="--ability:${color}" title="${tip}" aria-label="${tip}">${level}</span>`;
 }
 
 function aniimoLabel(step) {
@@ -3196,20 +3218,24 @@ function aniimoLabel(step) {
         const personality = FACILITIES.find(f => f.name === step.facility)?.personality;
         note = `${personality ? `${personality} personality` : 'matching personality'} (+20% speed)`;
     }
-    return `<span class="ability-dots">${abilityDot(a.ability, a.level, note)}</span>`;
+    const family = FACILITIES.find(f => f.name === step.facility)?.family;
+    if (family) note = `${family} family${note ? ` · ${note}` : ''}`;
+    return `<span class="ability-dots">${abilityDot(a.ability, a.level, note, a.personality_bonus)}</span>${family ? ` <span class="hint small">${family} family</span>` : ''}`;
 }
 
 // "Fire Lv.4 · Practical": one kind of Aniimo, with the facility's personality when the plan
 // counts on its bonus. `tagged` shows the ability as a colored tag.
 function taskLabel(task, facility, tagged = false) {
     const ability = tagged ? abilityTag(task.ability) : task.ability;
-    if (!task.personality_bonus) return `${ability} Lv.${task.level}`;
+    const family = task.jobs?.length ? null : FACILITIES.find(f => f.name === facility)?.family;
+    const label = `${ability} Lv.${task.level}${family ? ` · ${family} family` : ''}`;
+    if (!task.personality_bonus) return label;
     const personality = FACILITIES.find(f => f.name === facility)?.personality;
-    if (!personality) return `${ability} Lv.${task.level} · matching personality`;
+    if (!personality) return `${label} · matching personality`;
     // The letter the game shows over an Aniimo's portrait, so a player can read a team off the
     // four it carries.
     const letter = personalityLetter(personality);
-    return `${ability} Lv.${task.level} · ${personality}${letter ? ` (${letter})` : ''}`;
+    return `${label} · ${personality}${letter ? ` (${letter})` : ''}`;
 }
 
 function facilityPlanTable(rows) {
@@ -3276,15 +3302,15 @@ function whereText(g) {
 }
 
 // What one Aniimo of a team row has to be: its level, then every personality it carries, each
-// with the letter the game shows. "Lv.4 · Judicious (J), Faithful (F)" is one Aniimo working a
-// Nimbus Bed and a Starfall Hammock, which it can because those never want opposites.
+// with the letter the game shows, and any station's required family. Compatible personalities
+// can share ordinary work, but a Nimbi can never cover a Celestis-only job.
 function aniimoNeeds(g) {
     if (g.environment) return g.label.slice(g.ability.length).trim();
     const personalities = [...g.personalities]
         .sort()
         .map(name => `${name} (${personalityLetter(name)})`)
         .join(', ');
-    return `Lv.${g.level}${personalities ? ` · ${personalities}` : ''}`;
+    return `Lv.${g.level}${g.family ? ` · ${g.family} family` : ''}${personalities ? ` · ${personalities}` : ''}`;
 }
 
 // The Aniimo team the shown plan needs, one row per distinct ability / level / personality.
@@ -3305,7 +3331,8 @@ function renderAniimoSummary(plan) {
                 const personality = task.personality_bonus
                     ? FACILITIES.find(f => f.name === step.facility)?.personality ?? null
                     : null;
-                groups.set(key, { label: key, ability: task.ability, level: task.level, bonus: task.personality_bonus, personality, busy: 0, where: new Map(), jobs: new Map() });
+                const family = task.jobs?.length ? null : FACILITIES.find(f => f.name === step.facility)?.family;
+                groups.set(key, { label: key, family, ability: task.ability, level: task.level, bonus: task.personality_bonus, personality, busy: 0, where: new Map(), jobs: new Map() });
             }
             const g = groups.get(key);
             g.busy += task.busy;
@@ -3404,6 +3431,7 @@ function renderAniimoSummary(plan) {
         // One Aniimo can take another row's work when it has the ability at a high enough level,
         // hours to spare, and nothing on it already wanting the opposite personality.
         const holds = (host, g) => host.ability === g.ability && host.level >= g.level && host.spare >= g.busy - 1e-6
+            && (host.family || null) === (g.family || null)
             && (!g.personality || !host.personalities.has(opposedPersonality(g.personality)));
         rows.forEach(g => {
             // A facility with a resident Aniimo keeps it to itself.
@@ -4477,7 +4505,8 @@ function formatRecipeAniimo(recipe, facility) {
     }
     const [ability, minLevel] = recipe.aniimo;
     const best = `best Lv.${bestAniimoLevel(ability)}${facility.personality ? ' ' + facility.personality : ''}`;
-    return `<span>${abilityTag(ability)} Lv.${minLevel}+<span class="recipe-best">${best}</span></span>`;
+    const family = recipe.family || facility.family;
+    return `<span>${abilityTag(ability)} Lv.${minLevel}+${family ? ` · ${family} family` : ''}<span class="recipe-best">${best}</span></span>`;
 }
 
 // "44 Home Coins", or what a level-up material is for.

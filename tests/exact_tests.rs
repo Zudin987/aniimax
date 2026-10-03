@@ -367,6 +367,7 @@ fn crew_of(members: &[(u32, &[(&str, u32)])]) -> aniimax::models::Crew {
             .iter()
             .map(|(count, abilities)| aniimax::models::RosterAniimo {
                 count: *count,
+                family: None,
                 abilities: abilities.iter().map(|(a, l)| (a.to_string(), *l)).collect(),
                 personalities: Vec::new(),
             })
@@ -472,7 +473,7 @@ fn crew_copies_are_timed_per_member() {
     assert!((original.production_time - copy(1).production_time).abs() < 1e-9);
 }
 
-// A resident facility keeps its Aniimo all day: two Sandcastles need two Leisure Aniimo.
+// A resident facility keeps its Aniimo all day: two Sandcastles need two Susuta-family Aniimo.
 #[test]
 fn crew_residents_take_a_whole_aniimo() {
     if load_items().is_none() {
@@ -486,8 +487,13 @@ fn crew_residents_take_a_whole_aniimo() {
             .map(|(_, &n)| n)
             .sum()
     };
-    let (one, items) = solve_with_crew(&counts, crew_of(&[(1, &[("Leisure", 2)])]));
+    let susuta = |count| {
+        let mut crew = crew_of(&[(count, &[("Leisure", 2)])]);
+        crew.members[0].family = Some("Susuta".into());
+        crew
+    };
+    let (one, items) = solve_with_crew(&counts, susuta(1));
     assert_eq!(sandcastles(&one, &items), 1);
-    let (two, items) = solve_with_crew(&counts, crew_of(&[(2, &[("Leisure", 2)])]));
+    let (two, items) = solve_with_crew(&counts, susuta(2));
     assert_eq!(sandcastles(&two, &items), 2);
 }

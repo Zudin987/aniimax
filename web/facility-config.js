@@ -12,10 +12,10 @@
 // its +20% speed bonus (omitted if not known), shown in the plan's Aniimo recommendations.
 // `unlocks` maps each facility level to the RV (Homeland) level that unlocks it. `counts[i]` is how
 // many of the facility you can place at RV level i + 1; an RV level past the end of the list keeps
-// the last count. Simple mode uses both (see `simpleSetup`). Counts are confirmed in game up to RV
-// level 13 for the Cooling Unit, Sunlamp and Phonolfactory Table, RV level 12 for the Heat
-// Furnace and Simmering Pot and RV level 11 for the rest; past that, Farmland, Woodland and Mine
-// follow the game's pattern and the others keep their last count.
+// the last count. Simple mode uses both (see `simpleSetup`). The 2026-10-03 recording confirms
+// RV13 caps for every production/environment facility selected in its build menu; Crafting Table
+// and Claw Game Cooker retain their earlier evidence. Higher caps are not newly verified by that
+// recording: Farmland, Woodland and Mine follow the game's pattern, others keep their last count.
 //
 // Facilities marked "Not yet verified in game" in their tooltip haven't had their numbers
 // confirmed in game yet.
@@ -45,28 +45,28 @@ export const FACILITIES = [
         tooltip: "Lv.1: Well Water, Quick Well Water&#10;Lv.2: Fresh Water&#10;Lv.3: Quick Fresh Water&#10;Lv.4: Deep Rock Spring Water, Quick Deep Rock Spring Water&#10;Lv.5: Natural Mineral Spring Water, Quick Natural Mineral Spring Water"
     },
     {
-        name: 'Tidewhisper Sandcastle', slug: 'tidewhisper-sandcastle', defaultCount: 0, category: 'Aniimo Materials', hasWorker: true, ability: 'Leisure', personality: 'Judicious',
+        name: 'Tidewhisper Sandcastle', slug: 'tidewhisper-sandcastle', defaultCount: 0, category: 'Aniimo Materials', hasWorker: true, ability: 'Leisure', personality: 'Judicious', family: 'Susuta',
         unlocks: { 1: 5, 2: 8, 3: 13 },
         counts: [0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-        tooltip: "Lv.1: Sea Salt&#10;Lv.2: Quick Sea Salt&#10;Lv.3: Pearl (needs Warm)"
+        tooltip: "Requires a Susuta-family Aniimo with Leisure.&#10;Lv.1: Sea Salt&#10;Lv.2: Quick Sea Salt&#10;Lv.3: Pearl (needs Warm)"
     },
     {
-        name: 'Dewy House', slug: 'dewy-house', defaultCount: 0, category: 'Aniimo Materials', hasWorker: true, ability: 'Leisure', personality: 'Instinctive',
+        name: 'Dewy House', slug: 'dewy-house', defaultCount: 0, category: 'Aniimo Materials', hasWorker: true, ability: 'Leisure', personality: 'Instinctive', family: 'Dewy',
         unlocks: { 1: 6, 2: 11 },
         counts: [0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-        tooltip: "Lv.1: Aromathyst&#10;Lv.2: Quick Aromathyst"
+        tooltip: "Requires a Dewy-family Aniimo with Leisure.&#10;Lv.1: Aromathyst&#10;Lv.2: Quick Aromathyst"
     },
     {
-        name: 'Nimbus Bed', slug: 'nimbus-bed', defaultCount: 0, category: 'Aniimo Materials', hasWorker: true, ability: 'Leisure', personality: 'Judicious',
+        name: 'Nimbus Bed', slug: 'nimbus-bed', defaultCount: 0, category: 'Aniimo Materials', hasWorker: true, ability: 'Leisure', personality: 'Judicious', family: 'Nimbi',
         unlocks: { 1: 10, 2: 13, 3: 16 },
         counts: [0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-        tooltip: "Lv.1: Wool&#10;Lv.2: Quick Wool&#10;Lv.3: Petals"
+        tooltip: "Requires a Nimbi-family Aniimo with Leisure.&#10;Lv.1: Wool&#10;Lv.2: Quick Wool&#10;Lv.3: Petals"
     },
     {
-        name: 'Starfall Hammock', slug: 'starfall-hammock', defaultCount: 0, category: 'Aniimo Materials', hasLevels: false, hasWorker: true, ability: 'Leisure', personality: 'Faithful',
+        name: 'Starfall Hammock', slug: 'starfall-hammock', defaultCount: 0, category: 'Aniimo Materials', hasLevels: false, hasWorker: true, ability: 'Leisure', personality: 'Faithful', family: 'Celestis',
         unlocks: { 1: 12 },
         counts: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-        tooltip: "Star (needs Cool)&#10;Not yet verified in game."
+        tooltip: "Requires a Celestis-family Aniimo with Leisure.&#10;Star (needs Cool)"
     },
     {
         name: 'Floral Windmill', slug: 'floral-windmill', defaultCount: 0, category: 'Aniimo Materials', hasLevels: false, hasWorker: true, ability: 'Leisure', personality: 'Nimble',
@@ -109,7 +109,7 @@ export const FACILITIES = [
         name: 'Crafting Table', slug: 'crafting-table', defaultCount: 1, category: 'Materials Processing', hasWorker: true, ability: 'Artisanship', personality: 'Judicious',
         unlocks: { 1: 3, 2: 5, 3: 7, 4: 9, 5: 12, 6: 15, 7: 18, 8: 20 },
         counts: [0, 0, 1, 1, 1, 1, 1, 1, 1, 2],
-        tooltip: "Lv.1: Wood Sculpture&#10;Lv.2: Bamboo Ware, River-Washed Stones, Premium River-Washed Stones&#10;Lv.3: Rose Freshener, Pottery, Premium Rose Freshener&#10;Lv.4: Bouquet, Shell Ornament, Lavender Sachet&#10;Lv.5: Wind Chime, Star Wish Lantern, Dream Catcher, Advanced Wind Chime&#10;Lv.6: Rubber Duck, Pearl Necklace, Woven Toy, Porcelain&#10;Lv.7: Dye, Gemstone Dust, Flowers in a Bottle, Advanced Gemstone Dust&#10;Lv.8: Doll"
+        tooltip: "Lv.1: Wood Sculpture&#10;Lv.2: Bamboo Ware, River-Washed Stones, Premium River-Washed Stones&#10;Lv.3: Rose Freshener, Pottery, Premium Rose Freshener&#10;Lv.4: Bouquet, Shell Ornament, Lavender Sachet&#10;Lv.5: Wind Chime, Star Wish Lantern, Dream Catcher, Premium Wind Chime&#10;Lv.6: Rubber Duck, Pearl Necklace, Woven Toy, Porcelain&#10;Lv.7: Dye, Gemstone Dust, Flowers in a Bottle, Premium Gemstone Dust&#10;Lv.8: Doll"
     },
     {
         name: 'Claw Game Cooker', slug: 'claw-game-cooker', defaultCount: 1, category: 'Materials Processing', hasWorker: true, ability: 'Fire', personality: 'Practical',
@@ -185,6 +185,13 @@ export const FACILITIES = [
     },
 ];
 
+// Families confirmed by production tooltips; evolved Aniimo keep their family. Other/unset
+// covers ordinary jobs. Do not infer a family from a player's nickname or Leisure ability.
+export const ANIIMO_FAMILIES = FACILITIES.filter(f => f.family).map(f => f.family);
+
+// Max. Placement explicitly shown in the RV13 build menu. Other RV caps are not extrapolated.
+export const STORAGE_PLACEMENT_LIMITS = { 13: 5 };
+
 // Aniipod tiers in Aniipod Maker level order: each level adds a better one for catching Aniimo.
 // The "Most Aniipods" strategy makes only the best tier the player's Maker can reach.
 export const ANIIPOD_TIERS = ['aniipod', 'aniipod_pro', 'aniipod_mega'];
@@ -218,6 +225,11 @@ export const SEASON = {
         { name: 'umbral_sweet_and_spicy_sauce' },
     ],
 };
+
+// Upgrade countdowns visibly shown for targets RV 14–20 in the 2026-10-03 recording.
+// Earlier targets were already upgraded, so their timers are unknown rather than extrapolated.
+export const LEVEL_UP_TIMERS = { 14: 6 * 3600, 15: 7 * 3600, 16: 8 * 3600,
+    17: 9 * 3600, 18: 10 * 3600, 19: 11 * 3600, 20: 12 * 3600 };
 
 // What reaching each RV level costs: coins, plus raw Wood Blocks and Mineral Sand up to RV 6 and
 // one Woodworking Bench item and one Chimney Kiln item from RV 7.
@@ -398,4 +410,3 @@ export function simpleSetup(homeLevel) {
     );
     return { facilities, modules };
 }
-
