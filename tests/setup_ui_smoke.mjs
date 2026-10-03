@@ -36,7 +36,7 @@ const setup = {
     'mode-simple': false, 'mode-advanced': true, 'home-level': '13',
     'strategy-level-up': false, 'strategy-priorities': true,
     'aniimo-best': false, 'aniimo-minimum': false, 'aniimo-custom': true,
-    roster: [{ name: 'Nimbi ✓', count: 1, abilities: { Leisure: 4, Ice: 2, Light: 1 },
+    roster: [{ name: 'Nimbi ✓', family: 'Nimbi', count: 1, abilities: { Leisure: 4, Ice: 2, Light: 1 },
         personalities: ['Instinctive', 'Nimble', 'Faithful', 'Playful'] }],
     aniimoLevels: { Earth: 4 }, levelUpStock: { wood_block: 25 },
     priorities: [{ target: 'season_points', on: true }, { target: 'coins', on: true }],
@@ -57,6 +57,43 @@ try {
     await page.evaluate(({ key, saved }) => localStorage.setItem(key, JSON.stringify(saved)), { key, saved });
     await page.reload();
     await page.waitForFunction(() => document.getElementById('version').textContent.includes('0.16.0'));
+    // Exercise the deployed worker, WASM metadata and exact roster planner together.
+    const evidence = await page.evaluate(async () => {
+        const worker = new Worker('./worker.js', { type: 'module' });
+        let id = 0;
+        const ask = (type, input) => new Promise((resolve, reject) => {
+            const requestId = ++id;
+            const timeout = setTimeout(() => reject(new Error('Evidence worker timed out')), 60_000);
+            worker.onmessage = ({ data }) => {
+                if (data.id !== requestId || data.type === 'progress') return;
+                clearTimeout(timeout);
+                data.ok ? resolve(JSON.parse(data.result)) : reject(new Error(data.error));
+            };
+            worker.onerror = error => { clearTimeout(timeout); reject(new Error(error.message)); };
+            worker.postMessage({ id: requestId, type, ...(input ? { payload: JSON.stringify(input) } : {}) });
+        });
+        try {
+            const items = await ask('get_all_items');
+            const member = family => ({ count: 1, family, abilities: { Leisure: 3 }, personalities: [] });
+            const input = { currency: 'coins', aniimo: 'roster', prioritize_byproducts: false,
+                facilities: { 'Nimbus Bed': [{ count: 1, level: 2 }] }, modules: { resource_detector: 5 },
+                roster: { members: [member('Celestis'), member('Nimbi')], residents: ['Nimbus Bed'] } };
+            const matching = await ask('find_plan', input);
+            const wrong = await ask('find_plan', { ...input,
+                roster: { ...input.roster, members: [member('Celestis')] } });
+            return { star: items.find(item => item.name === 'star'),
+                scales: items.find(item => item.name === 'scales'), matching, wrong };
+        } finally { worker.terminate(); }
+    });
+    assert.equal(evidence.star.family, 'Celestis');
+    assert.equal(evidence.star.verified, true);
+    assert.equal(evidence.scales.verified, false, 'an unseen recipe remains unverified');
+    assert.equal(evidence.matching.success, true);
+    assert.ok(evidence.matching.rate_per_second > 0);
+    assert.equal(evidence.matching.coin_items.find(row => row.status === 'producing').crew, 1,
+        'real WASM must assign Nimbi, rather than another Leisure family');
+    assert.ok(!evidence.wrong.success || !evidence.wrong.coin_items.some(row => row.status === 'producing'),
+        'a Celestis-only roster cannot staff Nimbus Bed');
     assert.equal(await page.locator('#home-level').inputValue(), '2');
     assert.equal(await page.locator('#results-section').isVisible(), false);
     assert.equal(await page.locator('#aniimo-custom').isVisible(), true, 'Aniimo controls must be reviewable before solving');
@@ -69,6 +106,8 @@ try {
     assert.equal(await page.locator('#aniimo-custom').isChecked(), true);
     assert.equal(await page.locator('#roster-editor').isVisible(), true);
     assert.equal(await page.locator('#roster-editor .roster-name').inputValue(), 'Nimbi ✓');
+    assert.equal(await page.locator('#roster-editor .roster-family').inputValue(), 'Nimbi');
+    assert.equal((await config()).roster[0].family, 'Nimbi');
     assert.equal((await config()).roster[0].abilities.Ice, 2);
     assert.equal((await config()).facilityTiers.Mine[0].count, 2);
     assert.equal((await config())['force-e-mode'], true);
@@ -81,11 +120,22 @@ try {
     await page.waitForFunction(() => document.getElementById('version').textContent.includes('0.16.0'));
     await page.locator('#setup-import-code').waitFor();
     assert.equal(await page.locator('#aniimo-custom').isChecked(), true, 'selected Aniimo mode survives reload');
+    assert.equal(await page.locator('#roster-editor .roster-family').inputValue(), 'Nimbi', 'family survives reload');
     const before = await config();
     await load('ANIIMAX2.bad');
     assert.match(await page.locator('#setup-import-error').innerText(), /Could not import/);
     assert.deepEqual(await config(), before, 'invalid import must preserve saved settings');
     await page.locator('#setup-import-cancel').click();
+
+    const older = structuredClone(setup);
+    delete older.roster[0].family;
+    await load(encodeSetupCode(older));
+    assert.match(await page.locator('#setup-share-hint').innerText(), /Review Leisure Aniimo families/);
+    assert.equal(await page.locator('#roster-editor .roster-family').inputValue(), '',
+        'a nickname must not be used to infer family in older codes');
+    assert.equal(await page.locator('#results-section').isVisible(), false);
+    await page.locator('#roster-editor .roster-family').selectOption('Nimbi');
+    assert.equal((await config()).roster[0].family, 'Nimbi', 'reviewed family selection is saved');
 
     // Review explicit conflict, exact 768 cap, unlimited cap and no reserve.
     await page.locator('label:has(#aniimo-best)').click();
@@ -160,13 +210,34 @@ try {
     assert.equal((await config()).goalTarget, 'coins', 'imported goal must replace the previous plan choice');
     assert.deepEqual((await config()).roster, [], 'partial old setup must not merge with recipient roster');
 
+    // A cheap real solve verifies that resource readiness does not claim the RV upgrade is instant.
+    await load(encodeSetupCode({ facilityTiers: { 'Nimbus Bed': [{ count: 1, level: 2 }] },
+        'home-level': '13', 'mode-simple': false, 'mode-advanced': true,
+        'resource-detector-level': '5', 'season-on': false, 'force-e-mode': false,
+        'aniimo-best': false, 'aniimo-minimum': true, 'aniimo-custom': false,
+        'strategy-level-up': true, 'strategy-priorities': false, 'level-up-target': '14',
+        'layout-storage-count': '6',
+        levelUpStock: { coins: 2620000, standard_planks: 1590, sintered_ore_brick: 1060 } }));
+    await page.locator('#optimize-btn').click();
+    await page.waitForFunction(() => !document.getElementById('optimize-btn').disabled, null, { timeout: 120_000 });
+    assert.equal(await page.locator('#error-message').isVisible(), false);
+    assert.equal(await page.locator('#level-up-label').innerText(), 'Resources for RV 14');
+    assert.equal(await page.locator('#level-up-time').innerText(), 'Ready now');
+    assert.match(await page.locator('#level-up-prerequisites').innerText(), /6h.*upgrade timer/);
+    assert.match(await page.locator('#level-up-prerequisites').innerText(), /placement, habitability, title and quest/);
+    assert.match(await page.locator('#layout-storage-hint').innerText(), /RV 13.*at most 5.*uses 5 of the 6/);
+    await page.waitForFunction(() => document.querySelector('#layout-diagram svg'));
+    assert.equal(await page.locator('#layout-diagram .layout-storages > g').count(), 5,
+        'the real layout worker must respect the verified RV13 storage placement limit');
+    assert.equal((await config())['layout-storage-count'], '6', 'a constrained layout preserves the imported preference');
+
     // Storage denial still permits a reviewed import for this visit.
     await page.evaluate(() => { Storage.prototype.setItem = () => { throw new Error('storage unavailable'); }; });
     await load(encodeSetupCode({ ...linked, 'home-level': '11' }));
     assert.equal(await page.locator('#home-level').inputValue(), '11');
     assert.match(await page.locator('#setup-share-hint').innerText(), /saving is unavailable/);
     assert.deepEqual(errors, [], 'browser/WASM should not raise uncaught errors');
-    console.log('Setup UI/WASM smoke passed: pre-plan import/export, full restore, saved mode, invalid/legacy codes, shared links, budget feedback, desktop/mobile and storage denial.');
+    console.log('Setup UI/WASM smoke passed: import/export, family restore and staffing, old codes, shared links, budget feedback, RV upgrade timers, desktop/mobile and storage denial.');
 } catch (error) {
     await mkdir(new URL('../test-results/', import.meta.url), { recursive: true });
     await page.screenshot({ path: 'test-results/setup-failure.png', fullPage: true });

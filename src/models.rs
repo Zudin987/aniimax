@@ -344,17 +344,37 @@ pub fn grid_power_capacity(facilities: &FacilityCounts, modules: &ModuleLevels) 
 /// third (see [`crew_variants`]).
 pub const CREW_SUFFIX: &str = "__by";
 
+/// Family restrictions displayed in the production tooltips in the 2026-10-03 recording.
+/// Leisure ability alone does not qualify an Aniimo for these resident stations.
+/// Floral Windmill's family has not been shown, so no family is guessed for it.
+pub fn facility_family(facility: &str) -> Option<&'static str> {
+    match facility {
+        "Tidewhisper Sandcastle" => Some("Susuta"),
+        "Dewy House" => Some("Dewy"),
+        "Nimbus Bed" => Some("Nimbi"),
+        "Starfall Hammock" => Some("Celestis"),
+        _ => None,
+    }
+}
+
 /// One kind of Aniimo on the player's roster: how many they have that are alike, the homeland
 /// abilities each has with its level (an Aniimo can have several, e.g. Fire 3 and Hauling 3), and
 /// its four personalities, one from each opposed pair.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct RosterAniimo {
     pub count: u32,
+    /// Family, including evolved members of that family. Missing on older saved rosters;
+    /// unspecified members may work ordinary jobs but not known family-restricted stations.
+    pub family: Option<String>,
     pub abilities: std::collections::BTreeMap<String, u32>,
     pub personalities: Vec<String>,
 }
 
 impl RosterAniimo {
+    pub fn can_work_at(&self, facility: &str) -> bool {
+        facility_family(facility).is_none_or(|family| self.family.as_deref() == Some(family))
+    }
+
     /// This Aniimo's level at `ability`, or 0 if it hasn't got it.
     pub fn level(&self, ability: &str) -> u32 {
         self.abilities.get(ability).copied().unwrap_or(0)
@@ -382,6 +402,7 @@ impl Crew {
     /// the facility's personality.
     pub fn worker(&self, member: usize, item: &ProductionItem, requirements: &AniimoRequirements) -> Option<Worker> {
         let aniimo = self.members.get(member)?;
+        if !aniimo.can_work_at(&item.facility) { return None; }
         let (ability, _) = requirements.get(base_item_name(&item.name))?;
         let bonus = has_personality_bonus(&item.facility)
             && self.personalities.get(&item.facility).is_some_and(|p| aniimo.personalities.contains(p));
@@ -423,7 +444,7 @@ pub fn crew_variants(
             (Some(workload), Some((ability, required))) => {
                 let mut fastest = f64::INFINITY;
                 for (member, aniimo) in crew.members.iter().enumerate() {
-                    if aniimo.count == 0 || aniimo.level(ability) < required {
+                    if aniimo.count == 0 || aniimo.level(ability) < required || !aniimo.can_work_at(&item.facility) {
                         continue;
                     }
                     let mut variant = ProductionItem {
@@ -1525,10 +1546,10 @@ impl FacilityCounts {
 /// use aniimax::models::ModuleLevels;
 ///
 /// let modules = ModuleLevels {
-///     ecological_module: 2,  // Unlocks high-speed wheat and willow
-///     kitchen_module: 2,     // Unlocks super wheat flour
-///     resource_detector: 1,   // Unlocks high-speed rock
-///     crafting_module: 1,    // Unlocks advanced wood carving
+///     ecological_module: 2,  // Unlocks Quick Wheat and Quick Bamboo
+///     kitchen_module: 2,     // Unlocks Premium Bread
+///     resource_detector: 1,  // Unlocks Quick Well Water
+///     crafting_module: 1,    // Unlocks Premium River-Washed Stones
 ///     power_module: 0,       // E-Mode still locked in this example
 /// };
 ///
@@ -1536,13 +1557,13 @@ impl FacilityCounts {
 /// ```
 #[derive(Debug, Clone, Default)]
 pub struct ModuleLevels {
-    /// Level of Ecological Module (unlocks high-speed wheat at 1, high-speed willow at 2)
+    /// Level of Ecological Module (unlocks Quick Wheat at 1, Quick Bamboo at 2).
     pub ecological_module: u32,
-    /// Level of Kitchen Module (unlocks super wheat flour at 2)
+    /// Level of Kitchen Module (unlocks Premium Bread at 2).
     pub kitchen_module: u32,
-    /// Level of Resource Detector (unlocks high-speed rock at 1)
+    /// Level of Resource Detector (unlocks Quick Well Water at 1).
     pub resource_detector: u32,
-    /// Level of Crafting Module (unlocks advanced wood carving at 1)
+    /// Level of Crafting Module (unlocks Premium River-Washed Stones at 1).
     pub crafting_module: u32,
     /// Level of Power Module. From level 1, Crackle Generators can run E-Mode.
     pub power_module: u32,

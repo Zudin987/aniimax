@@ -411,6 +411,7 @@ fn lightning_crew(level: u32) -> Crew {
     Crew {
         members: vec![RosterAniimo {
             count: 1,
+            family: None,
             abilities: [("Lightning".to_string(), level)].into_iter().collect(),
             personalities: Vec::new(),
         }],
@@ -508,6 +509,7 @@ fn grower_jobs_consume_custom_roster_time() {
     counts.set_crew(Crew {
         members: vec![RosterAniimo {
             count: 1,
+            family: None,
             abilities: [("Earth".to_string(), 1)].into_iter().collect(),
             personalities: Vec::new(),
         }],

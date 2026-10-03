@@ -18,9 +18,11 @@ export function aniimoTeamCount(plan, input = {}) {
     const groups = new Map();
     for (const row of plan.coin_items || []) {
         for (const task of row.aniimo_tasks || []) {
-            const personality = task.personality_bonus ? FACILITIES.find(f => f.name === row.facility)?.personality : null;
-            const label = `${task.ability} Lv.${task.level}${personality ? ` · ${personality} (${personalityLetter(personality)})` : ''}`;
-            if (!groups.has(label)) groups.set(label, { label, ability: task.ability, level: task.level, bonus: task.personality_bonus, personality, busy: 0 });
+            const facility = FACILITIES.find(f => f.name === row.facility);
+            const family = task.jobs?.length ? null : facility?.family;
+            const personality = task.personality_bonus ? facility?.personality : null;
+            const label = `${task.ability} Lv.${task.level}${family ? ` · ${family} family` : ''}${personality ? ` · ${personality} (${personalityLetter(personality)})` : ''}`;
+            if (!groups.has(label)) groups.set(label, { label, family, ability: task.ability, level: task.level, bonus: task.personality_bonus, personality, busy: 0 });
             groups.get(label).busy += task.busy;
         }
     }
@@ -50,6 +52,7 @@ export function aniimoTeamCount(plan, input = {}) {
     const kept = [];
     for (const row of rows) {
         const host = row.environment ? null : kept.find(k => k.ability === row.ability && k.level >= row.level
+            && (k.family || null) === (row.family || null)
             && k.spare >= row.busy - 1e-6 && (!row.personality || !k.personalities.has(opposedPersonality(row.personality))));
         if (host) {
             host.spare -= row.busy;
