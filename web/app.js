@@ -5,6 +5,9 @@ import {
     MAX_HOME_LEVEL, ANIIMO_MAX, simpleSetup,
     LEVEL_UP_COSTS, LEVEL_UP_CHAINS, SPECIAL_RECIPES, SEASON, ANIIPOD_TIERS, PERSONALITY_PAIRS, personalityLetter, opposedPersonality,
 } from './facility-config.js';
+import {
+    aniimaxCodeKind, decodeLayoutCode, decodeSetupCode, encodeLayoutCode, encodeSetupCode,
+} from './share-code.js';
 
 let wasmReady = false;
 
@@ -418,17 +421,82 @@ function initFacilityTiers(data) {
 
 }
 
-function saveInputsToStorage() {
-    const data = { facilityTiers, levelUpStock, skippedRecipes: [...skippedRecipes], unlockedSpecial: [...unlockedSpecial], priorities: priorityOrder, aniimoLevels, roster };
+function currentConfigData() {
+    const data = {
+        facilityTiers,
+        levelUpStock,
+        skippedRecipes: [...skippedRecipes],
+        unlockedSpecial: [...unlockedSpecial],
+        priorities: priorityOrder,
+        aniimoLevels,
+        roster,
+    };
     getPersistedFieldIds().forEach(id => {
         const el = document.getElementById(id);
         if (!el) return;
         data[id] = (el.type === 'checkbox' || el.type === 'radio') ? el.checked : el.value;
     });
+    return data;
+}
+
+function saveInputsToStorage() {
+    const data = currentConfigData();
     try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
     } catch (e) {
         console.warn('Could not save inputs to localStorage:', e);
+    }
+}
+
+function attachSetupShareHandlers() {
+    const hint = document.getElementById('setup-share-hint');
+    document.getElementById('setup-copy-code').addEventListener('click', async () => {
+        const code = encodeSetupCode(currentConfigData());
+        try {
+            await navigator.clipboard.writeText(code);
+            hint.textContent = 'Setup code copied. It includes your calculator inputs, priorities, recipe choices and Aniimo setup, but no account data.';
+        } catch {
+            window.prompt('Copy this Aniimax setup code:', code);
+        }
+    });
+
+    document.getElementById('setup-import-code').addEventListener('click', () => {
+        const raw = window.prompt('Paste an Aniimax setup or layout code:');
+        if (!raw) return;
+        try {
+            const kind = aniimaxCodeKind(raw);
+            if (kind === 'setup') {
+                const imported = migrateSavedConfig(decodeSetupCode(raw));
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(imported));
+                sessionStorage.setItem('aniimax-import-notice', 'Setup imported. Review the values, then click Find the best plan when ready.');
+                window.location.reload();
+                return;
+            }
+            if (kind === 'layout') {
+                const imported = decodeLayoutCode(raw);
+                document.getElementById('imported-layout-summary').textContent =
+                    `RV ${imported.homeLevel} layout · ${(imported.layout.storages || [imported.layout.storage]).length} Storage Unit(s). This is placement-only; import a setup code to reproduce calculator inputs.`;
+                document.getElementById('imported-layout-diagram').innerHTML =
+                    homelandSvg(imported.layout, imported.homeLevel);
+                document.getElementById('imported-layout-card').hidden = false;
+                document.getElementById('imported-layout-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+                hint.textContent = 'Layout code opened below without running the optimizer.';
+                return;
+            }
+            throw new Error('unsupported code version');
+        } catch (error) {
+            window.alert(`That Aniimax code is invalid: ${error.message || error}`);
+        }
+    });
+
+    document.getElementById('imported-layout-close').addEventListener('click', () => {
+        document.getElementById('imported-layout-card').hidden = true;
+    });
+
+    const notice = sessionStorage.getItem('aniimax-import-notice');
+    if (notice) {
+        sessionStorage.removeItem('aniimax-import-notice');
+        hint.textContent = notice;
     }
 }
 
@@ -1285,27 +1353,6 @@ function attachLayoutHandlers() {
     });
 }
 
-function encodeLayoutCode(drawn) {
-    const payload = JSON.stringify({ v: 1, homeLevel: drawn.homeLevel, layout: drawn.layout });
-    const bytes = new TextEncoder().encode(payload);
-    let binary = '';
-    bytes.forEach(byte => { binary += String.fromCharCode(byte); });
-    return 'ANIIMAX1.' + btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
-}
-
-function decodeLayoutCode(code) {
-    if (!code.startsWith('ANIIMAX1.')) throw new Error('unsupported code version');
-    const body = code.slice('ANIIMAX1.'.length).replace(/-/g, '+').replace(/_/g, '/');
-    const padded = body + '='.repeat((4 - body.length % 4) % 4);
-    const binary = atob(padded);
-    const bytes = Uint8Array.from(binary, ch => ch.charCodeAt(0));
-    const parsed = JSON.parse(new TextDecoder().decode(bytes));
-    if (parsed?.v !== 1 || !parsed.layout || !Array.isArray(parsed.layout.pieces)) {
-        throw new Error('missing layout data');
-    }
-    return { homeLevel: Number(parsed.homeLevel) || 1, layout: parsed.layout };
-}
-
 function drawLayout(drawn) {
     const diagram = document.getElementById('layout-diagram');
     diagram.innerHTML = homelandSvg(drawn.layout, drawn.homeLevel);
@@ -2091,7 +2138,30 @@ function seasonWheatBudget() {
 
 function seasonMutationPlots() {
     const value = Number(document.getElementById('season-mutation-plots')?.value);
-    return Number.isFinite(value) ? Math.max(0, Math.round(value)) : 2;
+    return Number.isFinite(value) ? Math.max(0, Math.round(value)) : 1;
+}
+
+const HARVEST_WHEAT_PER_WATERED_PLOT_PAIR = 384;
+
+function renderSeasonBudgetNote() {
+    const note = document.getElementById('season-budget-note');
+    if (!note) return;
+    const plots = seasonMutationPlots();
+    const budget = seasonWheatBudget();
+    const needed = plots * HARVEST_WHEAT_PER_WATERED_PLOT_PAIR;
+    note.classList.remove('warning');
+
+    if (plots === 0) {
+        note.innerHTML = '<strong>No mutation reserve:</strong> the optimizer may use zero event-crop plots when another plan is better.';
+    } else if (budget === null) {
+        note.innerHTML = `<strong>Unlimited seed spend:</strong> ${plots} watered mutation plot${plots === 1 ? '' : 's'} of each crop uses about ${formatNumber(needed)} Moonray Wheat/day.`;
+    } else if (budget + 1e-9 < needed) {
+        note.classList.add('warning');
+        note.innerHTML = `<strong>Budget conflict:</strong> ${plots} watered mutation plot${plots === 1 ? '' : 's'} of each crop needs about ${formatNumber(needed)} Wheat/day, above your ${formatNumber(budget)}/day cap. Raise the cap or reduce the mutation reserve.`;
+    } else {
+        const spare = Math.max(0, budget - needed);
+        note.innerHTML = `<strong>Fits this budget:</strong> ${plots} watered mutation plot${plots === 1 ? '' : 's'} of each crop uses about ${formatNumber(needed)} Wheat/day, leaving up to ${formatNumber(spare)}/day for other event seeds.`;
+    }
 }
 
 function renderSeason() {
@@ -2102,10 +2172,13 @@ function renderSeason() {
             <input type="checkbox" data-special="${r.name}"${unlockedSpecial.has(r.name) ? ' checked' : ''}>
             <span>${prettyItem(r.name)}</span>
         </label>`).join('');
+    renderSeasonBudgetNote();
 }
 
 function attachSeasonHandlers() {
     document.getElementById('season-on').addEventListener('change', renderStrategy);
+    ['season-wheat-budget', 'season-mutation-plots'].forEach(id =>
+        document.getElementById(id).addEventListener('input', renderSeasonBudgetNote));
     document.getElementById('season-notes').addEventListener('change', (e) => {
         const name = e.target.dataset.special;
         if (!name) return;
@@ -4037,6 +4110,7 @@ function displayGoal(goalResult) {
 // Solve for the best achievable plan (facilities + currency + modules); the heavier computation,
 // triggered explicitly by the Calculate button or Enter in a facility/module field.
 async function runFindPlan() {
+    document.getElementById('imported-layout-card').hidden = true;
     if (!wasmReady) {
         showError('Optimizer not ready. Please wait...');
         return;
@@ -4444,6 +4518,7 @@ document.addEventListener('DOMContentLoaded', () => {
     attachSeasonHandlers();
     attachRosterHandlers();
     attachLayoutHandlers();
+    attachSetupShareHandlers();
     attachPriorityHandlers();
     showAniimoSetup();
     applyConfigMode();
