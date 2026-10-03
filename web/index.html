@@ -26,8 +26,13 @@
             <section class="card config-section">
                 <div class="card-head">
                     <h2>Your Homeland</h2>
-                    <button type="button" id="clear-saved-btn" class="toggle-button small" title="Your inputs are saved in this browser automatically.">Clear saved values</button>
+                    <div class="setup-actions">
+                        <button type="button" id="setup-copy-code" class="toggle-button small" title="Copy these calculator settings so another player can import them.">Copy setup code</button>
+                        <button type="button" id="setup-import-code" class="toggle-button small" title="Import an Aniimax setup code before calculating. Layout-only codes also open here.">Import code</button>
+                        <button type="button" id="clear-saved-btn" class="toggle-button small" title="Your inputs are saved in this browser automatically.">Clear saved values</button>
+                    </div>
                 </div>
+                <p class="hint small setup-share-hint" id="setup-share-hint">Share or import calculator settings before generating a plan. Setup codes include facilities, modules, priorities, recipe choices, season limits and Aniimo settings, but no account data.</p>
 
                 <div class="tabs" role="radiogroup" aria-label="Input mode">
                     <label><input type="radio" name="config-mode" id="mode-simple" value="simple" checked> Simple</label>
@@ -167,20 +172,20 @@
                         <span class="season-title">Harvest Moon Festival</span>
                     </label>
                     <div id="season-config" hidden>
-                        <p class="hint">A seasonal event with its own currency, Moonray Wheat, which buys the season's seeds. Plans can now stay inside a daily Wheat budget instead of treating it as unlimited. Season items also earn Harvest Moon Points, which you can rank under Priorities.</p>
+                        <p class="hint">Moonray Wheat buys Harvest Moon seeds. Set how much the optimizer is allowed to <strong>spend</strong> per day so it does not recommend an event setup you cannot sustain. Season items also earn Harvest Moon Points, which you can rank under Priorities.</p>
                         <div class="input-row season-limits">
                             <div class="input-field">
-                                <label for="season-wheat-budget">Moonray Wheat / day</label>
+                                <label for="season-wheat-budget">Max Moonray Wheat spend / day</label>
                                 <input type="number" id="season-wheat-budget" value="600" min="0" step="50">
-                                <span class="hint small">0 = unlimited. 600/day is the guaranteed festival-daily baseline; seasonal orders can add more.</span>
+                                <span class="hint small">A spending cap, not your current balance. 600/day is the guaranteed daily-mission baseline; include seasonal-order Wheat if you normally collect it. Set 0 for unlimited.</span>
                             </div>
                             <div class="input-field">
-                                <label for="season-mutation-plots">Mutation plots / crop</label>
-                                <input type="number" id="season-mutation-plots" value="2" min="0" max="10" step="1">
-                                <span class="hint small">Keeps this many plots of each event crop cycling. With watering, 1 plot each needs 384 Wheat/day; 2 each needs 768.</span>
+                                <label for="season-mutation-plots">Reserved mutation plots / crop</label>
+                                <input type="number" id="season-mutation-plots" value="1" min="0" max="10" step="1">
+                                <span class="hint small">Minimum plots kept cycling for both Moondew Radish and Waxing Moon Pepper mutation rolls. 0 lets profit/priority alone decide.</span>
                             </div>
                         </div>
-                        <p class="harvest-mutation-note"><strong>Tip:</strong> mutation rolls are RNG. The 600 Wheat/day budget supports 1 watered plot of each crop. For 2 each, budget at least 768 from daily rewards plus other sources.</p>
+                        <p class="harvest-mutation-note" id="season-budget-note"></p>
                         <p class="assume-title">Recipe Notes</p>
                         <div class="special-grid" id="season-notes"></div>
                     </div>
@@ -209,6 +214,16 @@
                 </div>
                 <p id="progress-bar-caption" class="hint small" style="display: none;"></p>
                 <div class="card solve-progress" id="solve-progress" style="display: none;" aria-live="polite"></div>
+            </section>
+
+            <section class="card production-steps imported-layout-card" id="imported-layout-card" hidden>
+                <div class="card-head">
+                    <h2>Imported Homeland Layout</h2>
+                    <button type="button" class="toggle-button small" id="imported-layout-close">Close</button>
+                </div>
+                <p class="hint" id="imported-layout-summary"></p>
+                <p class="hint small">This opens a layout-only code without making you generate a plan first. It does not change your calculator settings.</p>
+                <div class="layout-diagram" id="imported-layout-diagram"></div>
             </section>
 
             <section class="results-section" id="results-section" style="display: none;">
@@ -326,12 +341,12 @@
                                 </label>
                             </span>
                             <span class="layout-actions">
-                                <button type="button" class="toggle-button small" id="layout-copy-code">Copy layout code</button>
-                                <button type="button" class="toggle-button small" id="layout-import-code">Import layout code</button>
+                                <button type="button" class="toggle-button small" id="layout-copy-code">Copy layout-only code</button>
+                                <button type="button" class="toggle-button small" id="layout-import-code">Import layout-only code</button>
                                 <span class="layout-sim" id="layout-sim" hidden><span id="layout-clock">0h 00m</span><button type="button" class="toggle-button small" id="layout-replay">Replay</button></span>
                             </span>
                         </div>
-                        <p class="hint small layout-share-hint" id="layout-share-hint">Aniimax layout codes share this calculator's placement. They are not the game's server-side 8-character Combo Codes.</p>
+                        <p class="hint small layout-share-hint" id="layout-share-hint">Layout-only codes share this placement, not your calculator settings. Use the setup-code buttons at the top to share/import settings. These are not the game's server-side 8-character Combo Codes.</p>
                         <div class="layout-diagram" id="layout-diagram"></div>
                     </div>
 
