@@ -23,10 +23,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
 
       - name: Rust tests
         run: |
-          cargo test --all-targets -- \
+          cargo test --release --locked --all-targets -- \
             --skip coverage::tests::baked_pair_options_really_fit \
             --skip coverage::tests::tidy_pair_layouts_keep_their_zones
 
@@ -37,14 +42,43 @@ jobs:
           node --check web/worker.js
           node --check web/layout.js
           node --check web/layout-worker.js
+          node --check web/share-code.js
+          node --check web/share-config.js
+          node --check web/setup-config.js
+          node --check web/harvest-budget.js
 
-      - name: Homeland layout smoke test
-        run: node --experimental-default-type=module tests/layout_smoke.mjs
-
-      - name: Aniimo staffing smoke test
-        run: node --experimental-default-type=module tests/aniimo_team_smoke.mjs
+      - name: JavaScript regressions and smoke tests
+        run: npm test
 
       - name: Browser asset version checks
         run: |
           python3 tests/version_web_assets_test.py
-          node --experimental-default-type=module tests/asset_loader_smoke.mjs
+          node tests/asset_loader_smoke.mjs
+
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Install browser
+        run: npx playwright install --with-deps chromium
+      - name: Build WASM
+        run: |
+          cargo install wasm-pack --version 0.13.1 --locked
+          wasm-pack build --target web --out-dir web/pkg --no-opt -- --locked
+      - name: Setup import and WASM UI smoke
+        run: npm run test:ui
+      - name: Keep UI screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: setup-ui-screenshots
+          path: test-results/

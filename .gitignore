@@ -21,3 +21,5 @@ target
 #.idea/
 # WASM build output
 web/pkg/
+node_modules/
+test-results/

@@ -320,7 +320,8 @@ fn harvest_moon_keeps_two_plots_of_each_mutation_crop_when_unprofitable() {
         item("waxing_moon_pepper", "Farmland", 100.0, 0.0),
         item("profitable_crop", "Farmland", 100.0, 1_000.0),
     ];
-    let counts = FacilityCounts::only(&[("Farmland", 6, 1)]);
+    let mut counts = FacilityCounts::only(&[("Farmland", 6, 1)]);
+    counts.set_season_limits(None, 2);
     let plan = solve(&items, &counts, &ModuleLevels::default());
 
     assert_eq!(plan.units.get("moondew_radish"), Some(&2));
@@ -345,6 +346,20 @@ fn harvest_mutation_minimum_is_configurable() {
     assert_eq!(plan.units.get("moondew_radish"), Some(&1));
     assert_eq!(plan.units.get("waxing_moon_pepper"), Some(&1));
     assert_eq!(plan.units.get("profitable_crop"), Some(&5));
+}
+
+#[test]
+fn harvest_default_reserves_one_plot_per_crop_and_leaves_other_plots_productive() {
+    let items = vec![
+        item("moondew_radish", "Farmland", 100.0, 0.0),
+        item("waxing_moon_pepper", "Farmland", 100.0, 0.0),
+        item("profitable_crop", "Farmland", 100.0, 1_000.0),
+    ];
+    let counts = FacilityCounts::only(&[("Farmland", 6, 1)]);
+    let plan = solve(&items, &counts, &ModuleLevels::default());
+    assert_eq!(plan.units.get("moondew_radish"), Some(&1));
+    assert_eq!(plan.units.get("waxing_moon_pepper"), Some(&1));
+    assert_eq!(plan.units.get("profitable_crop"), Some(&4));
 }
 
 #[test]

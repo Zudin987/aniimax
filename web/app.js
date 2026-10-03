@@ -5,6 +5,12 @@ import {
     MAX_HOME_LEVEL, ANIIMO_MAX, simpleSetup,
     LEVEL_UP_COSTS, LEVEL_UP_CHAINS, SPECIAL_RECIPES, SEASON, ANIIPOD_TIERS, PERSONALITY_PAIRS, personalityLetter, opposedPersonality,
 } from './facility-config.js';
+import {
+    encodeLayoutCode, encodeSetupCode, readSetupImport,
+} from './share-code.js';
+import { createShareUrl, readShareHash, urlWithoutShare } from './share-config.js';
+import { normalizeSetupSettings } from './setup-config.js';
+import { harvestBudgetStatus } from './harvest-budget.js';
 
 let wasmReady = false;
 
@@ -171,6 +177,7 @@ function stopSetupSolve() {
 
 // Shows the selected setup, and works it out first if this is the first time it's been asked for.
 function switchAniimoSetup() {
+    renderSeasonBudgetNote();
     showSelectedPlan();
     ensurePlanFor(selectedAniimoSetup());
 }
@@ -183,7 +190,7 @@ function showSelectedPlan() {
     const content = document.getElementById('results-content');
     content.classList.toggle('stale', !plan);
     if (!plan) {
-        pending.style.display = 'block';
+        pending.style.display = lastPlanInput ? 'block' : 'none';
         return;
     }
     pending.style.display = 'none';
@@ -352,6 +359,8 @@ const STORAGE_KEY = 'aniimax-config-v1';
 // True once the player has picked a rate unit themselves this visit. Until then a fresh plan
 // picks the unit it reads best at; after it, their choice stands.
 let rateUnitChosen = false;
+let defaultConfigData;
+let preferredGoalTarget = '';
 
 // Every plain input ID whose value should be persisted (facility tiers are saved separately;
 // see `facilityTiers`/`initFacilityTiers`, since they're a dynamic list rather than one fixed
@@ -364,7 +373,8 @@ function getPersistedFieldIds() {
         'ecological-module-level', 'kitchen-module-level',
         'resource-detector-level', 'crafting-module-level', 'power-module-level',
         'rate-unit', 'season-on', 'season-wheat-budget', 'season-mutation-plots',
-        'layout-sim-on', 'layout-storage-count'
+        'layout-sim-on', 'layout-storage-count', 'layout-whole',
+        'aniimo-best', 'aniimo-minimum', 'aniimo-custom'
     ];
 }
 
@@ -418,22 +428,185 @@ function initFacilityTiers(data) {
 
 }
 
-function saveInputsToStorage() {
-    const data = { facilityTiers, levelUpStock, skippedRecipes: [...skippedRecipes], unlockedSpecial: [...unlockedSpecial], priorities: priorityOrder, aniimoLevels, roster };
+function currentConfigData() {
+    const data = {
+        facilityTiers,
+        levelUpStock,
+        skippedRecipes: [...skippedRecipes],
+        unlockedSpecial: [...unlockedSpecial],
+        priorities: priorityOrder,
+        aniimoLevels,
+        roster,
+        goalTarget: document.getElementById('goal-target').value || preferredGoalTarget,
+    };
     getPersistedFieldIds().forEach(id => {
         const el = document.getElementById(id);
         if (!el) return;
         data[id] = (el.type === 'checkbox' || el.type === 'radio') ? el.checked : el.value;
     });
+    return data;
+}
+
+function saveInputsToStorage() {
+    const data = currentConfigData();
+    const editedShare = clearShareHash();
+    document.getElementById('setup-export-panel').hidden = true;
     try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+        if (editedShare) document.getElementById('setup-share-hint').textContent = 'Your edited setup is now saved in this browser.';
+        return true;
     } catch (e) {
         console.warn('Could not save inputs to localStorage:', e);
+        return false;
     }
+}
+
+function clearShareHash() {
+    const next = urlWithoutShare(window.location.href);
+    if (next === window.location.href) return false;
+    window.history.replaceState(null, '', next);
+    return true;
+}
+
+function showImportedLayout(imported) {
+    document.getElementById('imported-layout-summary').textContent =
+        `RV ${imported.homeLevel} layout · ${(imported.layout.storages || [imported.layout.storage]).length} Storage Unit(s). Placement only: this code does not contain calculator settings.`;
+    document.getElementById('imported-layout-diagram').innerHTML = homelandSvg(imported.layout, imported.homeLevel);
+    document.getElementById('imported-layout-card').hidden = false;
+}
+
+function applyImportedSetup(settings, clearSharedLink = true) {
+    // Discard every result/cache so changing Aniimo mode cannot revive a pre-import plan.
+    planRunId++;
+    stopRanking();
+    stopSetupSolve();
+    stopLayout();
+    plansBySetup = {};
+    rankingsBySetup = {};
+    lastPlan = lastPlanInput = lastGoalResult = null;
+    lastBestTeam = null;
+    // Goal options belong to the discarded plan. Keep the imported goal preference
+    // until fresh options are created rather than saving the previous plan's choice.
+    document.getElementById('goal-target').replaceChildren();
+    document.getElementById('aniimo-count').hidden = true;
+    ['aniimo-summary', 'aniimo-abilities', 'aniimo-collapsed-summary'].forEach(id => {
+        document.getElementById(id).replaceChildren();
+    });
+    document.getElementById('solve-progress').style.display = 'none';
+    document.getElementById('results-section').style.display = 'none';
+    document.getElementById('imported-layout-card').hidden = true;
+    document.getElementById('setup-export-panel').hidden = true;
+    initFacilityTiers(settings);
+    loadInputsFromStorage(settings);
+    renderFacilityCards();
+    renderSkippedRecipes();
+    renderSpecialRecipes();
+    applyConfigMode();
+    showAniimoSetup();
+    rateUnitChosen = true;
+    if (clearSharedLink) clearShareHash();
+}
+
+function sharedSetupNotice(warnings) {
+    return `Shared setup loaded. Review it before calculating. Your previous saved values are kept until you edit this setup. ${warnings.join(' ')}`;
+}
+
+function attachSetupShareHandlers() {
+    const hint = document.getElementById('setup-share-hint');
+    const panel = document.getElementById('setup-import-panel');
+    const input = document.getElementById('setup-import-value');
+    const error = document.getElementById('setup-import-error');
+    const apply = document.getElementById('setup-import-apply');
+    const exportSetup = async asLink => {
+        try {
+            const config = currentConfigData();
+            const value = asLink ? await createShareUrl(window.location.href, config) : encodeSetupCode(config);
+            const output = document.getElementById('setup-export-value');
+            output.value = value;
+            document.getElementById('setup-export-panel').hidden = false;
+            output.focus();
+            output.select();
+            try {
+                await navigator.clipboard.writeText(value);
+                hint.textContent = `${asLink ? 'Setup link' : 'Setup code'} copied. The recipient can review the settings before calculating.`;
+            } catch {
+                hint.textContent = 'Clipboard unavailable. Copy the selected text above to share this setup.';
+            }
+        } catch (e) {
+            hint.textContent = `Could not share this setup: ${e.message}`;
+        }
+    };
+    document.getElementById('setup-copy-code').addEventListener('click', () => exportSetup(false));
+    document.getElementById('setup-copy-link').addEventListener('click', () => exportSetup(true));
+    const openImport = () => {
+        panel.hidden = false;
+        error.textContent = '';
+        input.focus();
+    };
+    document.getElementById('setup-import-code').addEventListener('click', openImport);
+    document.getElementById('layout-import-code').addEventListener('click', () => {
+        openImport();
+        panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+    document.getElementById('setup-import-cancel').addEventListener('click', () => {
+        panel.hidden = true;
+        document.getElementById('setup-import-code').focus();
+    });
+    apply.addEventListener('click', async () => {
+        error.textContent = '';
+        apply.disabled = true;
+        try {
+            const imported = await readSetupImport(input.value);
+            if (document.getElementById('optimize-btn').disabled) {
+                throw new Error('Wait for the current calculation to finish before importing');
+            }
+            if (imported.kind === 'setup') {
+                const { settings, warnings } = normalizeSetupSettings(imported.settings, defaultConfigData);
+                applyImportedSetup(settings);
+                const saved = saveInputsToStorage();
+                hint.textContent = `Setup imported. Review the values, then click Find the best plan. ${warnings.join(' ')}${saved ? '' : ' Browser saving is unavailable; this setup works for this visit.'}`.trim();
+                if (selectedSetupTab() !== 'best') {
+                    document.getElementById('aniimo-toggle').setAttribute('aria-expanded', 'true');
+                    document.getElementById('aniimo-body').hidden = false;
+                }
+            } else {
+                showImportedLayout(imported.drawn);
+                hint.textContent = 'Older layout opened below. Your calculator settings were kept; use a setup code or link to restore inputs.';
+            }
+            panel.hidden = true;
+            input.value = '';
+        } catch (e) {
+            error.textContent = `Could not import: ${e.message || e}. Your current setup was kept.`;
+        } finally {
+            apply.disabled = false;
+        }
+    });
+    document.getElementById('imported-layout-close').addEventListener('click', () => {
+        document.getElementById('imported-layout-card').hidden = true;
+    });
+    // Navigating to a link for this already-open page only changes its fragment;
+    // it does not run DOMContentLoaded again. Review that setup without auto-saving it.
+    window.addEventListener('hashchange', async () => {
+        const hash = window.location.hash;
+        try {
+            const shared = await readShareHash(hash);
+            if (!shared || hash !== window.location.hash) return;
+            if (document.getElementById('optimize-btn').disabled) {
+                throw new Error('Wait for the current calculation to finish, then open the link again');
+            }
+            const { settings, warnings } = normalizeSetupSettings(shared, defaultConfigData);
+            applyImportedSetup(settings, false);
+            hint.textContent = sharedSetupNotice(warnings);
+        } catch (e) {
+            if (hash !== window.location.hash) return;
+            hint.textContent = `This shared link could not be loaded: ${e.message}. Your current setup was kept.`;
+        }
+    });
 }
 
 function loadInputsFromStorage(data) {
     if (!data) return;
+    preferredGoalTarget = typeof data.goalTarget === 'string' ? data.goalTarget : '';
     if (data.levelUpStock && typeof data.levelUpStock === 'object') levelUpStock = { ...data.levelUpStock };
     if (Array.isArray(data.skippedRecipes)) skippedRecipes = new Set(data.skippedRecipes.filter(n => typeof n === 'string'));
     if (Array.isArray(data.unlockedSpecial)) unlockedSpecial = new Set(data.unlockedSpecial.filter(n => typeof n === 'string'));
@@ -476,6 +649,7 @@ function loadInputsFromStorage(data) {
         }
     });
     levelUpTargetChosen = 'level-up-target' in data;
+    layoutShowsWhole = document.getElementById('layout-whole').checked;
 }
 
 // Auto-save on every change to a persisted static field (facility tier inputs save themselves;
@@ -495,6 +669,7 @@ function clearSavedInputs() {
     } catch (e) {
         console.warn('Could not clear saved inputs from localStorage:', e);
     }
+    clearShareHash();
     window.location.reload();
 }
 
@@ -1267,43 +1442,7 @@ function attachLayoutHandlers() {
             window.prompt('Copy this Aniimax layout code:', code);
         }
     });
-    document.getElementById('layout-import-code').addEventListener('click', () => {
-        const raw = window.prompt('Paste an Aniimax layout code:');
-        if (!raw) return;
-        try {
-            const imported = decodeLayoutCode(raw.trim());
-            lastLayout = imported;
-            document.getElementById('layout-card').style.display = 'block';
-            document.getElementById('layout-summary').textContent =
-                `Imported Aniimax layout with ${(imported.layout.storages || [imported.layout.storage]).length} Storage Unit(s).`;
-            drawLayout(lastLayout);
-            document.getElementById('layout-share-hint').textContent =
-                'Imported successfully. This is an Aniimax share code, not the game\'s server-side Combo Code.';
-        } catch (error) {
-            window.alert(`That Aniimax layout code is invalid: ${error.message || error}`);
-        }
-    });
-}
 
-function encodeLayoutCode(drawn) {
-    const payload = JSON.stringify({ v: 1, homeLevel: drawn.homeLevel, layout: drawn.layout });
-    const bytes = new TextEncoder().encode(payload);
-    let binary = '';
-    bytes.forEach(byte => { binary += String.fromCharCode(byte); });
-    return 'ANIIMAX1.' + btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
-}
-
-function decodeLayoutCode(code) {
-    if (!code.startsWith('ANIIMAX1.')) throw new Error('unsupported code version');
-    const body = code.slice('ANIIMAX1.'.length).replace(/-/g, '+').replace(/_/g, '/');
-    const padded = body + '='.repeat((4 - body.length % 4) % 4);
-    const binary = atob(padded);
-    const bytes = Uint8Array.from(binary, ch => ch.charCodeAt(0));
-    const parsed = JSON.parse(new TextDecoder().decode(bytes));
-    if (parsed?.v !== 1 || !parsed.layout || !Array.isArray(parsed.layout.pieces)) {
-        throw new Error('missing layout data');
-    }
-    return { homeLevel: Number(parsed.homeLevel) || 1, layout: parsed.layout };
 }
 
 function drawLayout(drawn) {
@@ -2091,7 +2230,29 @@ function seasonWheatBudget() {
 
 function seasonMutationPlots() {
     const value = Number(document.getElementById('season-mutation-plots')?.value);
-    return Number.isFinite(value) ? Math.max(0, Math.round(value)) : 2;
+    return Number.isFinite(value) ? Math.max(0, Math.round(value)) : 1;
+}
+
+function renderSeasonBudgetNote() {
+    const note = document.getElementById('season-budget-note');
+    if (!note) return;
+    const plots = seasonMutationPlots();
+    const budget = seasonWheatBudget();
+    const watered = selectedSetupTab() !== 'custom' || roster.some(a => a.count > 0 && (a.abilities.Water || 0) >= 1);
+    const { needed, spare, conflict } = harvestBudgetStatus(plots, budget, watered);
+    const growth = watered ? 'assuming both watering jobs finish' : 'without a Water worker';
+    note.classList.remove('warning');
+
+    if (plots === 0) {
+        note.innerHTML = '<strong>No mutation reserve:</strong> the optimizer may use zero event-crop plots when another plan is better.';
+    } else if (budget === null) {
+        note.innerHTML = `<strong>Unlimited seed spend:</strong> ${plots} plot${plots === 1 ? '' : 's'} per crop (${plots * 2} total) needs about ${formatNumber(needed)} Moonray Wheat/day, ${growth}. The optimizer may plant more.`;
+    } else if (conflict) {
+        note.classList.add('warning');
+        note.innerHTML = `<strong>Budget conflict:</strong> ${plots} plot${plots === 1 ? '' : 's'} per crop (${plots * 2} total) needs about ${formatNumber(needed)} Wheat/day, ${growth}. Your cap is ${formatNumber(budget)}/day. Raise it or reduce the reserve before calculating.`;
+    } else {
+        note.innerHTML = `<strong>Fits this budget:</strong> ${plots} plot${plots === 1 ? '' : 's'} per crop (${plots * 2} total) needs about ${formatNumber(needed)} Wheat/day, ${growth}. Up to ${formatNumber(spare)}/day remains for additional event seeds.`;
+    }
 }
 
 function renderSeason() {
@@ -2102,10 +2263,13 @@ function renderSeason() {
             <input type="checkbox" data-special="${r.name}"${unlockedSpecial.has(r.name) ? ' checked' : ''}>
             <span>${prettyItem(r.name)}</span>
         </label>`).join('');
+    renderSeasonBudgetNote();
 }
 
 function attachSeasonHandlers() {
     document.getElementById('season-on').addEventListener('change', renderStrategy);
+    ['season-wheat-budget', 'season-mutation-plots'].forEach(id =>
+        document.getElementById(id).addEventListener('input', renderSeasonBudgetNote));
     document.getElementById('season-notes').addEventListener('change', (e) => {
         const name = e.target.dataset.special;
         if (!name) return;
@@ -2867,7 +3031,7 @@ function showError(message) {
 // current choice when the new plan still has it.
 function renderGoalTargets(plan) {
     const select = document.getElementById('goal-target');
-    const previous = select.value;
+    const previous = preferredGoalTarget || select.value;
     const rows = priorityRows(plan);
     select.innerHTML = rows.map(r => `<option value="${r.target}">${goalName(r)}</option>`).join('');
     if (rows.some(r => r.target === previous)) select.value = previous;
@@ -4037,6 +4201,7 @@ function displayGoal(goalResult) {
 // Solve for the best achievable plan (facilities + currency + modules); the heavier computation,
 // triggered explicitly by the Calculate button or Enter in a facility/module field.
 async function runFindPlan() {
+    document.getElementById('imported-layout-card').hidden = true;
     if (!wasmReady) {
         showError('Optimizer not ready. Please wait...');
         return;
@@ -4426,12 +4591,25 @@ window.closeFacilitiesOnBackdrop = function(event) {
 }
 
 // Event listeners
-document.addEventListener('DOMContentLoaded', () => {
-    const savedData = readStorage();
-    initFacilityTiers(savedData);
-    renderFacilityCards();
+document.addEventListener('DOMContentLoaded', async () => {
+    initFacilityTiers(null);
     populateHomeLevels();
     populateLevelUpTargets();
+    defaultConfigData = structuredClone(currentConfigData());
+    let savedData = readStorage();
+    let shareNotice = '';
+    try {
+        const shared = await readShareHash(window.location.hash);
+        if (shared) {
+            const { settings, warnings } = normalizeSetupSettings(shared, defaultConfigData);
+            savedData = settings;
+            shareNotice = sharedSetupNotice(warnings);
+        }
+    } catch (e) {
+        shareNotice = `This shared link is invalid: ${e.message}. Your saved setup was kept.`;
+    }
+    initFacilityTiers(savedData);
+    renderFacilityCards();
     loadInputsFromStorage(savedData);
     attachAutoSave();
     attachFacilityTierHandlers();
@@ -4444,6 +4622,8 @@ document.addEventListener('DOMContentLoaded', () => {
     attachSeasonHandlers();
     attachRosterHandlers();
     attachLayoutHandlers();
+    attachSetupShareHandlers();
+    if (shareNotice) document.getElementById('setup-share-hint').textContent = shareNotice;
     attachPriorityHandlers();
     showAniimoSetup();
     applyConfigMode();
@@ -4489,7 +4669,11 @@ document.addEventListener('DOMContentLoaded', () => {
     // goal amount changed.
     document.getElementById('target-amount').addEventListener('input', runTimeToGoal);
     document.getElementById('current-amount').addEventListener('input', runTimeToGoal);
-    document.getElementById('goal-target').addEventListener('change', runTimeToGoal);
+    document.getElementById('goal-target').addEventListener('change', () => {
+        preferredGoalTarget = document.getElementById('goal-target').value;
+        saveInputsToStorage();
+        runTimeToGoal();
+    });
 
     // Allow Enter key to trigger a full plan recalculation; but not in the goal fields, which
     // already update live on every keystroke via the listeners above. Facility tier inputs are
