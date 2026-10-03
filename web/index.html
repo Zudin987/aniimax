@@ -26,7 +26,27 @@
             <section class="card config-section">
                 <div class="card-head">
                     <h2>Your Homeland</h2>
-                    <button type="button" id="clear-saved-btn" class="toggle-button small" title="Your inputs are saved in this browser automatically.">Clear saved values</button>
+                    <div class="setup-actions">
+                        <button type="button" id="setup-copy-link" class="toggle-button small">Share setup link</button>
+                        <button type="button" id="setup-copy-code" class="toggle-button small" title="Copy these calculator settings so another player can import them.">Copy setup code</button>
+                        <button type="button" id="setup-import-code" class="toggle-button small" title="Import an Aniimax setup code before calculating. Layout-only codes also open here.">Import code</button>
+                        <button type="button" id="clear-saved-btn" class="toggle-button small" title="Your inputs are saved in this browser automatically.">Clear saved values</button>
+                    </div>
+                </div>
+                <p class="hint small setup-share-hint" id="setup-share-hint" role="status" aria-live="polite">Share or import settings before calculating. Includes facilities, modules, priorities, recipes, season limits and your Aniimo setup.</p>
+                <div id="setup-export-panel" hidden>
+                    <label for="setup-export-value">Copy this setup link or code</label>
+                    <textarea id="setup-export-value" rows="2" readonly spellcheck="false"></textarea>
+                </div>
+                <div id="setup-import-panel" hidden>
+                    <label for="setup-import-value">Setup link or Aniimax code</label>
+                    <textarea id="setup-import-value" rows="3" placeholder="Paste a setup link, setup code or older layout code" spellcheck="false" aria-describedby="setup-import-help setup-import-error"></textarea>
+                    <p class="hint small" id="setup-import-help">Import replaces the setup shown here. Review it before calculating. Older layout codes show placement only. These are calculator codes, not in-game Combo Codes.</p>
+                    <div class="setup-actions">
+                        <button type="button" id="setup-import-apply" class="skip-add-btn">Load setup</button>
+                        <button type="button" id="setup-import-cancel" class="toggle-button small">Cancel</button>
+                    </div>
+                    <p id="setup-import-error" role="alert"></p>
                 </div>
 
                 <div class="tabs" role="radiogroup" aria-label="Input mode">
@@ -167,20 +187,21 @@
                         <span class="season-title">Harvest Moon Festival</span>
                     </label>
                     <div id="season-config" hidden>
-                        <p class="hint">A seasonal event with its own currency, Moonray Wheat, which buys the season's seeds. Plans can now stay inside a daily Wheat budget instead of treating it as unlimited. Season items also earn Harvest Moon Points, which you can rank under Priorities.</p>
+                        <p class="hint">Moonray Wheat buys Harvest Moon seeds. Set how much the optimizer is allowed to <strong>spend</strong> per day so it does not recommend an event setup you cannot sustain. Season items also earn Harvest Moon Points, which you can rank under Priorities.</p>
                         <div class="input-row season-limits">
                             <div class="input-field">
-                                <label for="season-wheat-budget">Moonray Wheat / day</label>
-                                <input type="number" id="season-wheat-budget" value="600" min="0" step="50">
-                                <span class="hint small">0 = unlimited. 600/day is the guaranteed festival-daily baseline; seasonal orders can add more.</span>
+                                <label for="season-wheat-budget">Max Moonray Wheat spend / day</label>
+                                <input type="number" id="season-wheat-budget" value="600" min="0" step="1" aria-describedby="season-budget-help season-budget-note">
+                                <span class="hint small" id="season-budget-help">0 = unlimited. This caps seed spending over 24 hours of continuous production; it is not your current balance. The 600 default uses the reported daily-mission allowance. Increase it for orders or Wheat you already have.</span>
                             </div>
                             <div class="input-field">
-                                <label for="season-mutation-plots">Mutation plots / crop</label>
-                                <input type="number" id="season-mutation-plots" value="2" min="0" max="10" step="1">
-                                <span class="hint small">Keeps this many plots of each event crop cycling. With watering, 1 plot each needs 384 Wheat/day; 2 each needs 768.</span>
+                                <label for="season-mutation-plots">Reserved mutation plots / crop</label>
+                                <input type="number" id="season-mutation-plots" value="1" min="0" max="10" step="1" aria-describedby="season-mutation-help season-budget-note">
+                                <span class="hint small" id="season-mutation-help">Minimum for <strong>each</strong> crop: 1 reserves 2 plots total, 2 reserves 4. Keeps Moondew Radish and Waxing Moon Pepper cycling for mutation attempts. 0 removes the reserve; the optimizer may still plant event crops.</span>
                             </div>
                         </div>
-                        <p class="harvest-mutation-note"><strong>Tip:</strong> mutation rolls are RNG. The 600 Wheat/day budget supports 1 watered plot of each crop. For 2 each, budget at least 768 from daily rewards plus other sources.</p>
+                        <p class="harvest-mutation-note" id="season-budget-note" role="status" aria-live="polite"></p>
+                        <p class="hint small">Mutation outcomes are random. This reserve creates attempts; it does not predict mutation rewards. Turn on Harvest Moon Points under Priorities to favor event points.</p>
                         <p class="assume-title">Recipe Notes</p>
                         <div class="special-grid" id="season-notes"></div>
                     </div>
@@ -200,6 +221,37 @@
                     <datalist id="skip-options"></datalist>
                     <div class="skip-chips" id="skip-chips"></div>
                 </details>
+                <div class="card aniimo-card" id="aniimo-card">
+                    <div class="card-head">
+                        <button type="button" class="collapse-toggle" id="aniimo-toggle" aria-expanded="false" aria-controls="aniimo-body">
+                            <span class="chevron" aria-hidden="true"></span>
+                            <h2>Aniimo Team</h2>
+                        </button>
+                        <div class="tabs compact" role="radiogroup" aria-label="Aniimo setup">
+                            <label title="The best Aniimo you have, with each facility's personality"><input type="radio" name="aniimo-setup" id="aniimo-best" value="best" checked> Best</label>
+                            <label title="The lowest ability level each recipe accepts: the least you can get by with"><input type="radio" name="aniimo-setup" id="aniimo-minimum" value="minimum"> Minimum</label>
+                            <label title="Plan with the Aniimo you actually have"><input type="radio" name="aniimo-setup" id="aniimo-custom" value="custom"> My Aniimo</label>
+                        </div>
+                    </div>
+                    <div class="aniimo-setup-panel" id="aniimo-setup-panel">
+                        <p class="hint small" id="aniimo-setup-hint"></p>
+                        <div class="ability-levels" id="ability-levels"></div>
+                        <div class="roster-editor" id="roster-editor" hidden></div>
+                    </div>
+                    <p class="aniimo-count" id="aniimo-count" hidden><span id="aniimo-count-have">0</span><span class="aniimo-count-of" id="aniimo-count-of"></span></p>
+                    <p class="collapsed-summary" id="aniimo-collapsed-summary"></p>
+                    <div class="ability-strip" id="aniimo-abilities" aria-label="Aniimo needed per ability"></div>
+                    <p class="hint small" id="aniimo-pending" style="display: none;">Still working this setup out...</p>
+                    <div id="aniimo-body" hidden>
+                        <details class="explain">
+                            <summary>How the team is worked out</summary>
+                            <p><strong>Best</strong>: the best Aniimo you have of each ability (pick its level above), with each facility's personality. <strong>My Aniimo</strong>: the Aniimo you list; each works what its abilities allow, for the hours it has. <strong>Minimum</strong>: the lowest ability level each recipe accepts, with no personality bonus. The plan below follows whichever is picked.</p>
+                            <p>An Aniimo can take any job needing its ability at or below its level while it has hours to spare, as long as no two of its facilities want opposite personalities. It has four personalities, one from each pair, shown as letters over its portrait: Instinctive or Energetic (I/E), Nimble or Practical (N/S), Faithful or Tenacious (F/T), Playful or Judicious (P/J). Facilities with a resident Aniimo (Sandcastle, Dewy House and the like) need one each, and so does each Heat Furnace (Fire), Cooling Unit (Ice) and Sunlamp (Light) in use. With My Aniimo, Farmland and Woodland tending jobs also consume roster time, so reclaiming, sowing, watering and harvesting compete with Mine, Well and processor work for the same Aniimo's day. Not yet checked in game: each recipe's minimum ability level, the Farmland and Woodland jobs, and whether an environment building's Aniimo level or personality matters.</p>
+                        </details>
+                        <div id="aniimo-summary"></div>
+                    </div>
+                </div>
+
                 <button id="optimize-btn" class="optimize-btn">
                     <span class="btn-text">Find the best plan</span>
                     <span class="btn-loading" style="display: none;">Solving...</span>
@@ -211,41 +263,20 @@
                 <div class="card solve-progress" id="solve-progress" style="display: none;" aria-live="polite"></div>
             </section>
 
+            <section class="card production-steps imported-layout-card" id="imported-layout-card" hidden>
+                <div class="card-head">
+                    <h2>Imported Homeland Layout</h2>
+                    <button type="button" class="toggle-button small" id="imported-layout-close">Close</button>
+                </div>
+                <p class="hint" id="imported-layout-summary"></p>
+                <p class="hint small">This opens a layout-only code without making you generate a plan first. It does not change your calculator settings.</p>
+                <div class="layout-diagram" id="imported-layout-diagram"></div>
+            </section>
+
             <section class="results-section" id="results-section" style="display: none;">
                 <div id="error-message" class="card error-message" style="display: none;"></div>
 
                 <div id="results-content">
-                    <div class="card aniimo-card" id="aniimo-card">
-                        <div class="card-head">
-                            <button type="button" class="collapse-toggle" id="aniimo-toggle" aria-expanded="false" aria-controls="aniimo-body">
-                                <span class="chevron" aria-hidden="true"></span>
-                                <h2>Aniimo Team</h2>
-                            </button>
-                            <div class="tabs compact" role="radiogroup" aria-label="Aniimo setup">
-                                <label title="The best Aniimo you have, with each facility's personality"><input type="radio" name="aniimo-setup" id="aniimo-best" value="best" checked> Best</label>
-                                <label title="The lowest ability level each recipe accepts: the least you can get by with"><input type="radio" name="aniimo-setup" id="aniimo-minimum" value="minimum"> Minimum</label>
-                                <label title="Plan with the Aniimo you actually have"><input type="radio" name="aniimo-setup" id="aniimo-custom" value="custom"> My Aniimo</label>
-                            </div>
-                        </div>
-                        <div class="aniimo-setup-panel" id="aniimo-setup-panel">
-                            <p class="hint small" id="aniimo-setup-hint"></p>
-                            <div class="ability-levels" id="ability-levels"></div>
-                            <div class="roster-editor" id="roster-editor" hidden></div>
-                        </div>
-                        <p class="aniimo-count" id="aniimo-count" hidden><span id="aniimo-count-have">0</span><span class="aniimo-count-of" id="aniimo-count-of"></span></p>
-                        <p class="collapsed-summary" id="aniimo-collapsed-summary"></p>
-                        <div class="ability-strip" id="aniimo-abilities" aria-label="Aniimo needed per ability"></div>
-                        <p class="hint small" id="aniimo-pending" style="display: none;">Still working this setup out...</p>
-                        <div id="aniimo-body" hidden>
-                            <details class="explain">
-                                <summary>How the team is worked out</summary>
-                                <p><strong>Best</strong>: the best Aniimo you have of each ability (pick its level above), with each facility's personality. <strong>My Aniimo</strong>: the Aniimo you list; each works what its abilities allow, for the hours it has. <strong>Minimum</strong>: the lowest ability level each recipe accepts, with no personality bonus. The plan below follows whichever is picked.</p>
-                                <p>An Aniimo can take any job needing its ability at or below its level while it has hours to spare, as long as no two of its facilities want opposite personalities. It has four personalities, one from each pair, shown as letters over its portrait: Instinctive or Energetic (I/E), Nimble or Practical (N/S), Faithful or Tenacious (F/T), Playful or Judicious (P/J). Facilities with a resident Aniimo (Sandcastle, Dewy House and the like) need one each, and so does each Heat Furnace (Fire), Cooling Unit (Ice) and Sunlamp (Light) in use. With My Aniimo, Farmland and Woodland tending jobs also consume roster time, so reclaiming, sowing, watering and harvesting compete with Mine, Well and processor work for the same Aniimo's day. Not yet checked in game: each recipe's minimum ability level, the Farmland and Woodland jobs, and whether an environment building's Aniimo level or personality matters.</p>
-                            </details>
-                            <div id="aniimo-summary"></div>
-                        </div>
-                    </div>
-
                     <div class="card rate-card">
                         <!-- A level-up plan leads with the level-up, and its table's rate column
                              takes over the unit select and the coin rate below. -->
@@ -326,12 +357,12 @@
                                 </label>
                             </span>
                             <span class="layout-actions">
-                                <button type="button" class="toggle-button small" id="layout-copy-code">Copy layout code</button>
-                                <button type="button" class="toggle-button small" id="layout-import-code">Import layout code</button>
+                                <button type="button" class="toggle-button small" id="layout-copy-code">Copy layout-only code</button>
+                                <button type="button" class="toggle-button small" id="layout-import-code">Import layout-only code</button>
                                 <span class="layout-sim" id="layout-sim" hidden><span id="layout-clock">0h 00m</span><button type="button" class="toggle-button small" id="layout-replay">Replay</button></span>
                             </span>
                         </div>
-                        <p class="hint small layout-share-hint" id="layout-share-hint">Aniimax layout codes share this calculator's placement. They are not the game's server-side 8-character Combo Codes.</p>
+                        <p class="hint small layout-share-hint" id="layout-share-hint">Layout-only codes share this placement, not your calculator settings. Use the setup-code buttons at the top to share/import settings. These are not the game's server-side 8-character Combo Codes.</p>
                         <div class="layout-diagram" id="layout-diagram"></div>
                     </div>
 

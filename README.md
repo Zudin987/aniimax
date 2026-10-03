@@ -22,7 +22,9 @@ Updated for the full release, with a joint LP-based facility-allocation engine f
 - **Whole-Unit Realism**: Growers are rounded to whole plots and processors are dedicated to one recipe each, matching how the game actually works; only the Woodworking Bench and Chimney Kiln take turns between tiers, since each tier is made from the one below
 - **Level-Up Strategy**: Plans the soonest next RV level-up (Home Coins plus Wood Blocks and Mineral Sand, or from RV 7 the Woodworking Bench and Chimney Kiln items it costs), counting what you already have, then earns as many Home Coins as that pace allows; RV 2 to 20
 - **Priorities Strategy**: Rank what you want (Home Coins, Aniimo EXP, Aniipods, Wood Blocks, Mineral Sand, and Harvest Moon Points during the festival) and switch off what you don't; each one is maximized in turn, keeping what the ones above it reached, and Home Coins take whatever is left
-- **Harvest Moon Festival**: From RV 10, plans can use the season's crops and recipes (Recipe Note ones once you tick them), count Harvest Moon Points on everything sold, cap Moonray Wheat seed spend per day, and reserve a configurable minimum of Moondew Radish / Waxing Moon Pepper plots for mutation rolls
+- **Share and Import Setup**: Before calculating, use Share setup link or Copy setup code. Import code accepts setup links/codes and older layout-only codes. Setup imports restore facilities, modules, RV stock, priorities, skipped/unlocked recipes, Harvest limits, Aniimo mode/levels/roster, and display choices; review before calculating. Opening a link keeps previous browser-saved values until you edit the shared setup. Layout-only codes show placement without replacing settings. These are Aniimax calculator codes, not in-game Combo Codes.
+- **Harvest Moon Festival**: From RV 10, plans can use the season's crops and recipes (Recipe Note ones once you tick them), count Harvest Moon Points on everything sold, cap Moonray Wheat seed spend per day, and reserve a configurable minimum of Moondew Radish / Waxing Moon Pepper plots for mutation rolls. The web app starts with a 600 Wheat/day spending cap (0 = unlimited) and one mutation plot per crop, two total. Under the current 40-minute crop model with both watering jobs, those two plots cost about 384/day; two per crop costs about 768/day. The setup shows budget conflicts before calculation, and distinguishes an unwatered roster. Previously saved plot counts and caps are preserved.
+- **Portable Setup Codes**: Copy or import calculator settings before solving. Codes carry facilities, modules, priorities, recipe choices, season limits and Aniimo setup; the older layout-only code remains supported separately.
 - **Growing Environments**: Heat Furnace, Cooling Unit and Sunlamp layouts are planned with the plots, including a crop grown outside its environment at the slower rate, and a Heat Furnace and Cooling Unit placed so their areas overlap and add up to a third temperature between them
 - **Watering**: A plot is watered twice as it grows, each watering taking an eighth off its full-speed time
 - **Recipe Reference Page**: Every recipe in the game data, browsable by facility, independent of what you own
@@ -715,3 +717,20 @@ cd web && python3 -m http.server 8080
 ## License
 
 MIT License - see [LICENSE](LICENSE) for details.
+
+
+## Setup sharing development checks
+
+`web/share-config.js` uses the compressed `v1` fragment format from upstream
+[PR #26](https://github.com/ae-bii/aniimax/pull/26) at `740dd186`, so links from that
+version can be pasted into Import code. The fork also supports `ANIIMAX2` setup
+codes and `ANIIMAX1` placement codes. Unknown versions and invalid settings are
+rejected before replacing the current setup. Missing fields in older setups use
+current defaults rather than the recipient's previous roster or recipe choices.
+
+For browser changes, run `npm ci`, `npm test`,
+`wasm-pack build --target web --out-dir web/pkg --no-opt -- --locked`,
+`npx playwright install chromium`, and `npm run test:ui`. The UI smoke test uses
+a local server and real optimizer WASM, covering pre-calculation import, stored
+Aniimo mode, compatibility, invalid codes, shared-link persistence, Harvest caps,
+and desktop/mobile layout.

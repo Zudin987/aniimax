@@ -696,7 +696,7 @@ fn default_true() -> bool {
 }
 
 fn default_harvest_mutation_plots() -> u32 {
-    2
+    1
 }
 
 /// JavaScript-friendly input for the plan solver; everything needed to know the best achievable
@@ -2145,6 +2145,17 @@ pub fn get_all_items() -> String {
 #[cfg(test)]
 mod tests {
     use super::{embedded_aniimo_requirements, embedded_grower_steps, get_embedded_items};
+
+    #[test]
+    fn harvest_defaults_fit_a_600_wheat_daily_cap() {
+        let input = serde_json::json!({ "season": true, "aniimo": "minimum",
+            "season_currency_per_day": 600 });
+        let parsed: super::JsPlanInput = serde_json::from_value(input.clone()).unwrap();
+        assert_eq!(parsed.harvest_mutation_plots, 1);
+        assert_eq!(super::plan_input_error(&input.to_string()), "null");
+        assert_eq!(crate::models::FacilityCounts::default().harvest_mutation_plots(), 1);
+        assert_eq!(crate::models::FacilityCounts::only(&[]).harvest_mutation_plots(), 1);
+    }
 
     #[test]
     fn harvest_budget_validation_uses_the_prepared_crop_timers() {
