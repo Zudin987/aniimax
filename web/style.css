@@ -2387,6 +2387,17 @@ tr:hover .skip-row,
     vertical-align: super;
 }
 
+.setup-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.4rem;
+}
+
+.setup-share-hint {
+    margin: -0.2rem 0 0.85rem;
+}
+
 /* Harvest Moon Festival: a switch, then the season's inputs while it's on. */
 .season {
     margin: 0 0 1.25rem;
@@ -2417,6 +2428,19 @@ tr:hover .skip-row,
 
 .harvest-mutation-note strong {
     color: var(--text);
+}
+
+.harvest-mutation-note.warning {
+    border-left-color: var(--warning);
+    background: color-mix(in srgb, var(--warning) 8%, transparent);
+}
+
+.harvest-mutation-note.warning strong {
+    color: var(--warning);
+}
+
+.imported-layout-card {
+    margin-bottom: 1rem;
 }
 
 .emode-auto-note {
