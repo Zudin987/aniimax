@@ -696,7 +696,7 @@ fn default_true() -> bool {
 }
 
 fn default_harvest_mutation_plots() -> u32 {
-    2
+    1
 }
 
 /// JavaScript-friendly input for the plan solver; everything needed to know the best achievable
