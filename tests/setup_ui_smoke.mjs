@@ -74,9 +74,12 @@ try {
         });
         try {
             const items = await ask('get_all_items');
+            const { FACILITIES } = await import('./facility-config.js');
+            // API callers inherit one of omitted facilities; the UI sends explicit zeroes.
+            const facilities = Object.fromEntries(FACILITIES.map(f => [f.name, [{ count: 0, level: 1 }]]));
             const member = family => ({ count: 1, family, abilities: { Leisure: 3 }, personalities: [] });
             const input = { currency: 'coins', aniimo: 'roster', prioritize_byproducts: false,
-                facilities: { 'Nimbus Bed': [{ count: 1, level: 2 }] }, modules: { resource_detector: 5 },
+                facilities: { ...facilities, 'Nimbus Bed': [{ count: 1, level: 2 }] }, modules: { resource_detector: 5 },
                 roster: { members: [member('Celestis'), member('Nimbi')], residents: ['Nimbus Bed'] } };
             const matching = await ask('find_plan', input);
             const wrong = await ask('find_plan', { ...input,
@@ -88,7 +91,7 @@ try {
     assert.equal(evidence.star.family, 'Celestis');
     assert.equal(evidence.star.verified, true);
     assert.equal(evidence.scales.verified, false, 'an unseen recipe remains unverified');
-    assert.equal(evidence.matching.success, true);
+    assert.equal(evidence.matching.success, true, evidence.matching.error || 'the matching family must produce');
     assert.ok(evidence.matching.rate_per_second > 0);
     assert.equal(evidence.matching.coin_items.find(row => row.status === 'producing').crew, 1,
         'real WASM must assign Nimbi, rather than another Leisure family');
