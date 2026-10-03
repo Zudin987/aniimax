@@ -139,6 +139,13 @@ try {
     assert.equal(await page.locator('#results-section').isVisible(), false);
     await page.locator('#roster-editor .roster-family').selectOption('Nimbi');
     assert.equal((await config()).roster[0].family, 'Nimbi', 'reviewed family selection is saved');
+    await mkdir(new URL('../test-results/', import.meta.url), { recursive: true });
+    await page.locator('#roster-editor').screenshot({ path: 'test-results/aniimo-family-desktop.png' });
+    await page.setViewportSize({ width: 390, height: 844 });
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), false,
+        'the Advanced roster and family control must fit on mobile');
+    await page.locator('#roster-editor').screenshot({ path: 'test-results/aniimo-family-mobile.png' });
+    await page.setViewportSize({ width: 1000, height: 900 });
 
     // Review explicit conflict, exact 768 cap, unlimited cap and no reserve.
     await page.locator('label:has(#aniimo-best)').click();
@@ -224,7 +231,7 @@ try {
     await page.locator('#optimize-btn').click();
     await page.waitForFunction(() => !document.getElementById('optimize-btn').disabled, null, { timeout: 120_000 });
     assert.equal(await page.locator('#error-message').isVisible(), false);
-    assert.equal(await page.locator('#level-up-label').innerText(), 'Resources for RV 14');
+    assert.equal(await page.locator('#level-up-label').textContent(), 'Resources for RV 14');
     assert.equal(await page.locator('#level-up-time').innerText(), 'Ready now');
     assert.match(await page.locator('#level-up-prerequisites').innerText(), /6h.*upgrade timer/);
     assert.match(await page.locator('#level-up-prerequisites').innerText(), /placement, habitability, title and quest/);
@@ -233,6 +240,7 @@ try {
     assert.equal(await page.locator('#layout-diagram .layout-storages > g').count(), 5,
         'the real layout worker must respect the verified RV13 storage placement limit');
     assert.equal((await config())['layout-storage-count'], '6', 'a constrained layout preserves the imported preference');
+    await page.locator('#level-up-card').screenshot({ path: 'test-results/rv14-resource-timer.png' });
 
     // Storage denial still permits a reviewed import for this visit.
     await page.evaluate(() => { Storage.prototype.setItem = () => { throw new Error('storage unavailable'); }; });
