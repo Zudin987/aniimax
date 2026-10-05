@@ -1307,6 +1307,8 @@ pub struct FacilityCounts {
     season_currency_per_day: Option<f64>,
     /// Minimum Moondew Radish and Waxing Moon Pepper plots to keep cycling during the festival.
     harvest_mutation_plots: u32,
+    /// Raw seasonal-order ingredients whose one-unit output must be kept, not used or sold.
+    harvest_order_items: Vec<String>,
     /// Growing jobs used by custom-roster planning so reclaiming/sowing/watering/harvesting
     /// consume real Aniimo time instead of merely checking that an ability exists somewhere.
     grower_steps: Option<GrowerSteps>,
@@ -1325,6 +1327,7 @@ impl Default for FacilityCounts {
             crew: None,
             season_currency_per_day: None,
             harvest_mutation_plots: 1,
+            harvest_order_items: Vec::new(),
             grower_steps: None,
             generator_lightning_level: None,
             force_e_mode: false,
@@ -1392,6 +1395,16 @@ impl FacilityCounts {
         self.harvest_mutation_plots
     }
 
+    /// Reserves one continuously producing unit of each raw ingredient for manual orders.
+    pub fn set_harvest_order_items(&mut self, items: Vec<String>) -> &mut Self {
+        self.harvest_order_items = items;
+        self
+    }
+
+    pub fn harvest_order_items(&self) -> &[String] {
+        &self.harvest_order_items
+    }
+
     /// Creates an empty `FacilityCounts` (every facility defaults to count=1, level=1).
     pub fn new() -> Self {
         Self::default()
@@ -1428,6 +1441,7 @@ impl FacilityCounts {
             crew: None,
             season_currency_per_day: None,
             harvest_mutation_plots: 1,
+            harvest_order_items: Vec::new(),
             grower_steps: None,
             generator_lightning_level: None,
             force_e_mode: false,
@@ -1447,6 +1461,7 @@ impl FacilityCounts {
             crew: None,
             season_currency_per_day: None,
             harvest_mutation_plots: 1,
+            harvest_order_items: Vec::new(),
             grower_steps: None,
             generator_lightning_level: None,
             force_e_mode: false,

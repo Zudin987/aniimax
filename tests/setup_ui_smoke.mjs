@@ -147,7 +147,7 @@ try {
     await page.locator('#roster-editor').screenshot({ path: 'test-results/aniimo-family-mobile.png' });
     await page.setViewportSize({ width: 1000, height: 900 });
 
-    // Review explicit conflict, exact 768 cap, unlimited cap and no reserve.
+    // Review explicit conflict, exact 768 cap, unlimited cap and the mandatory order baseline.
     await page.locator('label:has(#aniimo-best)').click();
     assert.equal(await page.locator('#aniimo-best').isChecked(), true);
     await page.locator('#season-mutation-plots').fill('2');
@@ -157,7 +157,9 @@ try {
     await page.locator('#season-wheat-budget').fill('0');
     assert.match(await page.locator('#season-budget-note').innerText(), /Unlimited seed spend/);
     await page.locator('#season-mutation-plots').fill('0');
-    assert.match(await page.locator('#season-budget-note').innerText(), /No mutation reserve/);
+    assert.match(await page.locator('#season-budget-note').innerText(), /Order stock still keeps 1 plot of each event crop/);
+    await page.locator('#season-wheat-budget').fill('383');
+    assert.match(await page.locator('#season-budget-note').innerText(), /Budget conflict.*384/);
     await page.locator('#season-wheat-budget').fill('');
     await page.locator('#season-mutation-plots').fill('');
     await page.locator('#setup-copy-code').click();
@@ -206,6 +208,18 @@ try {
     await page.waitForFunction(() => document.getElementById('version').textContent.includes('0.16.0'));
     await page.locator('#optimize-btn').click();
     await page.waitForFunction(() => !document.getElementById('optimize-btn').disabled, null, { timeout: 120_000 });
+    assert.equal(await page.locator('#harvest-order-card').isVisible(), true);
+    assert.equal(await page.locator('#harvest-order-stock tbody tr').count(), 6);
+    assert.match(await page.locator('#harvest-order-card').innerText(), /Apple/);
+    assert.match(await page.locator('#harvest-order-card').innerText(), /Fresh Water/);
+    assert.match(await page.locator('#harvest-order-card').innerText(), /Sea Salt/);
+    assert.match(await page.locator('#harvest-order-card').innerText(), /Sugarcane/);
+    await page.locator('#harvest-order-card').screenshot({ path: 'test-results/harvest-order-stock-desktop.png' });
+    await page.setViewportSize({ width: 390, height: 844 });
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), false,
+        'the six-item raw stock report must fit on mobile');
+    await page.locator('#harvest-order-card').screenshot({ path: 'test-results/harvest-order-stock-mobile.png' });
+    await page.setViewportSize({ width: 1000, height: 900 });
     assert.equal(await page.locator('#results-content').isVisible(), true, 'real WASM must calculate imported settings');
     assert.equal(await page.locator('#error-message').isVisible(), false);
     // Import another setup after a solve, then switch modes: no old plan may reappear.
@@ -248,7 +262,7 @@ try {
     assert.equal(await page.locator('#home-level').inputValue(), '11');
     assert.match(await page.locator('#setup-share-hint').innerText(), /saving is unavailable/);
     assert.deepEqual(errors, [], 'browser/WASM should not raise uncaught errors');
-    console.log('Setup UI/WASM smoke passed: import/export, family restore and staffing, old codes, shared links, budget feedback, RV upgrade timers, desktop/mobile and storage denial.');
+    console.log('Setup UI/WASM smoke passed: import/export, family restore and staffing, old codes, shared links, raw order stock, budget feedback, RV upgrade timers, desktop/mobile and storage denial.');
 } catch (error) {
     await mkdir(new URL('../test-results/', import.meta.url), { recursive: true });
     await page.screenshot({ path: 'test-results/setup-failure.png', fullPage: true });

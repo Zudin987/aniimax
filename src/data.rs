@@ -14,6 +14,35 @@ use crate::models::{
     ProductionItem, WoodlandRow,
 };
 
+/// Raw ingredients for every seasonal recipe, including dependencies of processed inputs.
+/// Call before filtering locked/skipped recipes or adding worker/environment variants: keeping
+/// order ingredients does not mean automatically crafting the seasonal dishes.
+pub fn season_raw_ingredients(items: &[ProductionItem]) -> Result<Vec<String>, String> {
+    use std::collections::{BTreeSet, HashMap};
+    let recipes: HashMap<&str, &ProductionItem> = items.iter().map(|item| (item.name.as_str(), item)).collect();
+    fn visit<'a>(name: &'a str, recipes: &HashMap<&str, &'a ProductionItem>, path: &mut Vec<&'a str>, raw: &mut BTreeSet<String>) -> Result<(), String> {
+        if path.contains(&name) {
+            return Err(format!("Season recipe dependency cycle at {name}"));
+        }
+        let item = recipes.get(name).ok_or_else(|| format!("Missing season ingredient recipe: {name}"))?;
+        if let Some(inputs) = &item.raw_materials {
+            path.push(name);
+            for input in inputs {
+                visit(input, recipes, path, raw)?;
+            }
+            path.pop();
+        } else {
+            raw.insert(name.to_string());
+        }
+        Ok(())
+    }
+    let mut raw = BTreeSet::new();
+    for item in items.iter().filter(|item| item.season.is_some()) {
+        visit(&item.name, &recipes, &mut Vec::new(), &mut raw)?;
+    }
+    Ok(raw.into_iter().collect())
+}
+
 /// One row of `aniimo_requirements.csv`.
 #[derive(Debug, serde::Deserialize)]
 struct AniimoRequirementRow {
@@ -150,10 +179,13 @@ struct SeasonRow {
     #[serde(rename = "yield")]
     yield_amount: u32,
     facility_level: u32,
+    /// Food Energy, when verified in game; older season CSVs can omit this column.
+    #[serde(default)]
+    energy: Option<f64>,
 }
 
 /// Parses a season's recipes (columns `name, facility, raw_materials, required_amount, seed_cost,
-/// sell_value, points, production_time, workload, yield, facility_level`; see
+/// sell_value, points, production_time, workload, yield, facility_level[, energy]`; see
 /// [`crate::models::SeasonTerms`]). Crops are watered like any other; call
 /// [`crate::models::apply_watering`] on them.
 pub fn parse_season(csv_text: &str) -> Result<Vec<ProductionItem>, Box<dyn Error>> {
@@ -177,7 +209,7 @@ pub fn parse_season(csv_text: &str) -> Result<Vec<ProductionItem>, Box<dyn Error
             sell_value: row.sell_value,
             production_time,
             yield_amount: row.yield_amount,
-            energy: None,
+            energy: row.energy,
             facility_level: row.facility_level,
             module_requirement: None,
             workload: row.workload,

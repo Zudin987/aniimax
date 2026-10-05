@@ -64,6 +64,7 @@ test('real rendering functions show current recipe names and required families',
     const labels = new Function(app.slice(app.indexOf('const ITEM_NAMES ='), app.indexOf('function isLevelUpStrategy()')) + '\nreturn ITEM_NAMES;')();
     assert.equal(labels.advanced_wind_chime, 'Premium Wind Chime');
     assert.equal(labels.advanced_gemstone_dust, 'Premium Gemstone Dust');
+    assert.equal(labels.umbral_sweet_and_spicy_sauce, 'Umbral Sweet Spicy Sauce');
     const code = app.slice(app.indexOf('function taskLabel('), app.indexOf('function facilityPlanTable('));
     const taskLabel = new Function('FACILITIES', 'personalityLetter', code + '\nreturn taskLabel;')(FACILITIES, () => 'J');
     assert.match(taskLabel({ ability: 'Leisure', level: 3, personality_bonus: false }, 'Nimbus Bed'), /Nimbi family/);

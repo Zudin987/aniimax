@@ -406,6 +406,24 @@ fn harvest_moon_wheat_budget_caps_planting_rate() {
     assert!(spend_per_day >= 3_455.0, "optimizer should use almost all profitable Wheat budget");
 }
 
+#[test]
+fn harvest_budget_fits_the_shown_whole_plots_without_hidden_pauses() {
+    let mut radish = item("moondew_radish", "Farmland", 1_800.0, 1_000.0);
+    radish.season = Some(SeasonTerms { points: 1.0, seed_cost: 4.0 });
+    let mut pepper = radish.clone();
+    pepper.name = "waxing_moon_pepper".into();
+    pepper.sell_value = 900.0;
+    let items = vec![radish, pepper];
+    let mut counts = FacilityCounts::only(&[("Farmland", 10, 1)]);
+    counts.set_season_limits(Some(600.0), 0);
+    let plan = solve(&items, &counts, &ModuleLevels::default());
+    assert_eq!(plan.units.values().sum::<u32>(), 3, "600/day fits three full plots, not a paused fourth");
+    for (name, units) in &plan.units {
+        assert!((plan.recipe_rates[name] * 1_800.0 - *units as f64).abs() < 1e-8);
+    }
+    assert!((plan.recipe_rates.values().sum::<f64>() * 4.0 * 86_400.0 - 576.0).abs() < 1e-8);
+}
+
 
 fn lightning_crew(level: u32) -> Crew {
     Crew {

@@ -187,7 +187,8 @@
                         <span class="season-title">Harvest Moon Festival</span>
                     </label>
                     <div id="season-config" hidden>
-                        <p class="hint">Moonray Wheat buys Harvest Moon seeds. Set how much the optimizer is allowed to <strong>spend</strong> per day so it does not recommend an event setup you cannot sustain. Season items also earn Harvest Moon Points, which you can rank under Priorities.</p>
+                        <p class="hint">Harvest Moon keeps <strong>one production unit each</strong> of Sugarcane, Moondew Radish, Waxing Moon Pepper, Apple, Fresh Water and Sea Salt. Keep that output <strong>raw in Storage</strong> and craft when an order arrives. Extra production follows your priorities; reserved stock is excluded from sales and income.</p>
+                        <p class="hint small">Rock Candy needs Sugarcane + Fresh Water (Simmering Pot level 3); Cider Vinegar needs Apple (Pickling Jar level 2). Craft these and the festival dishes on demand, using the Recipe Notes you own. The raw reserve covers every festival recipe, even unticked Notes. It builds stock over time; it does not assume you already have ingredients or predict orders.</p>
                         <div class="input-row season-limits">
                             <div class="input-field">
                                 <label for="season-wheat-budget">Max Moonray Wheat spend / day</label>
@@ -195,13 +196,13 @@
                                 <span class="hint small" id="season-budget-help">0 = unlimited. This caps seed spending over 24 hours of continuous production; it is not your current balance. The 600 default uses the reported daily-mission allowance. Increase it for orders or Wheat you already have.</span>
                             </div>
                             <div class="input-field">
-                                <label for="season-mutation-plots">Reserved mutation plots / crop</label>
+                                <label for="season-mutation-plots">Minimum event plots / crop</label>
                                 <input type="number" id="season-mutation-plots" value="1" min="0" max="10" step="1" aria-describedby="season-mutation-help season-budget-note">
-                                <span class="hint small" id="season-mutation-help">Minimum for <strong>each</strong> crop: 1 reserves 2 plots total, 2 reserves 4. Keeps Moondew Radish and Waxing Moon Pepper cycling for mutation attempts. 0 removes the reserve; the optimizer may still plant event crops.</span>
+                                <span class="hint small" id="season-mutation-help">Minimum for <strong>each</strong> crop: 1 keeps 2 event plots total, 2 keeps 4. These cycle for mutation attempts. 0 removes extra mutation requirements; order stock still keeps 1 Radish and 1 Pepper plot, plus 1 Sugarcane plot and 1 Apple woodland.</span>
                             </div>
                         </div>
                         <p class="harvest-mutation-note" id="season-budget-note" role="status" aria-live="polite"></p>
-                        <p class="hint small">Mutation outcomes are random. Your Plant Research Module unlocks mutation types and improves their chances; this reserve creates attempts and does not predict mutation rewards. Turn on Harvest Moon Points under Priorities to favor event points.</p>
+                        <p class="hint small">Moonray Wheat buys event seeds; the spending cap includes the order-stock plots. Mutation outcomes are random. Your Plant Research Module unlocks mutation types and improves their chances. Rank Harvest Moon Points under Priorities to favor points from extra output. Held stock earns no points until you use or sell it in game.</p>
                         <p class="assume-title">Recipe Notes</p>
                         <div class="special-grid" id="season-notes"></div>
                     </div>
@@ -326,6 +327,13 @@
                         <h2>Profit by Product</h2>
                         <p class="hint">Net of seed costs.</p>
                         <div id="profit-breakdown"></div>
+                    </div>
+
+                    <div class="card production-steps" id="harvest-order-card" hidden>
+                        <h2>Harvest Moon Order Stock</h2>
+                        <p class="hint">Keep the following output raw in Storage. Craft Rock Candy, Cider Vinegar and festival dishes when orders arrive. This stock is excluded from the plan's income and points; extra output can follow the facility plan.</p>
+                        <p class="hint small">These are production amounts, not your current inventory. The first batch starts your stock; check an order's quantities and your Recipe Notes before crafting.</p>
+                        <div class="table-wrapper" id="harvest-order-stock"></div>
                     </div>
 
                     <div class="card production-steps">
@@ -480,7 +488,7 @@
                 <p>where \(s_i\) is how much of item \(i\) is sold per second at price \(p_i\), and \(c_r\) is a crop's seed cost. During the Harvest Moon Festival, season crops' seeds cost Moonray Wheat instead; when a daily Wheat budget is set, their combined planting rate is constrained to stay within it (0 means unlimited). Subject to:</p>
                 <ul>
                     <li><strong>Whole units.</strong> \(b_r \, t_r \le u_r\), with \(u_r\) a whole number and \(t_r\) the time per batch. A unit runs one recipe and is left running.</li>
-                    <li><strong>Item balance.</strong> Everything made covers what other recipes use plus what's sold. A quick variant makes the same item as the regular one.</li>
+                    <li><strong>Item balance.</strong> Everything made covers what other recipes use plus what's sold. Harvest Moon also keeps one raw unit's output of every order ingredient in Storage; held stock earns no income or points. A quick variant makes the same item as the regular one.</li>
                     <li><strong>What you own.</strong> For every facility and level \(L\), the units on recipes needing level \(L\) or higher add up to at most what you own at that level. A higher-level plot can run a lower-level recipe.</li>
                     <li><strong>Growing environments.</strong> A crop wanting Cool, Warm, Freeze or Scorching grows at full speed on a plot covered by a Heat Furnace or Cooling Unit set to that mode, and more slowly on an uncovered one (see below). An Adequate crop needs a Sunlamp and grows nowhere else.</li>
                 </ul>
