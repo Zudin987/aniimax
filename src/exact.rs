@@ -394,6 +394,7 @@ fn build_model<'a>(
                 && facility_counts.can_produce(&item.facility, item.facility_level)
                 && item.module_requirement.as_ref().is_none_or(|(m, l)| module_levels.can_use(m, *l))
                 && item.production_time > 0.0
+                && (!crate::models::is_electric_item(&item.name) || crate::models::e_mode_allowed(item))
         })
         .collect();
     let power_capacity = crate::models::grid_power_capacity(facility_counts, module_levels);
@@ -1675,6 +1676,9 @@ pub fn check_plan(
     let mut units_at: HashMap<&str, Vec<(u32, f64)>> = HashMap::new();
     for (name, &rate) in &plan.recipe_rates {
         let recipe = all.get(name.as_str()).ok_or(format!("unknown recipe {name}"))?;
+        if crate::models::is_electric_item(name) && !crate::models::e_mode_allowed(recipe) {
+            return Err(format!("{name} must use Aniimo production"));
+        }
         if !facility_counts.can_produce(&recipe.facility, recipe.facility_level) {
             return Err(format!("{name} needs {} level {}", recipe.facility, recipe.facility_level));
         }

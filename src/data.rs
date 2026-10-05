@@ -105,9 +105,10 @@ struct EModeRow {
     production_time: f64,
 }
 
-/// Adds internal electric variants for every E-Mode row whose base recipe exists in `items`.
+/// Adds internal electric variants for eligible E-Mode rows whose base recipe exists in `items`.
 /// The normal recipe stays alongside it, so the optimizer can choose Aniimo mode or E-Mode.
 /// Unknown rows are ignored so the timing table may safely be a superset of the loaded recipes.
+/// Known game timers remain in the table even when the planner keeps that job on Aniimo.
 pub fn add_e_mode_variants(items: &mut Vec<ProductionItem>, csv_text: &str) -> Result<usize, Box<dyn Error>> {
     let source = items.clone();
     let mut rdr = ReaderBuilder::new().trim(csv::Trim::All).from_reader(csv_text.as_bytes());
@@ -115,6 +116,7 @@ pub fn add_e_mode_variants(items: &mut Vec<ProductionItem>, csv_text: &str) -> R
     for row in rdr.deserialize::<EModeRow>() {
         let row = row?;
         let Some(base) = source.iter().find(|item| item.name == row.name) else { continue };
+        if !crate::models::e_mode_allowed(base) { continue; }
         let mut electric = base.clone();
         electric.name = format!("{}{}", row.name, crate::models::ELECTRIC_SUFFIX);
         electric.production_time = row.production_time;

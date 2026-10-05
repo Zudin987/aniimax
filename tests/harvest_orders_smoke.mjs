@@ -1,21 +1,8 @@
 // The browser's real WASM/HiGHS planner, without an HTTP server or DOM mocks.
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import { pathToFileURL } from 'node:url';
-import path from 'node:path';
-import highsModule from '../web/vendor/highs/highs.mjs';
-import { aniimoTeamCount } from '../web/aniimo-team.js';
+import { pkg, plan } from './wasm_planner.mjs';
 import { FACILITIES, simpleSetup, SEASON } from '../web/facility-config.js';
 
-const pkgDir = process.env.ANIIMAX_WASM_DIR || new URL('../web/pkg/', import.meta.url);
-const pkgUrl = pkgDir instanceof URL ? pkgDir : pathToFileURL(path.resolve(pkgDir) + path.sep);
-const pkg = await import(new URL('aniimax.js', pkgUrl));
-await pkg.default({ module_or_path: fs.readFileSync(new URL('aniimax_bg.wasm', pkgUrl)) });
-const newHighs = async () => highsModule({ wasmBinary: fs.readFileSync(new URL('../web/vendor/highs/highs.wasm', import.meta.url)),
-    print: () => {}, printErr: () => {} });
-const worker = fs.readFileSync(new URL('../web/worker.js', import.meta.url), 'utf8');
-const plannerSource = worker.slice(worker.indexOf('// Seconds HiGHS'), worker.indexOf('// Ranks changes'));
-const plan = new Function('newHighs', 'aniimoTeamCount', plannerSource + '\nreturn exactPlanJson;')(newHighs, aniimoTeamCount);
 const items = JSON.parse(pkg.get_all_items());
 const raw = ['apple', 'fresh_water', 'moondew_radish', 'sea_salt', 'sugarcane', 'waxing_moon_pepper'];
 const none = Object.fromEntries(FACILITIES.map(f => [f.name, [{ count: 0, level: 1 }]]));
@@ -89,18 +76,22 @@ stockCheck(JSON.parse(await plan(pkg, JSON.stringify(rosterInput))));
 const wrongFamily = { ...rosterInput, roster: { ...team, members: [team.members[0], { ...team.members[1], family: 'Nimbi' }] } };
 assert.match(JSON.parse(pkg.plan_input_error(JSON.stringify(wrongFamily))), /raw sea salt/);
 const poweredInput = { ...input, aniimo: 'roster', force_e_mode: true,
-    facilities: { ...input.facilities, 'Crackle Generator': [{ count: 1, level: 1 }] },
+    facilities: { ...input.facilities, Farmland: [{ count: 4, level: 5 }],
+        'Carousel Mill': [{ count: 1, level: 1 }], 'Crackle Generator': [{ count: 1, level: 1 }] },
     modules: { ...input.modules, power_module: 1 },
     roster: { members: [{ count: 3, abilities: { Earth: 1, Grass: 1, Dark: 1, Lightning: 1 }, personalities: [] },
-        team.members[1]], residents } };
+        { count: 2, abilities: { Water: 2 }, personalities: [] }, team.members[1]], residents } };
 const powered = JSON.parse(await plan(pkg, JSON.stringify(poweredInput)));
 stockCheck(powered);
 assert.ok(powered.power_used > 0);
 const water = powered.coin_items.find(row => row.status === 'producing' && row.facility === 'Well');
-assert.match(water.item_name, /__electric/);
-assert.equal(water.crew, null);
-assert.equal(water.aniimo, null);
-assert.equal(wheatPerDay(powered), 288, 'without a Water worker crops are unwatered');
+assert.doesNotMatch(water.item_name, /__electric/);
+assert.notEqual(water.crew, null);
+assert.equal(water.aniimo.ability, 'Water');
+assert.equal(wheatPerDay(powered), 384);
+assert.match(JSON.parse(pkg.plan_input_error(JSON.stringify({ ...poweredInput,
+    roster: { ...poweredInput.roster, members: [poweredInput.roster.members[0], team.members[1]] } }))), /raw fresh water/,
+    'a powered Well cannot replace the Water worker');
 
 // Check the real RV10 Simple setup, where this event first becomes available.
 const rv10 = simpleSetup(10);
