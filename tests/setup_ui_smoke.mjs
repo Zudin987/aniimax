@@ -150,14 +150,36 @@ try {
     // Review explicit conflict, exact 768 cap, unlimited cap and the mandatory order baseline.
     await page.locator('label:has(#aniimo-best)').click();
     assert.equal(await page.locator('#aniimo-best').isChecked(), true);
+    const beforeDetails = await config();
+    assert.equal(await page.locator('#season-details p').first().isVisible(), false,
+        'crafting details should be collapsed so the setup stays concise');
+    await page.locator('#season-details summary').click();
+    assert.equal(await page.locator('#season-details p').first().isVisible(), true);
+    assert.match(await page.locator('#season-details').innerText(), /Sugarcane, Moondew Radish, Waxing Moon Pepper, Apple, Fresh Water and Sea Salt/);
+    await page.locator('#season-details summary').click();
+    assert.deepEqual(await config(), beforeDetails, 'reading help must not change the setup');
+    await page.locator('#season-section').screenshot({ path: 'test-results/harvest-setup-desktop.png' });
+    await page.setViewportSize({ width: 390, height: 844 });
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), false,
+        'the compact Harvest Moon setup must fit on mobile');
+    const budgetHelp = await page.locator('#season-budget-help').boundingBox();
+    const plotLabel = await page.locator('label[for="season-mutation-plots"]').boundingBox();
+    const plotHelp = await page.locator('#season-mutation-help').boundingBox();
+    const budgetNote = await page.locator('#season-budget-note').boundingBox();
+    assert.ok(plotLabel.y - budgetHelp.y - budgetHelp.height < 40,
+        'stacked controls must not keep a desktop flex basis as empty vertical space');
+    assert.ok(budgetNote.y - plotHelp.y - plotHelp.height < 40,
+        'the budget summary must sit close to the controls');
+    await page.locator('#season-section').screenshot({ path: 'test-results/harvest-setup-mobile.png' });
+    await page.setViewportSize({ width: 1000, height: 900 });
     await page.locator('#season-mutation-plots').fill('2');
     assert.match(await page.locator('#season-budget-note').innerText(), /Budget conflict.*768/);
     await page.locator('#season-wheat-budget').fill('768');
-    assert.match(await page.locator('#season-budget-note').innerText(), /Fits this budget/);
+    assert.match(await page.locator('#season-budget-note').innerText(), /Within budget/);
     await page.locator('#season-wheat-budget').fill('0');
     assert.match(await page.locator('#season-budget-note').innerText(), /Unlimited seed spend/);
     await page.locator('#season-mutation-plots').fill('0');
-    assert.match(await page.locator('#season-budget-note').innerText(), /Order stock still keeps 1 plot of each event crop/);
+    assert.match(await page.locator('#season-budget-note').innerText(), /Order stock keeps 1 plot per crop/);
     await page.locator('#season-wheat-budget').fill('383');
     assert.match(await page.locator('#season-budget-note').innerText(), /Budget conflict.*384/);
     await page.locator('#season-wheat-budget').fill('');
