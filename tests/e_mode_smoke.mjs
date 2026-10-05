@@ -34,7 +34,7 @@ test('automatic E-Mode keeps the Mine on workers in every Aniimo setup', async (
 test('RV materials keep first stages manual while later stages can use real E-Mode', async () => {
     const input = { currency: 'coins', aniimo: 'minimum', prioritize_byproducts: false,
         force_e_mode: true, modules: { power_module: 1 },
-        facilities: { ...none, Farmland: [{ count: 2, level: 1 }], Mine: [{ count: 1, level: 1 }],
+        facilities: { ...none, Woodland: [{ count: 1, level: 1 }], Mine: [{ count: 1, level: 1 }],
             'Woodworking Bench': [{ count: 2, level: 2 }], 'Chimney Kiln': [{ count: 2, level: 2 }],
             'Crackle Generator': [{ count: 1, level: 1 }] },
         level_up: { cost: [['standard_planks', 64], ['sintered_ore_brick', 64]], stock: [] } };
