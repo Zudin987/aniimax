@@ -313,6 +313,8 @@ self.onmessage = async (event) => {
                 // The backup planner doesn't know the player's roster, so a roster plan stops here.
                 if (error?.noFallback) {
                     result = JSON.stringify({ success: false, error: fallbackReason });
+                } else if (JSON.parse(payload).season) {
+                    result = JSON.stringify({ success: false, error: `No Harvest Moon plan found: ${fallbackReason}. Check the required raw facilities and Aniimo team, Wheat cap and event plots, then calculate again. The backup planner cannot preserve order stock.` });
                 } else if (JSON.parse(payload).force_e_mode) {
                     result = JSON.stringify({ success: false, error: `No forced E-Mode plan found: ${fallbackReason}. Check your power setup and Lightning Aniimo, or turn off Force E-Mode.` });
                 } else if (JSON.parse(payload).aniimo?.startsWith('roster')) {

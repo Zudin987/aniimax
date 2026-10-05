@@ -147,7 +147,7 @@ try {
     await page.locator('#roster-editor').screenshot({ path: 'test-results/aniimo-family-mobile.png' });
     await page.setViewportSize({ width: 1000, height: 900 });
 
-    // Review explicit conflict, exact 768 cap, unlimited cap and no reserve.
+    // Review explicit conflict, exact 768 cap, unlimited cap and the mandatory order baseline.
     await page.locator('label:has(#aniimo-best)').click();
     assert.equal(await page.locator('#aniimo-best').isChecked(), true);
     await page.locator('#season-mutation-plots').fill('2');
@@ -157,7 +157,9 @@ try {
     await page.locator('#season-wheat-budget').fill('0');
     assert.match(await page.locator('#season-budget-note').innerText(), /Unlimited seed spend/);
     await page.locator('#season-mutation-plots').fill('0');
-    assert.match(await page.locator('#season-budget-note').innerText(), /No mutation reserve/);
+    assert.match(await page.locator('#season-budget-note').innerText(), /Order stock still keeps 1 plot of each event crop/);
+    await page.locator('#season-wheat-budget').fill('383');
+    assert.match(await page.locator('#season-budget-note').innerText(), /Budget conflict.*384/);
     await page.locator('#season-wheat-budget').fill('');
     await page.locator('#season-mutation-plots').fill('');
     await page.locator('#setup-copy-code').click();

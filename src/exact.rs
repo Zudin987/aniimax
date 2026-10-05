@@ -144,6 +144,8 @@ pub struct ExactPlan {
     pub generators: Vec<(u32, u32)>,
     /// Units/sec sold of each item.
     pub sold: BTreeMap<String, f64>,
+    /// Whole units whose output is retained raw for manual Harvest Moon order crafting.
+    pub harvest_reserve_units: BTreeMap<String, u32>,
     pub environment: Vec<ExactEnvironment>,
     /// Overlapping pairs of environment buildings (see [`ExactPair`]).
     pub pairs: Vec<ExactPair>,
@@ -251,7 +253,7 @@ pub fn takes_turns(recipe: &ProductionItem) -> bool {
 
 /// The item a recipe makes: a quick variant makes the regular item, and an uncovered crop (see
 /// [`crate::models::add_uncovered_variants`]) makes the same crop, just slower.
-fn made_item<'a>(name: &'a str, all: &HashMap<&str, &ProductionItem>) -> &'a str {
+pub(crate) fn made_item<'a>(name: &'a str, all: &HashMap<&str, &ProductionItem>) -> &'a str {
     let name = crate::models::base_item_name(name);
     match name.strip_prefix("quick_") {
         Some(base) if all.contains_key(base) => base,
@@ -263,6 +265,7 @@ fn made_item<'a>(name: &'a str, all: &HashMap<&str, &ProductionItem>) -> &'a str
 enum VarKind<'a> {
     Rate(&'a ProductionItem),
     Units(&'a ProductionItem),
+    HarvestReserve(&'a ProductionItem),
     /// One E-Mode recipe assigned to an owned machine at this exact facility tier.
     ElectricUnits { recipe: &'a ProductionItem, tier_level: u32 },
     /// A physical machine of an exact tier switched into E-Mode.
@@ -581,6 +584,27 @@ fn build_model<'a>(
                 balance.entry(input.as_str()).or_default().push((rate, -(amount as f64)));
             }
         }
+    }
+    // Keep one whole unit's output of every raw order ingredient. Its real variant timer
+    // matters: quick recipes, uncovered crops, roster workers and E-Mode produce different
+    // amounts. Merely assigning a plot would let processors or sales consume the entire crop.
+    for name in facility_counts.harvest_order_items() {
+        let mut reserved = Vec::new();
+        for &(recipe, rate) in &rate_of {
+            if recipe.raw_materials.is_some() || made_item(&recipe.name, &all) != name {
+                continue;
+            }
+            let reserve = model.add(0.0, (0.0, 1.0), true, VarKind::HarvestReserve(recipe));
+            reserved.push((reserve, 1.0));
+            let mut owned = vec![(reserve, -1.0)];
+            owned.extend(units_of.iter().filter(|(r, _)| r.name == recipe.name).map(|(_, units)| (*units, 1.0)));
+            owned.extend(electric_units_of.iter().filter(|(r, _, _)| r.name == recipe.name).map(|(_, _, units)| (*units, 1.0)));
+            model.constrain(owned, ComparisonOp::Ge, 0.0);
+            model.constrain(vec![(rate, recipe.production_time), (reserve, -1.0)], ComparisonOp::Ge, 0.0);
+            balance.entry(name).or_default().push((reserve, -(recipe.yield_amount as f64) / recipe.production_time));
+        }
+        // An unavailable ingredient makes the setup infeasible, never silently removes a reserve.
+        model.constrain(reserved, ComparisonOp::Eq, 1.0);
     }
     // A floor naming a currency ("aniimo_exp", "aniipods") keeps a plan making that much of it
     // while it earns `currency`; those items need sell variables too, worth nothing here.
@@ -1412,6 +1436,7 @@ fn plan_from(model: &Model, value: f64, upper_bound: f64, proven_optimal: bool, 
     let mut electric_units: BTreeMap<String, Vec<(u32, u32)>> = BTreeMap::new();
     let mut electric_machines: BTreeMap<String, Vec<(u32, u32)>> = BTreeMap::new();
     let mut sold = BTreeMap::new();
+    let mut harvest_reserve_units = BTreeMap::new();
     let mut power_used = 0u32;
     let mut generators_used = 0u32;
     let mut power_supply = 0u32;
@@ -1425,6 +1450,9 @@ fn plan_from(model: &Model, value: f64, upper_bound: f64, proven_optimal: bool, 
     let mut grower_staffing = Vec::new();
     for (kind, &v) in model.kinds.iter().zip(values) {
         match kind {
+            VarKind::HarvestReserve(recipe) if v > 0.5 => {
+                harvest_reserve_units.insert(recipe.name.clone(), v.round() as u32);
+            }
             VarKind::Pace => pace = Some(v),
             VarKind::Staff { building, member } if v > 1e-9 => staffing.push((building.clone(), *member, v)),
             VarKind::GrowerStaff { item, step, member, seconds } if v > 1e-9 => {
@@ -1551,7 +1579,19 @@ fn plan_from(model: &Model, value: f64, upper_bound: f64, proven_optimal: bool, 
         })) {
             let renamed: BTreeMap<String, String> = replacements.into_iter().collect();
             for (name, boosted) in &renamed {
-                if let Some(rate) = recipe_rates.remove(name) { recipe_rates.insert(boosted.clone(), rate); }
+                if let Some(mut rate) = recipe_rates.remove(name) {
+                    if let Some(reserve) = harvest_reserve_units.remove(name) {
+                        // Actual low-draw E-Mode speeds up the reserved raw unit too. Retain
+                        // that additional output; downstream production and sales stay fixed.
+                        if let Some(VarKind::Rate(recipe)) = model.kinds.iter().find(|kind| {
+                            matches!(kind, VarKind::Rate(recipe) if recipe.name == *name)
+                        }) {
+                            rate += reserve as f64 * 0.2 / recipe.production_time;
+                        }
+                        harvest_reserve_units.insert(boosted.clone(), reserve);
+                    }
+                    recipe_rates.insert(boosted.clone(), rate);
+                }
                 units.remove(name);
                 electric_units.remove(name);
             }
@@ -1597,6 +1637,7 @@ fn plan_from(model: &Model, value: f64, upper_bound: f64, proven_optimal: bool, 
         power_efficiency,
         generators,
         sold,
+        harvest_reserve_units,
         environment,
         pairs,
         pace,
@@ -1706,6 +1747,31 @@ pub fn check_plan(
         // An item sold for another currency (Aniimo EXP, Aniipods) leaves the balance the same
         // way, but earns nothing towards `currency`.
         earned += sold * item.earns(currency);
+    }
+    // Check retained raw production independently, before any RV inventory offsets. Existing
+    // inventory cannot cover a continuously producing order unit, and retained items earn no
+    // coins or event points until the player crafts/sells them outside this plan.
+    let mut reserved: BTreeMap<&str, (u32, f64)> = BTreeMap::new();
+    for (name, &units) in &plan.harvest_reserve_units {
+        let recipe = all.get(name.as_str()).ok_or(format!("unknown Harvest Moon reserve {name}"))?;
+        let raw = made_item(name, &all);
+        if units == 0 || recipe.raw_materials.is_some() || !facility_counts.harvest_order_items().iter().any(|item| item == raw) {
+            return Err(format!("invalid raw Harvest Moon reserve {name}"));
+        }
+        if plan.units.get(name).copied().unwrap_or(0) < units
+            || plan.recipe_rates.get(name).copied().unwrap_or(0.0) * recipe.production_time + TOLERANCE < units as f64
+        {
+            return Err(format!("{name} needs {units} continuously producing units for Harvest Moon orders"));
+        }
+        let entry = reserved.entry(raw).or_default();
+        entry.0 += units;
+        entry.1 += units as f64 * recipe.yield_amount as f64 / recipe.production_time;
+    }
+    for raw in facility_counts.harvest_order_items() {
+        let (units, kept) = reserved.get(raw.as_str()).copied().unwrap_or_default();
+        if units != 1 || made.get(raw.as_str()).copied().unwrap_or(0.0) + TOLERANCE < kept {
+            return Err(format!("{raw} needs one unit's output kept raw for Harvest Moon orders"));
+        }
     }
     if let Some(level_up) = level_up {
         let pace = plan.pace.ok_or("the plan has no level-up pace")?;
@@ -2264,6 +2330,16 @@ pub fn to_production_plan(
         uses.sort_unstable();
         uses.dedup();
         let sells = exact.sold.get(made).is_some_and(|&s| s > 1e-9);
+        let reserved = exact.harvest_reserve_units.get(&recipe.name).copied().unwrap_or(0);
+        if reserved > 0 {
+            let extra = match (uses.is_empty(), sells) {
+                (true, false) => String::new(),
+                (true, true) => "; extra output sells directly".to_string(),
+                (false, false) => format!("; extra output used for {}", uses.join(", ")),
+                (false, true) => format!("; extra output used for {}; the rest sells directly", uses.join(", ")),
+            };
+            return format!("Keep 1 unit's output raw for Harvest Moon orders; craft when an order arrives{extra}");
+        }
         // Made, not sold, not all used up and not sellable: kept for the level-up.
         let sellable = all.get(made).is_some_and(|item| item.sell_currency != "none" && item.sell_value > 0.0);
         let kept = exact.pace.is_some() && !sells && !sellable && net_rates(exact, items).get(made).is_some_and(|&n| n > 1e-9);

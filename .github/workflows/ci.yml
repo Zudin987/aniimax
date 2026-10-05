@@ -76,6 +76,12 @@ jobs:
           wasm-pack build --target web --out-dir web/pkg --no-opt -- --locked
       - name: Setup import and WASM UI smoke
         run: npm run test:ui
+      - name: Keep tested WASM build
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tested-wasm-build
+          path: web/pkg/
       - name: Keep UI screenshots
         if: always()
         uses: actions/upload-artifact@v4

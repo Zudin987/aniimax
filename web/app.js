@@ -2252,22 +2252,22 @@ function seasonMutationPlots() {
 function renderSeasonBudgetNote() {
     const note = document.getElementById('season-budget-note');
     if (!note) return;
-    const plots = seasonMutationPlots();
+    const requested = seasonMutationPlots();
+    const plots = Math.max(1, requested);
     const budget = seasonWheatBudget();
     const watered = selectedSetupTab() !== 'custom' || roster.some(a => a.count > 0 && (a.abilities.Water || 0) >= 1);
     const { needed, spare, conflict } = harvestBudgetStatus(plots, budget, watered);
     const growth = watered ? 'assuming both watering jobs finish' : 'without a Water worker';
     note.classList.remove('warning');
 
-    if (plots === 0) {
-        note.innerHTML = '<strong>No mutation reserve:</strong> the optimizer may use zero event-crop plots when another plan is better.';
-    } else if (budget === null) {
-        note.innerHTML = `<strong>Unlimited seed spend:</strong> ${plots} plot${plots === 1 ? '' : 's'} per crop (${plots * 2} total) needs about ${formatNumber(needed)} Moonray Wheat/day, ${growth}. The optimizer may plant more.`;
+    const baseline = requested === 0 ? 'Order stock still keeps 1 plot of each event crop. ' : '';
+    if (budget === null) {
+        note.innerHTML = `<strong>Unlimited seed spend:</strong> ${baseline}${plots} plot${plots === 1 ? '' : 's'} per crop (${plots * 2} total) needs about ${formatNumber(needed)} Moonray Wheat/day, ${growth}. The optimizer may plant more.`;
     } else if (conflict) {
         note.classList.add('warning');
-        note.innerHTML = `<strong>Budget conflict:</strong> ${plots} plot${plots === 1 ? '' : 's'} per crop (${plots * 2} total) needs about ${formatNumber(needed)} Wheat/day, ${growth}. Your cap is ${formatNumber(budget)}/day. Raise it or reduce the reserve before calculating.`;
+        note.innerHTML = `<strong>Budget conflict:</strong> ${baseline}${plots} plot${plots === 1 ? '' : 's'} per crop (${plots * 2} total) needs about ${formatNumber(needed)} Wheat/day, ${growth}. Your cap is ${formatNumber(budget)}/day. Raise it${plots > 1 ? ' or reduce extra event plots' : ''} before calculating.`;
     } else {
-        note.innerHTML = `<strong>Fits this budget:</strong> ${plots} plot${plots === 1 ? '' : 's'} per crop (${plots * 2} total) needs about ${formatNumber(needed)} Wheat/day, ${growth}. Up to ${formatNumber(spare)}/day remains for additional event seeds.`;
+        note.innerHTML = `<strong>Fits this budget:</strong> ${baseline}${plots} plot${plots === 1 ? '' : 's'} per crop (${plots * 2} total) needs about ${formatNumber(needed)} Wheat/day, ${growth}. Up to ${formatNumber(spare)}/day remains for additional event seeds.`;
     }
 }
 
@@ -3869,7 +3869,22 @@ function renderEnvironmentDiagram(layout, mode, building, rows = [], unit = null
 // needs more than one building unit, that group splits into one table per unit (see
 // `splitByEnvironmentUnit`) so it's clear which crops go in which physical building. Everything
 // else falls back to the original per-facility-category grouping (FACILITY_CATEGORIES).
+function renderHarvestOrderStock(plan) {
+    const rows = plan.harvest_order_stock || [];
+    document.getElementById('harvest-order-card').hidden = rows.length === 0;
+    document.getElementById('harvest-order-stock').innerHTML = rows.length ? `
+        <table class="level-up-lines">
+            <thead><tr><th>Keep raw</th><th>Units</th><th>Held / day</th><th>First batch</th></tr></thead>
+            <tbody>${rows.map(row => `<tr>
+                <td>${prettyItem(row.item_name)}<br><span class="hint small">${row.facility}</span></td>
+                <td>${row.units}</td><td>${formatNumber(row.units_per_second * 86400)}</td>
+                <td>${formatDuration(row.first_batch_seconds)}</td>
+            </tr>`).join('')}</tbody>
+        </table>` : '';
+}
+
 function renderFacilityPlan(plan) {
+    renderHarvestOrderStock(plan);
     const container = document.getElementById('facility-plan-container');
     const steps = plan.coin_items || [];
 

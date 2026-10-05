@@ -3,13 +3,17 @@ import { test } from 'node:test';
 import fs from 'node:fs';
 import { harvestBudgetStatus } from '../web/harvest-budget.js';
 
-test('default reserve fits 600/day, two per crop conflicts, and zero means unlimited', () => {
+test('order stock fits 600/day, two per crop conflicts, and zero Wheat means unlimited', () => {
     assert.deepEqual(harvestBudgetStatus(1, 600), { needed: 384, spare: 216, conflict: false, watered: true });
     assert.equal(harvestBudgetStatus(2, 600).conflict, true);
     assert.equal(harvestBudgetStatus(2, 600).needed, 768);
     assert.equal(harvestBudgetStatus(2, 768).conflict, false);
     assert.equal(harvestBudgetStatus(2, null).conflict, false);
-    assert.equal(harvestBudgetStatus(0, 600).needed, 0);
+    assert.equal(harvestBudgetStatus(0, 600).needed, 384);
+    assert.equal(harvestBudgetStatus(0, 383).conflict, true);
+    assert.equal(harvestBudgetStatus(0, 0).conflict, true, 'the caller normalizes unlimited to null');
+    assert.equal(harvestBudgetStatus(0, null).conflict, false);
+    assert.equal(harvestBudgetStatus(0, 288, false).needed, 288);
     assert.equal(harvestBudgetStatus(2, 600, false).needed, 576);
     assert.equal(harvestBudgetStatus(2, 600, false).conflict, false);
 });
