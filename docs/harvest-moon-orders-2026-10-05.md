@@ -42,8 +42,9 @@ inputs and sales. Extra output may follow the player's priorities. The reserve i
 constraint in every exact solve, including RV leveling, priority refinement and worker
 minimization, and is independently checked before accepting a plan.
 
-Quick dispatch recipes, uncovered environments, custom workers and powered Wells use
-their actual yield and timer. Sea Salt retains the Susuta-family restriction. The raw
+Quick dispatch recipes, uncovered environments and custom workers use their actual
+yield and timer. The [E-Mode policy](e-mode-policy-2026-10-05.md) keeps Wells and other
+primary stations on Aniimo. Sea Salt retains the Susuta-family restriction. The raw
 stock report separates held amounts from income and points and shows the wait for a
 first batch. This is ongoing production, not a claim that the player already owns an
 inventory sufficient for an unknown order.

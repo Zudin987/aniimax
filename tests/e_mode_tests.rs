@@ -41,6 +41,83 @@ fn solve(items: &[ProductionItem], counts: &FacilityCounts, modules: &ModuleLeve
 }
 
 #[test]
+fn primary_jobs_never_get_e_mode_variants_even_with_fast_timers() {
+    let protected = ["Mine", "Well", "Dewy House", "Nimbus Bed", "Tidewhisper Sandcastle",
+        "Floral Windmill", "Farmland", "Starfall Hammock", "Woodland"];
+    let mut items: Vec<_> = protected.iter().enumerate()
+        .map(|(n, facility)| item(&format!("raw_{n}"), facility, 100.0, 1.0)).collect();
+    items.extend([item("rough_lumber", "Woodworking Bench", 100.0, 1.0),
+        item("coarse_sifted_ore", "Chimney Kiln", 100.0, 1.0)]);
+    let csv = format!("name,production_time\n{}", items.iter()
+        .map(|i| format!("{},0.01\n", i.name)).collect::<String>());
+    let original = items.len();
+    assert_eq!(add_e_mode_variants(&mut items, &csv).unwrap(), 0);
+    assert_eq!(items.len(), original);
+    for mut recipe in items {
+        recipe.name = format!("{}__uncovered__by7__electric_boost", recipe.name);
+        assert!(!aniimax::models::e_mode_allowed(&recipe), "{}", recipe.name);
+    }
+}
+
+#[test]
+fn real_recipe_catalog_keeps_later_rv_stages_and_other_processors_eligible() {
+    let mut items = aniimax::data::load_all_data(std::path::Path::new("data")).unwrap();
+    add_e_mode_variants(&mut items, include_str!("../data/e_mode.csv")).unwrap();
+    for name in ["rock", "copper_ore", "quick_fresh_water", "quick_well_water",
+        "rough_lumber", "coarse_sifted_ore"] {
+        assert!(items.iter().any(|i| i.name == name), "normal {name} must stay available");
+        assert!(!items.iter().any(|i| i.name == format!("{name}__electric")
+            || i.name == format!("{name}__electric_boost")), "{name}");
+    }
+    for name in ["standard_planks", "laminated_beams", "densified_timber_component",
+        "sintered_ore_brick", "refined_ore", "microcrystalline_ore_plate", "wheatmeal", "bread", "wood_sculpture"] {
+        for suffix in ["__electric", "__electric_boost"] {
+            assert!(items.iter().any(|i| i.name == format!("{name}{suffix}")), "{name}{suffix}");
+        }
+    }
+}
+
+#[test]
+fn exact_model_and_independent_check_block_injected_primary_e_mode() {
+    let raw = item("rock", "Mine", 100.0, 1_000.0);
+    let forbidden = ProductionItem { name: "rock__electric_boost".into(), production_time: 0.01, ..raw.clone() };
+    let items = vec![raw, forbidden];
+    let mut counts = FacilityCounts::only(&[("Mine", 1, 1), ("Crackle Generator", 1, 1)]);
+    let modules = ModuleLevels { power_module: 1, ..Default::default() };
+    let normal = solve(&items, &counts, &modules);
+    assert_eq!(normal.power_used, 0);
+    assert!(normal.recipe_rates.contains_key("rock"));
+    assert!(!normal.recipe_rates.contains_key("rock__electric_boost"));
+    let mut forged = normal.clone();
+    forged.recipe_rates.insert("rock__electric_boost".into(), 1.0);
+    assert!(check_plan(&forged, &items, "coins", &counts, &modules, None)
+        .unwrap_err().contains("must use Aniimo production"));
+    counts.set_force_e_mode(true);
+    assert!(solve_exact(&items, "coins", &counts, &modules, Goal::Earn { floors: &[] },
+        Some(Duration::from_secs(5)), None).is_none(), "Force E-Mode must not bypass the policy");
+}
+
+#[test]
+fn each_rv_chain_can_mix_manual_first_stage_with_powered_later_stage() {
+    for (facility, first, last) in [("Woodworking Bench", "rough_lumber", "standard_planks"),
+        ("Chimney Kiln", "coarse_sifted_ore", "sintered_ore_brick")] {
+        let mut primary = item(first, facility, 10.0, 0.0);
+        primary.raw_materials = Some(vec!["raw".into()]); primary.required_amount = Some(vec![1]);
+        let mut later = item(last, facility, 20_000.0, 1_000.0);
+        later.raw_materials = Some(vec![first.into()]); later.required_amount = Some(vec![1]);
+        let mut items = vec![item("raw", "Farmland", 1_000.0, 0.0), primary, later];
+        add_e_mode_variants(&mut items, &format!("name,production_time\n{first},0.01\n{last},1\n")).unwrap();
+        let mut counts = FacilityCounts::only(&[("Farmland", 1, 1), (facility, 2, 1), ("Crackle Generator", 1, 1)]);
+        counts.set_force_e_mode(true);
+        let modules = ModuleLevels { power_module: 1, ..Default::default() };
+        let plan = solve(&items, &counts, &modules);
+        assert!(plan.recipe_rates.contains_key(first), "{facility} needs manual {first}");
+        assert!(plan.recipe_rates.contains_key(&format!("{last}__electric_boost")), "{facility} can power {last}");
+        assert_eq!(plan.generators_used, 1);
+    }
+}
+
+#[test]
 fn forced_e_mode_runs_a_real_station_even_when_normal_is_faster() {
     let mut items = vec![item("widget", "Crafting Table", 10.0, 1_000.0)];
     add_e_mode_variants(&mut items, "name,production_time\nwidget,100\n").unwrap();

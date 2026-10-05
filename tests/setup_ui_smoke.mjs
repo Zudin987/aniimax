@@ -119,6 +119,11 @@ try {
     assert.equal((await config())['target-amount'], '123');
     assert.deepEqual((await config()).skippedRecipes, ['quick_potato']);
     assert.equal(await page.locator('#results-section').isVisible(), false, 'Import must not calculate');
+    await page.locator('#emode-rules summary').click();
+    assert.match(await page.locator('#emode-rules').innerText(), /Mine, Well/);
+    assert.match(await page.locator('#emode-rules').innerText(), /Rough Lumber.*Coarse-Sifted Ore/);
+    assert.equal((await config())['force-e-mode'], true, 'reading the rules must preserve imported settings');
+    await page.locator('#emode-rules summary').click();
     await page.reload();
     await page.waitForFunction(() => document.getElementById('version').textContent.includes('0.16.0'));
     await page.locator('#setup-import-code').waitFor();

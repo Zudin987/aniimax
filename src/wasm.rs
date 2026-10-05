@@ -1877,6 +1877,18 @@ impl PreparedInput {
                 }
             }
         }
+        if input.force_e_mode {
+            let error = if module_levels.power_module == 0 || facility_counts.get_count("Crackle Generator") == 0 {
+                Some("Force E-Mode requires a Power Module and at least one Crackle Generator.")
+            } else if !items.iter().any(|item| crate::models::is_electric_item(&item.name)
+                && facility_counts.can_produce(&item.facility, item.facility_level)
+                && item.module_requirement.as_ref().is_none_or(|(module, level)| module_levels.can_use(module, *level))) {
+                Some("Force E-Mode needs an eligible processing recipe. Add one or turn off Force E-Mode.")
+            } else { None };
+            if let Some(error) = error {
+                return Err(serde_json::to_string(&empty_production_plan(false, Some(error.to_string()))).unwrap_or_default());
+            }
+        }
         Ok(PreparedInput { input, facility_counts, module_levels, items, setup, crew, requirements, grower_steps })
     }
 
@@ -2271,8 +2283,7 @@ mod tests {
             valid["harvest_mutation_plots"] = plots.into();
             assert_eq!(super::plan_input_error(&valid.to_string()), "null");
         }
-        // A Water-1 worker waters crops but cannot dispatch Fresh Water (Water 2). A powered
-        // Well keeps that raw supply available; a roster with no Water grows unwatered.
+        // The Well must now keep its Water worker; power cannot bypass missing raw workers.
         let mut unwatered = input;
         unwatered["aniimo"] = "roster".into();
         unwatered["modules"] = serde_json::json!({ "power_module": 1 });
@@ -2280,7 +2291,8 @@ mod tests {
         unwatered["roster"] = serde_json::json!({ "members": [{ "count": 3,
             "abilities": { "Earth": 1, "Grass": 1, "Dark": 1, "Lightning": 1 }, "personalities": [] },
             { "count": 1, "family": "Susuta", "abilities": { "Leisure": 2 }, "personalities": [] }] });
-        assert_eq!(super::plan_input_error(&unwatered.to_string()), "null");
+        let error: String = serde_json::from_str(&super::plan_input_error(&unwatered.to_string())).unwrap();
+        assert!(error.contains("raw fresh water"), "{error}");
     }
 
     fn harvest_input() -> serde_json::Value {

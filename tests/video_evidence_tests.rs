@@ -31,7 +31,9 @@ fn production_tooltips_match_prices_yields_workloads_and_requirements() {
     }
     let mut electric = items.clone();
     data::add_e_mode_variants(&mut electric, include_str!("../data/e_mode.csv")).unwrap();
-    assert_eq!(electric.iter().find(|i| i.name == "quick_fresh_water__electric").unwrap().production_time, 1800.0);
+    // The in-game E-Mode timer stays documented, but the planner now keeps Wells on Aniimo.
+    assert!(include_str!("../data/e_mode.csv").lines().any(|row| row == "quick_fresh_water,1800"));
+    assert!(!electric.iter().any(|i| i.name == "quick_fresh_water__electric"));
     assert!(unverified.iter().any(|(name, _)| name == "scales"), "Floral Windmill production stats were not shown");
 }
 
