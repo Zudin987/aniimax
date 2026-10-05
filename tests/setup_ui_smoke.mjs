@@ -162,6 +162,14 @@ try {
     await page.setViewportSize({ width: 390, height: 844 });
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), false,
         'the compact Harvest Moon setup must fit on mobile');
+    const budgetHelp = await page.locator('#season-budget-help').boundingBox();
+    const plotLabel = await page.locator('label[for="season-mutation-plots"]').boundingBox();
+    const plotHelp = await page.locator('#season-mutation-help').boundingBox();
+    const budgetNote = await page.locator('#season-budget-note').boundingBox();
+    assert.ok(plotLabel.y - budgetHelp.y - budgetHelp.height < 40,
+        'stacked controls must not keep a desktop flex basis as empty vertical space');
+    assert.ok(budgetNote.y - plotHelp.y - plotHelp.height < 40,
+        'the budget summary must sit close to the controls');
     await page.locator('#season-section').screenshot({ path: 'test-results/harvest-setup-mobile.png' });
     await page.setViewportSize({ width: 1000, height: 900 });
     await page.locator('#season-mutation-plots').fill('2');

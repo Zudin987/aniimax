@@ -2736,8 +2736,9 @@ tr:hover .skip-row,
 }
 
 .season-limits .input-field {
-    min-width: 180px;
-    flex: 1 1 220px;
+    min-width: 0;
+    width: 100%;
+    flex: 1;
 }
 
 .layout-diagram.no-sim .layout-flows,
