@@ -749,8 +749,8 @@ function renderSimpleSummary() {
     note?.classList.toggle('is-active', active);
     document.getElementById('simple-emode-title').textContent = active ? 'E-Mode is available' : 'E-Mode unlocks at RV 12';
     document.getElementById('simple-emode-copy').textContent = active
-        ? `Power Module Lv.${modules.power_module} + ${generators} Crackle Generator${generators === 1 ? '' : 's'}. Powered production is compared automatically with Aniimo work.`
-        : 'Powered production becomes available with the Power Module and Crackle Generator.';
+        ? `Power Module Lv.${modules.power_module} + ${generators} Crackle Generator${generators === 1 ? '' : 's'}. Auto-selects powered or Aniimo production.`
+        : 'Requires a Power Module and Crackle Generator.';
 }
 
 // Whether the player has picked Advanced mode's level-up target; until then it follows the RV
@@ -2257,17 +2257,18 @@ function renderSeasonBudgetNote() {
     const budget = seasonWheatBudget();
     const watered = selectedSetupTab() !== 'custom' || roster.some(a => a.count > 0 && (a.abilities.Water || 0) >= 1);
     const { needed, spare, conflict } = harvestBudgetStatus(plots, budget, watered);
-    const growth = watered ? 'assuming both watering jobs finish' : 'without a Water worker';
+    const growth = watered ? 'fully watered' : 'no Water worker';
     note.classList.remove('warning');
 
-    const baseline = requested === 0 ? 'Order stock still keeps 1 plot of each event crop. ' : '';
+    const baseline = requested === 0 ? 'Order stock keeps 1 plot per crop. ' : '';
+    const cost = `${plots * 2} event plots need about ${formatNumber(needed)} Wheat/day (${growth}).`;
     if (budget === null) {
-        note.innerHTML = `<strong>Unlimited seed spend:</strong> ${baseline}${plots} plot${plots === 1 ? '' : 's'} per crop (${plots * 2} total) needs about ${formatNumber(needed)} Moonray Wheat/day, ${growth}. The optimizer may plant more.`;
+        note.innerHTML = `<strong>Unlimited seed spend:</strong> ${cost} ${baseline}More plots may be added.`;
     } else if (conflict) {
         note.classList.add('warning');
-        note.innerHTML = `<strong>Budget conflict:</strong> ${baseline}${plots} plot${plots === 1 ? '' : 's'} per crop (${plots * 2} total) needs about ${formatNumber(needed)} Wheat/day, ${growth}. Your cap is ${formatNumber(budget)}/day. Raise it${plots > 1 ? ' or reduce extra event plots' : ''} before calculating.`;
+        note.innerHTML = `<strong>Budget conflict:</strong> ${cost} ${baseline}Cap: ${formatNumber(budget)}/day. Raise it${plots > 1 ? ' or reduce extra plots' : ''}.`;
     } else {
-        note.innerHTML = `<strong>Fits this budget:</strong> ${baseline}${plots} plot${plots === 1 ? '' : 's'} per crop (${plots * 2} total) needs about ${formatNumber(needed)} Wheat/day, ${growth}. Up to ${formatNumber(spare)}/day remains for additional event seeds.`;
+        note.innerHTML = `<strong>Within budget:</strong> ${cost} ${baseline}${formatNumber(spare)}/day left for more seeds.`;
     }
 }
 
@@ -2477,7 +2478,7 @@ function showAniimoSetup() {
     document.getElementById('ability-levels').hidden = tab !== 'best';
     document.getElementById('roster-editor').hidden = tab !== 'custom';
     document.getElementById('aniimo-setup-hint').textContent = tab === 'custom'
-        ? 'The Aniimo you have. The plan shares their hours out, so it only counts on what they can do.'
+        ? 'Enter your Aniimo; the plan uses their available abilities and time.'
         : 'The best Aniimo you have of each ability.';
     if (tab === 'best') renderAbilityLevels();
     if (tab === 'custom') renderRoster();
@@ -2680,8 +2681,8 @@ function renderStrategy() {
     renderSeason();
     const forced = document.getElementById('force-e-mode').checked;
     document.getElementById('level-up-strategy-hint').textContent = forced
-        ? 'Finds the fastest RV level-up with E-Mode required, then reduces the Aniimo team. Extra Home Coin production may be lower so you can use spare slots at star stations.'
-        : 'Gets everything your next RV level costs as soon as possible, then earns as many Home Coins as that leaves room for.';
+        ? 'Fastest level-up with E-Mode, then the smallest team. Spare Aniimo come before extra Home Coins.'
+        : 'Gets your RV upgrade resources as quickly as possible, then earns extra Home Coins.';
     const levelUp = isLevelUpStrategy();
     document.getElementById('level-up-config').style.display = levelUp ? 'block' : 'none';
     document.getElementById('priorities-config').style.display = levelUp ? 'none' : 'block';

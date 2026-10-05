@@ -33,7 +33,7 @@
                         <button type="button" id="clear-saved-btn" class="toggle-button small" title="Your inputs are saved in this browser automatically.">Clear saved values</button>
                     </div>
                 </div>
-                <p class="hint small setup-share-hint" id="setup-share-hint" role="status" aria-live="polite">Share or import settings before calculating. Includes facilities, modules, priorities, recipes, season limits and your Aniimo setup.</p>
+                <p class="hint small setup-share-hint" id="setup-share-hint" role="status" aria-live="polite">Share your settings, or import and review before calculating.</p>
                 <div id="setup-export-panel" hidden>
                     <label for="setup-export-value">Copy this setup link or code</label>
                     <textarea id="setup-export-value" rows="2" readonly spellcheck="false"></textarea>
@@ -41,7 +41,7 @@
                 <div id="setup-import-panel" hidden>
                     <label for="setup-import-value">Setup link or Aniimax code</label>
                     <textarea id="setup-import-value" rows="3" placeholder="Paste a setup link, setup code or older layout code" spellcheck="false" aria-describedby="setup-import-help setup-import-error"></textarea>
-                    <p class="hint small" id="setup-import-help">Import replaces the setup shown here. Review it before calculating. Older layout codes show placement only. These are calculator codes, not in-game Combo Codes.</p>
+                    <p class="hint small" id="setup-import-help">Replaces your setup; review before calculating. Older codes open layouts only. Aniimax codes differ from in-game Combo Codes.</p>
                     <div class="setup-actions">
                         <button type="button" id="setup-import-apply" class="skip-add-btn">Load setup</button>
                         <button type="button" id="setup-import-cancel" class="toggle-button small">Cancel</button>
@@ -61,7 +61,7 @@
                             <select id="home-level"></select>
                         </div>
                     </div>
-                    <p class="hint">Assumes you've built and upgraded everything your RV level allows, including Toolkit module upgrades. If you have not purchased an upgrade, use Advanced and enter the module levels you own.</p>
+                    <p class="hint">Uses all facilities and Toolkit upgrades available at your RV level. Use Advanced to enter what you own.</p>
                     <details class="explain simple-details">
                         <summary id="simple-summary-title">Facilities and modules</summary>
                         <div id="simple-summary"></div>
@@ -70,7 +70,7 @@
                         <span class="emode-bolt" aria-hidden="true">⚡</span>
                         <div>
                             <strong id="simple-emode-title">E-Mode unlocks at RV 12</strong>
-                            <span id="simple-emode-copy">Powered production becomes available with the Power Module and Crackle Generator.</span>
+                            <span id="simple-emode-copy">Requires a Power Module and Crackle Generator.</span>
                         </div>
                     </div>
                 </div>
@@ -82,7 +82,7 @@
                         <label for="fill-level">Fill from RV level</label>
                         <select id="fill-level"></select>
                         <button type="button" id="fill-btn" class="skip-add-btn">Fill</button>
-                        <span class="hint small">Replaces every count and level below with what that RV level allows.</span>
+                        <span class="hint small">Replaces counts and levels below.</span>
                     </div>
 
                     <!-- Facility cards are generated dynamically by app.js from the FACILITIES config,
@@ -91,7 +91,7 @@
                     <div class="facilities-container" id="facilities-grid"></div>
 
                     <h3>Item Upgrade Modules</h3>
-                    <p class="hint">Enter the module levels you have actually purchased and upgraded with Toolkits (0 = not owned). Reaching an RV level only makes an upgrade available. Simple mode assumes every available upgrade is owned.</p>
+                    <p class="hint">Enter your owned Toolkit module levels (0 = not owned).</p>
 
                     <div class="modules-grid">
                         <div class="module-card">
@@ -138,7 +138,7 @@
                         <span class="emode-bolt" aria-hidden="true">⚡</span>
                         <div>
                             <strong>E-Mode is automatic</strong>
-                            <span>Configure your Power Module and Crackle Generator. The planner keeps your production targets, then uses E-Mode where it can free Aniimo slots for other Homeland stations.</span>
+                            <span>Uses power to free Aniimo slots while keeping your production targets.</span>
                         </div>
                     </div>
                 </div>
@@ -151,12 +151,12 @@
                     </div>
 
                     <div id="priorities-config" style="display: none;">
-                        <p class="hint">Switch on what you want and drag to rank it. The plan makes as much of the first as it can, then as much of the next as that allows, and so on. Whatever's left always goes to Home Coins.</p>
+                        <p class="hint">Enable and drag to rank your goals. Each is maximized in order; spare capacity earns Home Coins.</p>
                         <ol class="priority-list" id="priority-list"></ol>
                     </div>
 
                     <div id="level-up-config">
-                        <p class="hint" id="level-up-strategy-hint">Gets everything your next RV level costs as soon as possible, then earns as many Home Coins as that leaves room for.</p>
+                        <p class="hint" id="level-up-strategy-hint">Gets your RV upgrade resources as quickly as possible, then earns extra Home Coins.</p>
                         <div class="input-row" id="level-up-target-row">
                             <div class="input-field">
                                 <label for="level-up-target">Level up to RV</label>
@@ -175,8 +175,7 @@
                 <div class="emode-auto-note">
                     <div>
                         <label><input type="checkbox" id="force-e-mode"> <strong>Force E-Mode (free Aniimo slots)</strong></label>
-                        <p class="hint small">Requires at least one station running with power. With Level up, finds the fastest RV pace with E-Mode, then reduces the team instead of maximizing extra Home Coins, leaving Aniimo slots for star stations. The level-up may take longer than Automatic.</p>
-                        <p class="hint small">Requires a Power Module and Crackle Generator. One Lightning Aniimo can power many E-Mode stations; use repeaters to connect distant stations within the generator's power capacity.</p>
+                        <p class="hint small">Requires a Power Module and Crackle Generator. Frees Aniimo slots; level-ups may take longer than Automatic.</p>
                     </div>
                 </div>
 
@@ -187,23 +186,28 @@
                         <span class="season-title">Harvest Moon Festival</span>
                     </label>
                     <div id="season-config" hidden>
-                        <p class="hint">Harvest Moon keeps <strong>one production unit each</strong> of Sugarcane, Moondew Radish, Waxing Moon Pepper, Apple, Fresh Water and Sea Salt. Keep that output <strong>raw in Storage</strong> and craft when an order arrives. Extra production follows your priorities; reserved stock is excluded from sales and income.</p>
-                        <p class="hint small">Rock Candy needs Sugarcane + Fresh Water (Simmering Pot level 3); Cider Vinegar needs Apple (Pickling Jar level 2). Craft these and the festival dishes on demand, using the Recipe Notes you own. The raw reserve covers every festival recipe, even unticked Notes. It builds stock over time; it does not assume you already have ingredients or predict orders.</p>
+                        <p class="hint">Builds raw ingredient stock for festival orders. Craft when orders arrive; extra production follows your priorities.</p>
                         <div class="input-row season-limits">
                             <div class="input-field">
                                 <label for="season-wheat-budget">Max Moonray Wheat spend / day</label>
                                 <input type="number" id="season-wheat-budget" value="600" min="0" step="1" aria-describedby="season-budget-help season-budget-note">
-                                <span class="hint small" id="season-budget-help">0 = unlimited. This caps seed spending over 24 hours of continuous production; it is not your current balance. The 600 default uses the reported daily-mission allowance. Increase it for orders or Wheat you already have.</span>
+                                <span class="hint small" id="season-budget-help">Daily seed-spending cap, not your balance. 0 = unlimited.</span>
                             </div>
                             <div class="input-field">
                                 <label for="season-mutation-plots">Minimum event plots / crop</label>
                                 <input type="number" id="season-mutation-plots" value="1" min="0" max="10" step="1" aria-describedby="season-mutation-help season-budget-note">
-                                <span class="hint small" id="season-mutation-help">Minimum for <strong>each</strong> crop: 1 keeps 2 event plots total, 2 keeps 4. These cycle for mutation attempts. 0 removes extra mutation requirements; order stock still keeps 1 Radish and 1 Pepper plot, plus 1 Sugarcane plot and 1 Apple woodland.</span>
+                                <span class="hint small" id="season-mutation-help">Minimum for each crop. 0 still keeps 1 Radish and 1 Pepper plot for orders.</span>
                             </div>
                         </div>
                         <p class="harvest-mutation-note" id="season-budget-note" role="status" aria-live="polite"></p>
-                        <p class="hint small">Moonray Wheat buys event seeds; the spending cap includes the order-stock plots. Mutation outcomes are random. Your Plant Research Module unlocks mutation types and improves their chances. Rank Harvest Moon Points under Priorities to favor points from extra output. Held stock earns no points until you use or sell it in game.</p>
+                        <details class="explain" id="season-details">
+                            <summary>Order stock &amp; crafting</summary>
+                            <p>Reserves <strong>one production unit each</strong> for Sugarcane, Moondew Radish, Waxing Moon Pepper, Apple, Fresh Water and Sea Salt. Keep this output <strong>raw in Storage</strong>; it earns no income or points in the plan.</p>
+                            <p>Stock covers every festival recipe, even unticked Notes. Rock Candy needs Sugarcane + Fresh Water (Simmering Pot Lv. 3); Cider Vinegar needs Apple (Pickling Jar Lv. 2). Check order quantities and your Recipe Notes before crafting.</p>
+                            <p>Extra plots give more mutation attempts. Outcomes depend on your Plant Research Module and chance.</p>
+                        </details>
                         <p class="assume-title">Recipe Notes</p>
+                        <p class="hint small">Tick the Notes you own for extra production.</p>
                         <div class="special-grid" id="season-notes"></div>
                     </div>
                 </div>
@@ -270,7 +274,7 @@
                     <button type="button" class="toggle-button small" id="imported-layout-close">Close</button>
                 </div>
                 <p class="hint" id="imported-layout-summary"></p>
-                <p class="hint small">This opens a layout-only code without making you generate a plan first. It does not change your calculator settings.</p>
+                <p class="hint small">Layout only; your settings stay unchanged.</p>
                 <div class="layout-diagram" id="imported-layout-diagram"></div>
             </section>
 
@@ -312,7 +316,7 @@
 
                     <div class="card production-steps" id="power-card" style="display: none;">
                         <h2 class="emode-card-title"><span aria-hidden="true">⚡</span> E-Mode <span class="emode-auto-badge" id="emode-plan-kind">Automatic</span></h2>
-                        <p class="hint">One Lightning Aniimo runs each active generator, which can power many connected stations. Powered rows do not need their own production Aniimo. Repeaters extend coverage; total station demand must fit the generator's power capacity. Grid efficiency describes production speed.</p>
+                        <p class="hint">Each generator needs one Lightning Aniimo; powered stations need no production Aniimo. Repeaters extend coverage. Stay within the generator's capacity; grid efficiency sets production speed.</p>
                         <div id="power-summary"></div>
                         <p class="power-spare-note" id="power-spare-note"></p>
                     </div>
@@ -331,8 +335,8 @@
 
                     <div class="card production-steps" id="harvest-order-card" hidden>
                         <h2>Harvest Moon Order Stock</h2>
-                        <p class="hint">Keep the following output raw in Storage. Craft Rock Candy, Cider Vinegar and festival dishes when orders arrive. This stock is excluded from the plan's income and points; extra output can follow the facility plan.</p>
-                        <p class="hint small">These are production amounts, not your current inventory. The first batch starts your stock; check an order's quantities and your Recipe Notes before crafting.</p>
+                        <p class="hint">Keep this output raw and craft when orders arrive. Held stock earns no income or points.</p>
+                        <p class="hint small">Daily amounts are planned production, not your inventory.</p>
                         <div class="table-wrapper" id="harvest-order-stock"></div>
                     </div>
 
@@ -372,7 +376,7 @@
                             </span>
                         </div>
                         <p class="hint small" id="layout-storage-hint"></p>
-                        <p class="hint small layout-share-hint" id="layout-share-hint">Layout-only codes share this placement, not your calculator settings. Use the setup-code buttons at the top to share/import settings. These are not the game's server-side 8-character Combo Codes.</p>
+                        <p class="hint small layout-share-hint" id="layout-share-hint">Layout codes share placement only. Use setup codes for settings. These differ from in-game Combo Codes.</p>
                         <div class="layout-diagram" id="layout-diagram"></div>
                     </div>
 
