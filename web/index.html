@@ -488,7 +488,7 @@
                 <p>where \(s_i\) is how much of item \(i\) is sold per second at price \(p_i\), and \(c_r\) is a crop's seed cost. During the Harvest Moon Festival, season crops' seeds cost Moonray Wheat instead; when a daily Wheat budget is set, their combined planting rate is constrained to stay within it (0 means unlimited). Subject to:</p>
                 <ul>
                     <li><strong>Whole units.</strong> \(b_r \, t_r \le u_r\), with \(u_r\) a whole number and \(t_r\) the time per batch. A unit runs one recipe and is left running.</li>
-                    <li><strong>Item balance.</strong> Everything made covers what other recipes use plus what's sold. A quick variant makes the same item as the regular one.</li>
+                    <li><strong>Item balance.</strong> Everything made covers what other recipes use plus what's sold. Harvest Moon also keeps one raw unit's output of every order ingredient in Storage; held stock earns no income or points. A quick variant makes the same item as the regular one.</li>
                     <li><strong>What you own.</strong> For every facility and level \(L\), the units on recipes needing level \(L\) or higher add up to at most what you own at that level. A higher-level plot can run a lower-level recipe.</li>
                     <li><strong>Growing environments.</strong> A crop wanting Cool, Warm, Freeze or Scorching grows at full speed on a plot covered by a Heat Furnace or Cooling Unit set to that mode, and more slowly on an uncovered one (see below). An Adequate crop needs a Sunlamp and grows nowhere else.</li>
                 </ul>

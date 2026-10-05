@@ -56,6 +56,15 @@ fn screenshots_confirm_recipe_dependencies_and_workloads() {
         assert_eq!(recipe.raw_materials.as_ref().unwrap(), &ingredients, "{name}");
         assert_eq!(recipe.required_amount.as_ref().unwrap(), &amounts, "{name}");
     }
+    for (name, energy) in [("roasted_waxing_moon_pepper", 26_040.0), ("moondew_radish_slices", 45_280.0), ("umbral_hot_pot", 38_810.0)] {
+        assert_eq!(items.iter().find(|item| item.name == name).unwrap().energy, Some(energy), "{name}");
+    }
+    for (name, points) in [("roasted_waxing_moon_pepper", 4.0), ("moondew_radish_slices", 4.0),
+        ("umbral_hot_pot", 8.0), ("umbral_pickle", 8.0), ("umbral_sweet_and_spicy_sauce", 8.0), ("harvest_platter", 8.0)] {
+        assert_eq!(items.iter().find(|item| item.name == name).unwrap().season.unwrap().points, points, "{name}");
+    }
+    // Importing older season data without the optional Energy column still works.
+    assert!(parse_season("name,facility,raw_materials,required_amount,seed_cost,sell_value,points,production_time,workload,yield,facility_level\nold,Farmland,,,4,74,1,2400,,8,1\n").unwrap()[0].energy.is_none());
     // Future bad recipe data must fail explicitly rather than omit ingredients.
     let mut broken = raw("festival", "Blazing Stove");
     broken.season = Some(aniimax::models::SeasonTerms { points: 1.0, seed_cost: 0.0 });

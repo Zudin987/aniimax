@@ -3,7 +3,8 @@
   "type": "module",
   "scripts": {
     "test": "node --test tests/share_code_smoke.mjs tests/setup_config.test.mjs tests/harvest_budget.test.mjs tests/harvest_order_ui.test.mjs tests/layout_smoke.mjs tests/aniimo_team_smoke.mjs tests/asset_loader_smoke.mjs tests/video_evidence.test.mjs",
-    "test:ui": "node tests/setup_ui_smoke.mjs"
+    "test:ui": "node tests/setup_ui_smoke.mjs",
+    "test:wasm": "node tests/harvest_orders_smoke.mjs"
   },
   "devDependencies": {
     "playwright": "1.62.1"

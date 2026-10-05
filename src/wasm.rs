@@ -1832,7 +1832,7 @@ impl PreparedInput {
         // These are mandatory ingredients even if Recipe Notes are unticked. Report missing
         // facilities, levels, skipped raw recipes or incompatible workers before solving.
         let all: std::collections::HashMap<&str, &ProductionItem> = items.iter().map(|item| (item.name.as_str(), item)).collect();
-        let mut required: std::collections::BTreeMap<&str, Vec<u32>> = std::collections::BTreeMap::new();
+        let mut required: std::collections::BTreeMap<&str, Vec<(u32, u32)>> = std::collections::BTreeMap::new();
         for raw in facility_counts.harvest_order_items() {
             let available = items.iter().filter(|item| item.raw_materials.is_none()
                 && crate::exact::made_item(&item.name, &all) == raw
@@ -1845,11 +1845,15 @@ impl PreparedInput {
                     "Harvest Moon needs one unit producing raw {} for orders. Check facility counts/levels, skipped raw recipes and your Aniimo team (Sea Salt needs a Susuta-family Leisure worker).", raw.replace('_', " "),
                 )))).unwrap_or_default());
             };
-            required.entry(&recipe.facility).or_default().push(recipe.facility_level);
+            let units = if matches!(raw.as_str(), "moondew_radish" | "waxing_moon_pepper") {
+                facility_counts.harvest_mutation_plots().max(1)
+            } else { 1 };
+            required.entry(&recipe.facility).or_default().push((recipe.facility_level, units));
         }
         for (facility, levels) in required {
-            for &level in &levels {
-                let need = levels.iter().filter(|&&minimum| minimum >= level).count() as u32;
+            for &(level, _) in &levels {
+                let need = levels.iter().filter(|&&(minimum, _)| minimum >= level)
+                    .fold(0u32, |total, (_, units)| total.saturating_add(*units));
                 if facility_counts.capacity_at_level(facility, level) < need {
                     return Err(serde_json::to_string(&empty_production_plan(false, Some(format!(
                         "Harvest Moon order stock needs at least {need} {facility} units at level {level} or higher. Increase the owned count/levels or turn off Harvest Moon.",

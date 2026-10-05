@@ -2488,7 +2488,7 @@ const ITEM_NAMES = {
     coins: 'Home Coins',
     wood_block: 'Wood Blocks',
     mineral_sand: 'Mineral Sand',
-    umbral_sweet_and_spicy_sauce: 'Umbral Sweet and Spicy Sauce',
+    umbral_sweet_and_spicy_sauce: 'Umbral Sweet Spicy Sauce',
     coarse_sifted_ore: 'Coarse-Sifted Ore',
     river_washed_stones: 'River-Washed Stones',
     premium_river_washed_stones: 'Premium River-Washed Stones',

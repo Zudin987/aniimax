@@ -74,6 +74,8 @@ jobs:
         run: |
           cargo install wasm-pack --version 0.13.1 --locked
           wasm-pack build --target web --out-dir web/pkg --no-opt -- --locked
+      - name: Harvest Moon real WASM and HiGHS regressions
+        run: npm run test:wasm
       - name: Setup import and WASM UI smoke
         run: npm run test:ui
       - name: Keep tested WASM build

@@ -9,6 +9,7 @@
 //!   one Woodworking Bench has to make each tier in turn, so its recipes share its time.
 //! - Every item balances: what's made covers what recipes use plus what's sold. A quick variant
 //!   (e.g. `quick_wheat`) makes the same item as the regular one (`wheat`).
+//!   Harvest Moon order stock keeps a whole raw unit's output beyond those uses and sales.
 //! - Each facility's units per recipe add up to at most what's owned, counting only units at a
 //!   high enough level for each recipe.
 //! - A crop that needs a growing environment needs its plots covered: each environment building
@@ -553,20 +554,27 @@ fn build_model<'a>(
             );
         }
     }
-    if harvest_enabled {
-        if let Some(per_day) = facility_counts.season_currency_per_day() {
-            let wheat_terms: Vec<(usize, f64)> = rate_of
-                .iter()
-                .filter_map(|(recipe, rate)| {
-                    recipe
-                        .season
-                        .filter(|season| season.seed_cost > 0.0)
-                        .map(|season| (*rate, season.seed_cost))
-                })
-                .collect();
-            if !wheat_terms.is_empty() {
-                model.constrain(wheat_terms, ComparisonOp::Le, per_day / PACE_UNIT);
+    if let Some(per_day) = facility_counts.season_currency_per_day() {
+        // A planted event plot is left cycling, as the facility table and seed forecast
+        // describe. Do not fit the cap by quietly pausing part of an assigned plot's day.
+        for &(recipe, rate) in &rate_of {
+            if recipe.season.is_some_and(|season| season.seed_cost > 0.0) && recipe.raw_materials.is_none() {
+                if let Some((_, units)) = units_of.iter().find(|(r, _)| r.name == recipe.name) {
+                    model.constrain(vec![(rate, recipe.production_time), (*units, -1.0)], ComparisonOp::Eq, 0.0);
+                }
             }
+        }
+        let wheat_terms: Vec<(usize, f64)> = rate_of
+            .iter()
+            .filter_map(|(recipe, rate)| {
+                recipe
+                    .season
+                    .filter(|season| season.seed_cost > 0.0)
+                    .map(|season| (*rate, season.seed_cost))
+            })
+            .collect();
+        if !wheat_terms.is_empty() {
+            model.constrain(wheat_terms, ComparisonOp::Le, per_day / PACE_UNIT);
         }
     }
 
@@ -1713,6 +1721,11 @@ pub fn check_plan(
         }
         if let Some(season) = recipe.season.filter(|season| season.seed_cost > 0.0) {
             season_currency_per_second += rate * season.seed_cost;
+            if facility_counts.season_currency_per_day().is_some() && recipe.raw_materials.is_none()
+                && (rate * recipe.production_time - plan.units.get(name).copied().unwrap_or(0) as f64).abs() > TOLERANCE
+            {
+                return Err(format!("{name} must keep its assigned event plots continuously cycling within the Wheat budget"));
+            }
         }
     }
 

@@ -179,10 +179,13 @@ struct SeasonRow {
     #[serde(rename = "yield")]
     yield_amount: u32,
     facility_level: u32,
+    /// Food Energy, when verified in game; older season CSVs can omit this column.
+    #[serde(default)]
+    energy: Option<f64>,
 }
 
 /// Parses a season's recipes (columns `name, facility, raw_materials, required_amount, seed_cost,
-/// sell_value, points, production_time, workload, yield, facility_level`; see
+/// sell_value, points, production_time, workload, yield, facility_level[, energy]`; see
 /// [`crate::models::SeasonTerms`]). Crops are watered like any other; call
 /// [`crate::models::apply_watering`] on them.
 pub fn parse_season(csv_text: &str) -> Result<Vec<ProductionItem>, Box<dyn Error>> {
@@ -206,7 +209,7 @@ pub fn parse_season(csv_text: &str) -> Result<Vec<ProductionItem>, Box<dyn Error
             sell_value: row.sell_value,
             production_time,
             yield_amount: row.yield_amount,
-            energy: None,
+            energy: row.energy,
             facility_level: row.facility_level,
             module_requirement: None,
             workload: row.workload,
