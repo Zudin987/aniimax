@@ -278,6 +278,8 @@ try {
     assert.match(await page.locator('#festival-batch-result').innerText(), /Recipe Note not ticked/);
     await page.setViewportSize({ width: 390, height: 844 });
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), false);
+    assert.equal(await page.locator('#festival-batch-result').evaluate(result => result.scrollWidth > result.clientWidth), false,
+        'checklist quantities and facility names must fit without horizontal scrolling');
     await page.locator('#festival-batch').screenshot({ path: 'test-results/festival-checklist-mobile.png' });
     await page.setViewportSize({ width: 1000, height: 900 });
     await page.locator('#festival-batch-amount').fill('2');

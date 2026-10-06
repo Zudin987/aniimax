@@ -2294,13 +2294,13 @@ async function renderFestivalChecklist() {
         if (!recipeIndex.length) await loadRecipeIndex();
         const list = festivalCraftChecklist(recipeIndex,
             Number(document.getElementById('festival-batch-amount').value), getPlanInputValues());
-        const rows = values => values.map(r => `<tr><td>${prettyItem(r.name)}</td><td>${r.need}</td><td>${r.batches}</td><td>${r.produced}</td><td>${r.facility} Lv.${r.facilityLevel}</td></tr>`).join('');
-        const table = values => `<table class="level-up-lines"><thead><tr><th>Item</th><th>Needed</th><th>Batches</th><th>Makes</th><th>Facility</th></tr></thead><tbody>${rows(values)}</tbody></table>`;
+        const rows = values => values.map(r => `<tr><td>${prettyItem(r.name)}<br><span class="hint small">${r.facility} Lv.${r.facilityLevel}</span></td><td>${r.need}</td><td>${r.produced}<br><span class="hint small">${r.batches} batches</span></td></tr>`).join('');
+        const table = values => `<table class="level-up-lines"><thead><tr><th>Item / facility</th><th>Needed</th><th>Produce</th></tr></thead><tbody>${rows(values)}</tbody></table>`;
         result.innerHTML = `${list.blocked.length ? `<p class="warning">Check before crafting: ${list.blocked.map(prettyItem).join('; ')}.</p>` : ''}
-            <p class="hint small">${list.wheat} Moonray Wheat for event seeds. These are standard crops; mutations are not guaranteed.</p>
+            <p class="hint small">${list.wheat} Moonray Wheat for event seeds. Standard crops; mutations are not guaranteed.</p>
             <p class="assume-title">Gather first</p>${table(list.raw)}
             <p class="assume-title">Craft in this order</p>${table(list.steps)}
-            <p class="hint small">Targets include extra ingredients needed by later dishes. Keep the requested amount of each finished dish; use the rest in the next steps. Checklist only: worker availability, owned inventory and completion time are not calculated.</p>`;
+            <p class="hint small">Keep the requested amount of each dish; use surplus in later steps. Checklist only: inventory, workers and completion time are not calculated.</p>`;
     } catch (error) { result.textContent = error.message; }
 }
 
