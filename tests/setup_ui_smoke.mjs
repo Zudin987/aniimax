@@ -285,7 +285,7 @@ try {
     await page.locator('#festival-batch-build').click();
     await page.waitForFunction(() => document.getElementById('festival-batch-result').textContent.includes('80 Moonray Wheat'));
     await page.locator('#festival-batch summary').click();
-    await page.locator('#mode-advanced').check();
+    await page.locator('label:has(#mode-advanced)').click();
     await page.locator('#fill-level').selectOption('14');
     await page.locator('#fill-btn').click();
     for (const [name, count] of [['Well',3], ['Tidewhisper Sandcastle',2], ['Joy Wheel Loom',2],

@@ -39,6 +39,8 @@ so breadth is an order-readiness heuristic, not a guaranteed coverage percentage
 The report separates retained output from income and compares RV resource
 time with the best pace found. Timed-out searches are labeled; the 95% figure
 is relative to the best feasible pace found, not a proof of the unknown optimum.
+If the later income search finds no plan before timing out, the already-found
+variety allocation is rebuilt and checked rather than discarded.
 
 ## Archived requests
 
@@ -59,7 +61,7 @@ standard crop inputs and does not guess mutation probabilities.
 Native tests cover retained balances, shared processor limits, duplicate quick
 variants, the RV pace floor, forged plans and mandatory points with coin goals.
 Real WASM/HiGHS tests cover Automatic, Force E-Mode and roster variety, points
-behind coin/EXP priorities, and impossible targets. JS tests cover corrected
+behind coin/EXP priorities, impossible targets and income-refinement timeouts. JS tests cover corrected
 RV inference, setup compatibility and exact event quantities/crafting order.
 Browser smoke covers import/persistence, Fill, pre-calculation checklist,
 actual variety calculation, and desktop/mobile rendering.

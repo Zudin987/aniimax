@@ -1,9 +1,27 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { FACILITIES, SEASON } from '../web/facility-config.js';
-import { pkg, plan } from './wasm_planner.mjs';
+import { pkg, plan, createPlanner, newHighs } from './wasm_planner.mjs';
 
 const none = Object.fromEntries(FACILITIES.map(f => [f.name, [{ count: 0, level: 1 }]]));
+
+test('a coin refinement timeout preserves the verified variety allocation and RV pace', async () => {
+    let calls = 0;
+    const interrupted = createPlanner(async () => {
+        const solver = await newHighs();
+        return { solve: (...args) => ++calls === 3 ? { Status: 'Time limit reached' } : solver.solve(...args) };
+    });
+    const input = { currency: 'coins', aniimo: 'minimum', order_variety: true, prioritize_byproducts: false,
+        modules: {}, facilities: { ...none, Farmland: [{ count: 4, level: 2 }],
+            Woodland: [{ count: 1, level: 1 }], Mine: [{ count: 1, level: 1 }], 'Carousel Mill': [{ count: 2, level: 1 }] },
+        level_up: { cost: [['coins', 100], ['wood_block', 4], ['mineral_sand', 4]], stock: [] }, exclude: [] };
+    const result = JSON.parse(await interrupted(pkg, JSON.stringify(input)));
+    assert.equal(result.success, true, result.error);
+    assert.ok(result.order_variety.count >= 3);
+    assert.ok(result.level_up.seconds <= result.order_variety.fastest_seconds / 0.95 * 1.001);
+    assert.equal(result.proven_optimal, false, 'timed-out coin refinement cannot claim optimal income');
+    assert.ok(result.rate_per_second > 0);
+});
 
 test('real RV variety retains goods and pace in automatic, forced-power and roster plans', async () => {
     const input = { currency: 'coins', aniimo: 'minimum', prioritize_byproducts: false, modules: { power_module: 1 },

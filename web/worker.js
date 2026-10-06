@@ -147,6 +147,7 @@ async function exactPlanJson(pkg, payload, step = () => {}, first = () => {}) {
     const varietyActive = !!(input.order_variety && stage.pace);
     const fastestPace = stage.pace;
     let varietyProven = null;
+    let varietySolution = null;
     if (varietyActive) {
         stage.pace *= 0.95;
         stage.order_variety = true;
@@ -157,6 +158,7 @@ async function exactPlanJson(pkg, payload, step = () => {}, first = () => {}) {
         // Indicators are whole products. Numerical noise must not demand one extra product.
         stage.variety_count = Math.max(0, Math.round(breadth.objective));
         varietyProven = breadth.proven;
+        varietySolution = breadth;
         allProven &&= breadth.proven;
     }
     const staffingFirst = !!(input.force_e_mode && stage.pace && !varietyActive);
@@ -170,6 +172,10 @@ async function exactPlanJson(pkg, payload, step = () => {}, first = () => {}) {
     step('final', 'start');
     const alone = stage.floors.length === 0 && !stage.pace;
     let solved = await solveModel(problem);
+    // A harder coin refinement may time out before finding an incumbent. Keep the breadth
+    // allocation: these goals have identical variables and only change the objective/floor.
+    // exact_plan re-solves its rates and independently checks every limit before accepting it.
+    if (!solved && varietySolution) solved = { ...varietySolution, proven: false, objective: 0 };
     if (!solved) throw infeasible();
     if (alone) first({ measure: 'coins', objective: solved.objective, proven: solved.proven });
     let proven = solved.proven && allProven;
@@ -193,6 +199,11 @@ async function exactPlanJson(pkg, payload, step = () => {}, first = () => {}) {
             json = exact_plan(payload, stageJson, JSON.stringify({ values: strict.values, proven: strict.proven && allProven, bound }));
             plan = JSON.parse(json);
         }
+    }
+    if (!plan.success && varietySolution) {
+        proven = false;
+        plan = JSON.parse(exact_plan(payload, stageJson,
+            JSON.stringify({ values: varietySolution.values, proven: false, bound })));
     }
     if (!plan.success) throw new Error(plan.error || 'the plan failed its check');
 

@@ -3894,7 +3894,7 @@ function renderOrderVariety(plan) {
     if (!report) { target.innerHTML = ''; return; }
     const extra = plan.level_up?.seconds > 0 ? Math.max(0, (plan.level_up.seconds / report.fastest_seconds - 1) * 100) : 0;
     document.getElementById('order-variety-note').textContent =
-        `${report.count} extra items stocked daily; RV resources take ${extra.toFixed(1)}% longer than the fastest plan. ${report.proven ? '' : 'Variety is the best found within the search time.'}`;
+        `${report.count} extra items stocked daily; RV resources take ${extra.toFixed(1)}% longer than the best RV plan found. ${report.proven ? '' : 'Variety is the best found within the search time.'}`;
     target.innerHTML = `<table class="level-up-lines"><thead><tr><th>Keep for orders</th><th>Held / day</th></tr></thead>
         <tbody>${(plan.order_stock || []).map(([name, rate]) => `<tr><td>${prettyItem(name)}</td><td>${formatNumber(rate * 86400)}</td></tr>`).join('')}</tbody></table>`;
 }
