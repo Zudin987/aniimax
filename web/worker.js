@@ -170,9 +170,7 @@ async function exactPlanJson(pkg, payload, step = () => {}, first = () => {}) {
     step('final', 'start');
     const alone = stage.floors.length === 0 && !stage.pace;
     let solved = await solveModel(problem);
-    if (!solved) throw Object.assign(new Error(input.season_points_per_day > 0
-        ? 'The minimum festival points cannot fit this setup and Wheat budget. Lower the points minimum, raise the budget or check recipes and workers.'
-        : 'The solver found no plan for these targets.'), { noFallback: !!(input.order_variety || input.season) });
+    if (!solved) throw infeasible();
     if (alone) first({ measure: 'coins', objective: solved.objective, proven: solved.proven });
     let proven = solved.proven && allProven;
     let bound = staffingFirst ? 0 : solved.objective;

@@ -449,6 +449,7 @@ function currentConfigData() {
 }
 
 function saveInputsToStorage() {
+    document.getElementById('festival-batch-result').replaceChildren();
     const data = currentConfigData();
     const editedShare = clearShareHash();
     document.getElementById('setup-export-panel').hidden = true;
@@ -497,6 +498,7 @@ function applyImportedSetup(settings, clearSharedLink = true) {
     document.getElementById('results-section').style.display = 'none';
     document.getElementById('imported-layout-card').hidden = true;
     document.getElementById('setup-export-panel').hidden = true;
+    document.getElementById('festival-batch-result').replaceChildren();
     initFacilityTiers(settings);
     loadInputsFromStorage(settings);
     renderFacilityCards();
@@ -2836,7 +2838,7 @@ function renderLevelUp(plan) {
     // What's left over once everything is ready and paid for: costs that finish early keep coming
     // in while the slowest one finishes.
     const surplus = report.requirements
-        .map(r => ({ season: r.season, moduleRequirement: r.module_requirement, name: r.name, spare: Math.floor(r.have + r.per_second * report.seconds - r.need) }))
+        .map(r => ({ name: r.name, spare: Math.floor(r.have + r.per_second * report.seconds - r.need) }))
         .concat((report.leftovers || []).map(([name, amount]) => ({ name, spare: Math.floor(amount) })))
         .filter(r => r.spare >= 1)
         .map(r => `${formatNumber(r.spare)} ${r.name === 'coins' ? 'Home Coins' : ITEM_NAMES[r.name] || prettyItem(r.name)}`);
@@ -2981,8 +2983,8 @@ function getPlanInputValues() {
         priorities: activePriorities(),
         prioritize_byproducts: false,
         force_e_mode: document.getElementById('force-e-mode').checked,
-            order_variety: isLevelUpStrategy() && document.getElementById('rv-order-variety').checked,
-            season_points_per_day: seasonActive() ? Math.max(0, floatOrDefault(document.getElementById('season-points-min').value, 0)) : 0,
+        order_variety: isLevelUpStrategy() && document.getElementById('rv-order-variety').checked,
+        season_points_per_day: seasonActive() ? Math.max(0, floatOrDefault(document.getElementById('season-points-min').value, 0)) : 0,
         level_up: levelUpInput(),
         exclude: excludedRecipes(),
         season: seasonActive(),

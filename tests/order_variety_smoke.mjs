@@ -12,9 +12,10 @@ test('real RV variety retains goods and pace in automatic, forced-power and rost
             'Claw Game Cooker': [{ count: 1, level: 1 }], 'Crackle Generator': [{ count: 1, level: 1 }] },
         level_up: { cost: [['coins', 100], ['wood_block', 4], ['mineral_sand', 4]], stock: [] }, exclude: [] };
     for (const variant of [{}, { force_e_mode: true }, { aniimo: 'roster', roster: {
-        members: [{ count: 8, abilities: { Earth: 3, Grass: 3, Water: 3, Fire: 3, Wind: 3, Lightning: 3 }, personalities: [] }],
+        members: [{ count: 8, abilities: { Earth: 3, Grass: 3, Water: 3, Fire: 3, Wind: 3, Lightning: 3, Dark: 3 }, personalities: [] }],
         residents: [], environment: {} } }]) {
         const normal = JSON.parse(await plan(pkg, JSON.stringify({ ...input, ...variant })));
+        assert.ok(normal.level_up?.seconds > 0, 'test roster must support the RV materials and crop jobs');
         const result = JSON.parse(await plan(pkg, JSON.stringify({ ...input, ...variant, order_variety: true })));
         assert.equal(result.success, true, result.error);
         assert.ok(result.order_variety?.count >= 3, 'limited facilities must retain a useful mix');

@@ -15,7 +15,8 @@
 // the last count. Simple mode uses both (see `simpleSetup`). The 2026-10-03 recording confirms
 // RV13 caps for every production/environment facility selected in its build menu; Crafting Table
 // and Claw Game Cooker retain their earlier evidence. Higher caps are not newly verified by that
-// recording: Farmland, Woodland and Mine follow the game's pattern, others keep their last count. The five RV14 increases reported in upstream issue #33
+// recording: Farmland, Woodland and Mine follow the game's pattern, others keep their last count.
+// The five RV14 increases reported in upstream issue #33
 // are included without changing the video-confirmed RV13 limits.
 //
 // Facilities marked "Not yet verified in game" in their tooltip haven't had their numbers

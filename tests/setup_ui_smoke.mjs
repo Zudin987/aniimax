@@ -280,6 +280,10 @@ try {
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), false);
     await page.locator('#festival-batch').screenshot({ path: 'test-results/festival-checklist-mobile.png' });
     await page.setViewportSize({ width: 1000, height: 900 });
+    await page.locator('#festival-batch-amount').fill('2');
+    assert.equal(await page.locator('#festival-batch-result').innerText(), '', 'editing setup must clear stale quantities');
+    await page.locator('#festival-batch-build').click();
+    await page.waitForFunction(() => document.getElementById('festival-batch-result').textContent.includes('80 Moonray Wheat'));
     await page.locator('#festival-batch summary').click();
     await page.locator('#mode-advanced').check();
     await page.locator('#fill-level').selectOption('14');
@@ -295,6 +299,7 @@ try {
         facilityTiers: { Farmland: [{ count: 4, level: 2 }], Woodland: [{ count: 1, level: 1 }],
             Mine: [{ count: 1, level: 1 }], 'Carousel Mill': [{ count: 2, level: 1 }],
             'Claw Game Cooker': [{ count: 1, level: 1 }] } }));
+    assert.equal(await page.locator('#festival-batch-result').innerText(), '', 'import must clear the previous checklist');
     await page.locator('#optimize-btn').click();
     await page.waitForFunction(() => !document.getElementById('optimize-btn').disabled, null, { timeout: 120_000 });
     assert.equal(await page.locator('#error-message').isVisible(), false);
