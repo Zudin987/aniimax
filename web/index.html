@@ -61,7 +61,9 @@
                             <select id="home-level"></select>
                         </div>
                     </div>
-                    <p class="hint">Uses all facilities and Toolkit upgrades available at your RV level. Use Advanced to enter what you own.</p>
+                    <p class="hint">Uses all facilities at your RV level. Use Advanced to enter what you own.</p>
+                    <label><input type="checkbox" id="simple-toolkit-upgrades" checked> Assume all Toolkit upgrades</label>
+                    <p class="hint small">Untick if not upgraded. Advanced lets you set each module level.</p>
                     <details class="explain simple-details">
                         <summary id="simple-summary-title">Facilities and modules</summary>
                         <div id="simple-summary"></div>
@@ -156,6 +158,7 @@
                     </div>
 
                     <div id="level-up-config">
+                        <label><input type="checkbox" id="rv-order-variety"> Add order variety</label>
                         <p class="hint" id="level-up-strategy-hint">Gets your RV upgrade resources as quickly as possible, then earns extra Home Coins.</p>
                         <div class="input-row" id="level-up-target-row">
                             <div class="input-field">
@@ -205,6 +208,11 @@
                             </div>
                         </div>
                         <p class="harvest-mutation-note" id="season-budget-note" role="status" aria-live="polite"></p>
+                        <div class="input-field">
+                            <label for="season-points-min">Min festival points / day</label>
+                            <input type="number" id="season-points-min" value="0" min="0" step="1">
+                            <span class="hint small">0 = no minimum. Keeps points coming even behind RV or coin goals.</span>
+                        </div>
                         <details class="explain" id="season-details">
                             <summary>Order stock &amp; crafting</summary>
                             <p>Reserves <strong>one production unit each</strong> for Sugarcane, Moondew Radish, Waxing Moon Pepper, Apple, Fresh Water and Sea Salt. Keep this output <strong>raw in Storage</strong>; it earns no income or points in the plan.</p>
@@ -214,6 +222,15 @@
                         <p class="assume-title">Recipe Notes</p>
                         <p class="hint small">Tick the Notes you own for extra production.</p>
                         <div class="special-grid" id="season-notes"></div>
+                        <details class="explain" id="festival-batch">
+                            <summary>Crafting checklist</summary>
+                            <p class="hint small">Plan X of each dish. Follow the crafting order on shared stations.</p>
+                            <div class="input-row">
+                                <div class="input-field"><label for="festival-batch-amount">Amount of each dish</label><input id="festival-batch-amount" type="number" value="1" min="1" max="100000" step="1"></div>
+                                <button type="button" id="festival-batch-build" class="skip-add-btn">Build checklist</button>
+                            </div>
+                            <div id="festival-batch-result" class="table-wrapper" role="status"></div>
+                        </details>
                     </div>
                 </div>
 
@@ -343,6 +360,12 @@
                         <p class="hint">Keep this output raw and craft when orders arrive. Held stock earns no income or points.</p>
                         <p class="hint small">Daily amounts are planned production, not your inventory.</p>
                         <div class="table-wrapper" id="harvest-order-stock"></div>
+                    </div>
+                    <div class="card production-steps" id="order-variety-card" hidden>
+                        <h2>Order Variety</h2>
+                        <p class="hint" id="order-variety-note"></p>
+                        <p class="hint small">Keep this daily output in Storage. It is excluded from income and RV resources. Actual order quantities vary.</p>
+                        <div class="table-wrapper" id="order-variety-stock"></div>
                     </div>
 
                     <div class="card production-steps">

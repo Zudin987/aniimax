@@ -147,6 +147,8 @@ pub struct ExactPlan {
     pub sold: BTreeMap<String, f64>,
     /// Whole units whose output is retained raw for manual Harvest Moon order crafting.
     pub harvest_reserve_units: BTreeMap<String, u32>,
+    /// Additional daily order stock, excluded from sales, recipe use and RV resources.
+    pub order_stock: BTreeMap<String, f64>,
     pub environment: Vec<ExactEnvironment>,
     /// Overlapping pairs of environment buildings (see [`ExactPair`]).
     pub pairs: Vec<ExactPair>,
@@ -179,6 +181,8 @@ pub enum Goal<'a> {
     /// (each as a share of its cost): spare Bench and Kiln time processes whatever the level-up
     /// doesn't need yet, instead of leaving it raw.
     StockUp(&'a LevelUp, f64, f64),
+    /// Maximize distinct retained products at an RV pace, then coins at that breadth.
+    OrderVariety { level_up: Option<(&'a LevelUp, f64)>, minimum: Option<u32> },
     /// Keep the production targets already found, then free whole Aniimo slots for other
     /// Homeland stations. Generators and environment residents count toward the team too.
     FreeAniimo {
@@ -186,6 +190,7 @@ pub enum Goal<'a> {
         level_up: Option<(&'a LevelUp, f64)>,
         coins: f64,
         work: &'a [AniimoWork],
+        order_variety: Option<u32>,
     },
 }
 
@@ -267,6 +272,7 @@ enum VarKind<'a> {
     Rate(&'a ProductionItem),
     Units(&'a ProductionItem),
     HarvestReserve(&'a ProductionItem),
+    OrderStock(&'a str, f64),
     /// One E-Mode recipe assigned to an owned machine at this exact facility tier.
     ElectricUnits { recipe: &'a ProductionItem, tier_level: u32 },
     /// A physical machine of an exact tier switched into E-Mode.
@@ -615,6 +621,33 @@ fn build_model<'a>(
         // An unavailable ingredient makes the setup infeasible, never silently removes a reserve.
         model.constrain(reserved, ComparisonOp::Eq, 1.0);
     }
+    let variety = match goal {
+        Goal::OrderVariety { minimum, .. } => Some(minimum),
+        Goal::FreeAniimo { order_variety: Some(minimum), .. } => Some(Some(minimum)),
+        _ => None,
+    };
+    let mut stock_vars = Vec::new();
+    if let Some(minimum) = variety {
+        // One indicator per real product, not per quick, crew or electric variant.
+        // This is actual retained output: a recipe merely using the item does not count.
+        let mut amounts: BTreeMap<&str, f64> = BTreeMap::new();
+        for recipe in &recipes {
+            let name = made_item(&recipe.name, &all);
+            if recipe.sell_currency != "coins" || recipe.sell_value <= 0.0
+                || facility_counts.harvest_order_items().iter().any(|raw| raw == name) { continue; }
+            let amount = recipe.yield_amount as f64;
+            amounts.entry(name).and_modify(|old| *old = old.min(amount)).or_insert(amount);
+        }
+        for (name, amount) in amounts {
+            let per_second = amount / PACE_UNIT;
+            let kept = model.add(0.0, (0.0, 1.0), true, VarKind::OrderStock(name, per_second));
+            balance.entry(name).or_default().push((kept, -per_second));
+            stock_vars.push((kept, 1.0));
+        }
+        if let Some(minimum) = minimum {
+            model.constrain(stock_vars.clone(), ComparisonOp::Ge, minimum as f64);
+        }
+    }
     // A floor naming a currency ("aniimo_exp", "aniipods") keeps a plan making that much of it
     // while it earns `currency`; those items need sell variables too, worth nothing here.
     let floor_currencies: Vec<&str> = match goal {
@@ -624,7 +657,8 @@ fn build_model<'a>(
     let mut sold_of: Vec<(usize, &ProductionItem)> = Vec::new();
     for (&item_name, terms) in &mut balance {
         if let Some(&item) = all.get(item_name) {
-            if item.earns(currency) > 0.0 || floor_currencies.iter().any(|&c| item.earns(c) > 0.0) {
+            if item.earns(currency) > 0.0 || floor_currencies.iter().any(|&c| item.earns(c) > 0.0)
+                || (facility_counts.season_points_per_day() > 0.0 && item.earns(crate::models::SEASON_POINTS) > 0.0) {
                 let sold = model.add(item.earns(currency), (0.0, f64::INFINITY), false, VarKind::Sold(item.name.as_str()));
                 sold_of.push((sold, item));
                 terms.push((sold, -1.0));
@@ -633,6 +667,12 @@ fn build_model<'a>(
     }
     // Every variable added from here on earns nothing.
     model.earnings = model.objective.clone();
+    if facility_counts.season_points_per_day() > 0.0 {
+        model.constrain(sold_of.iter().filter_map(|&(v, item)| {
+            let points = item.earns(crate::models::SEASON_POINTS);
+            (points > 0.0).then_some((v, points))
+        }).collect(), ComparisonOp::Ge, facility_counts.season_points_per_day() / PACE_UNIT);
+    }
     // A level-up: stock and cost per unit of pace, in coins and in every item they name.
     let level_up = match goal {
         Goal::LevelUp(level_up) => Some((level_up, 0.0)),
@@ -640,6 +680,7 @@ fn build_model<'a>(
         // terms are small enough that a tighter floor sits inside the solver's tolerances.
         Goal::EarnWhileLevelingUp(level_up, pace) | Goal::StockUp(level_up, pace, _) => Some((level_up, pace * (1.0 - 1e-4))),
         Goal::FreeAniimo { level_up: Some((level_up, pace)), .. } => Some((level_up, pace * (1.0 - 1e-4))),
+        Goal::OrderVariety { level_up: Some((level_up, pace)), .. } => Some((level_up, pace * (1.0 - 1e-4))),
         _ => None,
     };
     if let Some((level_up, min_pace)) = level_up {
@@ -690,6 +731,10 @@ fn build_model<'a>(
     }
     for terms in balance.into_values() {
         model.constrain(terms, ComparisonOp::Ge, 0.0);
+    }
+    if matches!(goal, Goal::OrderVariety { minimum: None, .. }) {
+        model.objective.fill(0.0);
+        for &(v, _) in &stock_vars { model.objective[v] = 1.0; }
     }
 
     // Owned units per facility and level. Normal recipes share the remaining physical machines
@@ -924,7 +969,7 @@ fn build_model<'a>(
                 model.objective[v] += amount;
             }
         }
-        Goal::LevelUp(_) | Goal::EarnWhileLevelingUp(..) | Goal::StockUp(..) => {}
+        Goal::LevelUp(_) | Goal::EarnWhileLevelingUp(..) | Goal::StockUp(..) | Goal::OrderVariety { .. } => {}
     }
     // With the player's own Aniimo (see `Crew`), each member's day covers everything it works:
     // a recipe's time per batch at its rate, or at a facility it lives in, the whole day per unit.
@@ -1446,6 +1491,7 @@ fn plan_from(model: &Model, value: f64, upper_bound: f64, proven_optimal: bool, 
     let mut electric_machines: BTreeMap<String, Vec<(u32, u32)>> = BTreeMap::new();
     let mut sold = BTreeMap::new();
     let mut harvest_reserve_units = BTreeMap::new();
+    let mut order_stock = BTreeMap::new();
     let mut power_used = 0u32;
     let mut generators_used = 0u32;
     let mut power_supply = 0u32;
@@ -1459,6 +1505,7 @@ fn plan_from(model: &Model, value: f64, upper_bound: f64, proven_optimal: bool, 
     let mut grower_staffing = Vec::new();
     for (kind, &v) in model.kinds.iter().zip(values) {
         match kind {
+            VarKind::OrderStock(name, rate) if v > 0.5 => { order_stock.insert((*name).to_string(), *rate); }
             VarKind::HarvestReserve(recipe) if v > 0.5 => {
                 harvest_reserve_units.insert(recipe.name.clone(), v.round() as u32);
             }
@@ -1647,6 +1694,7 @@ fn plan_from(model: &Model, value: f64, upper_bound: f64, proven_optimal: bool, 
         generators,
         sold,
         harvest_reserve_units,
+        order_stock,
         environment,
         pairs,
         pace,
@@ -1764,6 +1812,19 @@ pub fn check_plan(
         // An item sold for another currency (Aniimo EXP, Aniipods) leaves the balance the same
         // way, but earns nothing towards `currency`.
         earned += sold * item.earns(currency);
+    }
+    for (name, &kept) in &plan.order_stock {
+        if !kept.is_finite() || kept <= 0.0
+            || !items.iter().any(|recipe| made_item(&recipe.name, &all) == name
+                && recipe.sell_currency == "coins" && recipe.sell_value > 0.0)
+            || facility_counts.harvest_order_items().iter().any(|raw| raw == name) {
+            return Err(format!("invalid order stock {name}"));
+        }
+        *made.entry(name.as_str()).or_default() -= kept;
+    }
+    let minimum_points = facility_counts.season_points_per_day();
+    if minimum_points > 0.0 && target_rate(plan, items, crate::models::SEASON_POINTS) * PACE_UNIT + TOLERANCE < minimum_points {
+        return Err("plan does not meet the minimum Harvest Moon points per day".to_string());
     }
     // Check retained raw production independently, before any RV inventory offsets. Existing
     // inventory cannot cover a continuously producing order unit, and retained items earn no
@@ -2268,6 +2329,7 @@ pub fn net_rates(exact: &ExactPlan, items: &[ProductionItem]) -> BTreeMap<String
     for (name, &sold) in &exact.sold {
         *net.entry(name.clone()).or_default() -= sold;
     }
+    for (name, &kept) in &exact.order_stock { *net.entry(name.clone()).or_default() -= kept; }
     net
 }
 
@@ -2356,6 +2418,9 @@ pub fn to_production_plan(
                 (false, true) => format!("; extra output used for {}; the rest sells directly", uses.join(", ")),
             };
             return format!("Keep 1 unit's output raw for Harvest Moon orders; craft when an order arrives{extra}");
+        }
+        if let Some(kept) = exact.order_stock.get(made) {
+            return format!("Keep {:.0}/day for orders; extra output follows the plan", kept * PACE_UNIT);
         }
         // Made, not sold, not all used up and not sellable: kept for the level-up.
         let sellable = all.get(made).is_some_and(|item| item.sell_currency != "none" && item.sell_value > 0.0);

@@ -1315,6 +1315,7 @@ pub struct FacilityCounts {
     /// Optional Harvest Moon seed-currency budget, per real day. Kept here with the rest of the
     /// plan setup so every exact-solver entry point applies the same limit.
     season_currency_per_day: Option<f64>,
+    season_points_per_day: f64,
     /// Minimum Moondew Radish and Waxing Moon Pepper plots to keep cycling during the festival.
     harvest_mutation_plots: u32,
     /// Raw seasonal-order ingredients whose one-unit output must be kept, not used or sold.
@@ -1336,6 +1337,7 @@ impl Default for FacilityCounts {
             default_tier: (1, 1),
             crew: None,
             season_currency_per_day: None,
+            season_points_per_day: 0.0,
             harvest_mutation_plots: 1,
             harvest_order_items: Vec::new(),
             grower_steps: None,
@@ -1400,6 +1402,13 @@ impl FacilityCounts {
         self.season_currency_per_day
     }
 
+    pub fn set_season_points_per_day(&mut self, points: f64) -> &mut Self {
+        self.season_points_per_day = if points.is_finite() { points.max(0.0) } else { 0.0 };
+        self
+    }
+
+    pub fn season_points_per_day(&self) -> f64 { self.season_points_per_day }
+
     /// Minimum plots of EACH Harvest Moon crop kept cycling for mutation attempts.
     pub fn harvest_mutation_plots(&self) -> u32 {
         self.harvest_mutation_plots
@@ -1450,6 +1459,7 @@ impl FacilityCounts {
             default_tier: (0, 1),
             crew: None,
             season_currency_per_day: None,
+            season_points_per_day: 0.0,
             harvest_mutation_plots: 1,
             harvest_order_items: Vec::new(),
             grower_steps: None,
@@ -1470,6 +1480,7 @@ impl FacilityCounts {
             default_tier: (1, 99),
             crew: None,
             season_currency_per_day: None,
+            season_points_per_day: 0.0,
             harvest_mutation_plots: 1,
             harvest_order_items: Vec::new(),
             grower_steps: None,

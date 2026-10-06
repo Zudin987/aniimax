@@ -42,6 +42,7 @@ const setup = {
     priorities: [{ target: 'season_points', on: true }, { target: 'coins', on: true }],
     skippedRecipes: ['quick_potato'], unlockedSpecial: ['rose_shortbread'],
     'season-on': true, 'season-wheat-budget': '600', 'season-mutation-plots': '1',
+    'rv-order-variety': true, 'simple-toolkit-upgrades': false, 'season-points-min': '0', 'festival-batch-amount': '2',
     'force-e-mode': true, 'power-module-level': '1', 'layout-storage-count': '3', 'layout-whole': false,
     'rate-unit': 'day', goalTarget: 'season_points', 'target-amount': '123', 'current-amount': '5',
 };
@@ -114,6 +115,9 @@ try {
     assert.equal((await config()).roster[0].abilities.Ice, 2);
     assert.equal((await config()).facilityTiers.Mine[0].count, 2);
     assert.equal((await config())['force-e-mode'], true);
+    assert.equal((await config())['rv-order-variety'], true);
+    assert.equal((await config())['simple-toolkit-upgrades'], false);
+    assert.equal((await config())['festival-batch-amount'], '2');
     assert.equal((await config()).goalTarget, 'season_points');
     assert.equal((await config())['layout-whole'], false);
     assert.equal((await config())['target-amount'], '123');
@@ -260,6 +264,55 @@ try {
     assert.equal(await page.locator('#season-mutation-plots').inputValue(), '1');
     assert.equal((await config()).goalTarget, 'coins', 'imported goal must replace the previous plan choice');
     assert.deepEqual((await config()).roster, [], 'partial old setup must not merge with recipient roster');
+
+    // Both new controls work before solving; RV14 Fill persists the correct cap data.
+    await load(encodeSetupCode({ 'home-level': '14', 'mode-simple': true, 'mode-advanced': false,
+        'simple-toolkit-upgrades': false, 'season-on': true, 'force-e-mode': false,
+        'strategy-level-up': true, 'strategy-priorities': false }));
+    assert.equal(await page.locator('#simple-toolkit-upgrades').isChecked(), false);
+    await page.locator('#festival-batch summary').click();
+    await page.locator('#festival-batch-amount').fill('3');
+    await page.locator('#festival-batch-build').click();
+    await page.waitForFunction(() => document.getElementById('festival-batch-result').textContent.includes('Craft in this order'));
+    assert.match(await page.locator('#festival-batch-result').innerText(), /120 Moonray Wheat/);
+    assert.match(await page.locator('#festival-batch-result').innerText(), /Recipe Note not ticked/);
+    await page.setViewportSize({ width: 390, height: 844 });
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), false);
+    assert.equal(await page.locator('#festival-batch-result').evaluate(result => result.scrollWidth > result.clientWidth), false,
+        'checklist quantities and facility names must fit without horizontal scrolling');
+    await page.locator('#festival-batch').screenshot({ path: 'test-results/festival-checklist-mobile.png' });
+    await page.setViewportSize({ width: 1000, height: 900 });
+    await page.locator('#festival-batch-amount').fill('2');
+    assert.equal(await page.locator('#festival-batch-result').innerText(), '', 'editing setup must clear stale quantities');
+    await page.locator('#festival-batch-build').click();
+    await page.waitForFunction(() => document.getElementById('festival-batch-result').textContent.includes('80 Moonray Wheat'));
+    await page.locator('#festival-batch summary').click();
+    await page.locator('label:has(#mode-advanced)').click();
+    await page.locator('#fill-level').selectOption('14');
+    await page.locator('#fill-btn').click();
+    for (const [name, count] of [['Well',3], ['Tidewhisper Sandcastle',2], ['Joy Wheel Loom',2],
+        ['Woodworking Bench',3], ['Chimney Kiln',3]]) assert.equal((await config()).facilityTiers[name][0].count, count);
+
+    // A real UI solve displays retained variety and a bounded RV tradeoff.
+    await load(encodeSetupCode({ 'home-level': '3', 'mode-simple': false, 'mode-advanced': true,
+        'strategy-level-up': true, 'strategy-priorities': false, 'level-up-target': '4',
+        'rv-order-variety': true, 'season-on': false, 'force-e-mode': false,
+        'aniimo-best': true, 'aniimo-minimum': false, 'aniimo-custom': false,
+        facilityTiers: { Farmland: [{ count: 4, level: 2 }], Woodland: [{ count: 1, level: 1 }],
+            Mine: [{ count: 1, level: 1 }], 'Carousel Mill': [{ count: 2, level: 1 }],
+            'Claw Game Cooker': [{ count: 1, level: 1 }] } }));
+    assert.equal(await page.locator('#festival-batch-result').innerText(), '', 'import must clear the previous checklist');
+    await page.locator('#optimize-btn').click();
+    await page.waitForFunction(() => !document.getElementById('optimize-btn').disabled, null, { timeout: 120_000 });
+    assert.equal(await page.locator('#error-message').isVisible(), false);
+    assert.equal(await page.locator('#order-variety-card').isVisible(), true);
+    assert.ok(await page.locator('#order-variety-stock tbody tr').count() >= 3);
+    assert.match(await page.locator('#order-variety-note').innerText(), /extra items stocked daily/);
+    await page.locator('#order-variety-card').screenshot({ path: 'test-results/order-variety-desktop.png' });
+    await page.setViewportSize({ width: 390, height: 844 });
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), false);
+    await page.locator('#order-variety-card').screenshot({ path: 'test-results/order-variety-mobile.png' });
+    await page.setViewportSize({ width: 1000, height: 900 });
 
     // A cheap real solve verifies that resource readiness does not claim the RV upgrade is instant.
     await load(encodeSetupCode({ facilityTiers: { 'Nimbus Bed': [{ count: 1, level: 2 }] },

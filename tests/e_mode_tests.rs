@@ -172,7 +172,7 @@ fn forced_rv_staffing_preserves_pace_without_hiring_for_extra_coins() {
         ("extra_coins", "Earth", true, 1.0)].into_iter().map(|(recipe, group, per_unit, seconds)|
             AniimoWork { recipe: recipe.into(), group: group.into(), per_unit, seconds }).collect();
     let freed = solve_exact(&items, "coins", &counts, &modules,
-        Goal::FreeAniimo { floors: &[], level_up: Some((&cost, pace)), coins: 0.0, work: &work },
+        Goal::FreeAniimo { order_variety: None, floors: &[], level_up: Some((&cost, pace)), coins: 0.0, work: &work },
         Some(Duration::from_secs(5)), None).unwrap();
     check_plan(&freed, &items, "coins", &counts, &modules, Some(&cost)).unwrap();
     assert!(freed.pace.unwrap() >= pace * 0.9999 - 1e-8);
@@ -207,7 +207,7 @@ fn e_mode_frees_whole_worker_slots_even_when_normal_mode_is_faster() {
         recipe: name.into(), group: name.into(), per_unit: false, seconds: 10.0,
     }).collect();
     let plan = solve_exact(&items, "coins", &counts, &modules,
-        Goal::FreeAniimo { floors: &[], level_up: None, coins: 1.0, work: &work },
+        Goal::FreeAniimo { order_variety: None, floors: &[], level_up: None, coins: 1.0, work: &work },
         Some(Duration::from_secs(10)), None).expect("worker-saving plan");
     check_plan(&plan, &items, "coins", &counts, &modules, None).unwrap();
     assert!(plan.rate_per_second >= 0.9999 - 1e-9);
@@ -232,7 +232,7 @@ fn free_aniimo_keeps_priority_floors_and_accounts_for_generator_workers() {
     let work = [AniimoWork { recipe: "widget".into(), group: "Artisanship".into(), per_unit: false, seconds: 10.0 }];
     let floors = [("Wood Blocks".into(), 0.001)];
     let plan = solve_exact(&items, "coins", &counts, &modules,
-        Goal::FreeAniimo { floors: &floors, level_up: None, coins: 1.0, work: &work },
+        Goal::FreeAniimo { order_variety: None, floors: &floors, level_up: None, coins: 1.0, work: &work },
         Some(Duration::from_secs(10)), None).expect("worker-saving plan");
     check_plan(&plan, &items, "coins", &counts, &modules, None).unwrap();
     // One normal worker cannot be replaced by fewer than one generator resident.
@@ -259,7 +259,7 @@ fn free_aniimo_respects_personality_sharing_when_counting_saved_slots() {
             AniimoWork { recipe: "b".into(), group: format!("Fire:4:{other_personality}"), per_unit: false, seconds: 10.0 },
         ];
         let plan = solve_exact(&items, "coins", &counts, &modules,
-            Goal::FreeAniimo { floors: &floors, level_up: None, coins: 1.0, work: &work },
+            Goal::FreeAniimo { order_variety: None, floors: &floors, level_up: None, coins: 1.0, work: &work },
             Some(Duration::from_secs(10)), None).unwrap();
         check_plan(&plan, &items, "coins", &counts, &modules, None).unwrap();
         assert_eq!(plan.generators_used, expected_generators, "{other_personality}");
