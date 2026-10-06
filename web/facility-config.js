@@ -392,10 +392,18 @@ function atHomeLevel(list, homeLevel) {
 // unknown).
 export const ANIIMO_MAX = [null, 8, 11, 14, 17, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 42, 43, 44, 45];
 
-// Everything a player at `homeLevel` could have: each facility at its highest unlocked level, as
-// many as that RV level allows (see `counts`), and every module at its cap for that RV level. Returns the same shapes simple
-// mode sends to the solver: `{ facilities: { name: [{count, level}] }, modules }`.
-export function simpleSetup(homeLevel, toolkitUpgrades = true) {
+export const SIMPLE_MODULE_FIELDS = [
+    { id: 'simple-ecological-module-level', module: 'ecological_module' },
+    { id: 'simple-kitchen-module-level', module: 'kitchen_module' },
+    { id: 'simple-resource-detector-level', module: 'resource_detector' },
+    { id: 'simple-crafting-module-level', module: 'crafting_module' },
+    { id: 'simple-power-module-level', module: 'power_module' },
+];
+
+// All facilities allowed at `homeLevel`, with modules at their RV caps unless overridden.
+// A module's 'auto' value follows the RV cap; a fixed owned level cannot exceed that cap.
+// The legacy Toolkit boolean still selects all caps or all zeroes for omitted overrides.
+export function simpleSetup(homeLevel, toolkitUpgrades = true, moduleLevels = {}) {
     const facilities = {};
     FACILITIES.forEach(f => {
         const unlocked = Object.entries(f.unlocks || {})
@@ -408,7 +416,13 @@ export function simpleSetup(homeLevel, toolkitUpgrades = true) {
         facilities[f.name] = [{ count: atHomeLevel(f.counts, homeLevel), level: Math.max(...unlocked) }];
     });
     const modules = Object.fromEntries(
-        Object.entries(MODULE_MAX_LEVELS).map(([module, caps]) => [module, toolkitUpgrades ? atHomeLevel(caps, homeLevel) : 0])
+        Object.entries(MODULE_MAX_LEVELS).map(([module, caps]) => {
+            const cap = atHomeLevel(caps, homeLevel);
+            if (!Object.hasOwn(moduleLevels, module)) return [module, toolkitUpgrades ? cap : 0];
+            const value = moduleLevels[module];
+            const level = Number(value);
+            return [module, value === 'auto' ? cap : Number.isInteger(level) ? Math.max(0, Math.min(cap, level)) : 0];
+        })
     );
     return { facilities, modules };
 }

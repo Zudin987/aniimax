@@ -8,7 +8,7 @@ review concerns issue templates. Its E-Mode and localization PRs remain open.
 
 | Open upstream issue | Fork behavior |
 | --- | --- |
-| [#29 Toolkit recipes](https://github.com/ae-bii/aniimax/issues/29) | Advanced already accepts each owned module level and individual recipe skips. Simple now also offers “Assume all Toolkit upgrades”; unticking uses zero module upgrades, including power. Default stays on for compatibility. |
+| [#29 Toolkit recipes](https://github.com/ae-bii/aniimax/issues/29) | Simple has five editable module-level selectors before calculation: RV max, 0 (not upgraded), or an owned level up to the selected RV cap. A master checkbox sets all to RV max or all to 0. Default stays at RV max; old unticked codes/saves restore all zeroes. Individual values persist in saves, setup codes and links, independently of Advanced's module inputs. |
 | [#32 Festival points and seed limits](https://github.com/ae-bii/aniimax/issues/32) | Existing whole-plot Wheat limits and raw ingredient reserves remain. Optional minimum festival points/day is a constraint in every exact solve, including RV and non-coin priority solves. Zero leaves strict priority behavior unchanged. Impossible targets fail visibly. |
 | [#33 RV14 Fill](https://github.com/ae-bii/aniimax/issues/33) | Reported RV14 counts: Well 3, Sandcastle 2, Loom 2, Bench 3, Kiln 3. These increases persist above RV14 without inventing later increases. RV13 video counts stay unchanged. Advanced RV inference uses the same corrected tables as Fill and Simple, keeping this setup's Opportunities at RV14. This additional evidence is the issue report, not the RV13 video. |
 | [#34 Every festival recipe](https://github.com/ae-bii/aniimax/issues/34) | A finite checklist accepts X of each of the six dishes. It includes additional roasted peppers/slices consumed by platters, aggregates shared ingredients, rounds batches, lists raw quantities and Wheat, and orders prerequisites before dependent dishes. Missing Recipe Notes, skipped recipes, modules and facility levels are reported. It is a crafting checklist, not a fastest finite-horizon schedule. |
@@ -65,3 +65,5 @@ behind coin/EXP priorities, impossible targets and income-refinement timeouts. J
 RV inference, setup compatibility and exact event quantities/crafting order.
 Browser smoke covers import/persistence, Fill, pre-calculation checklist,
 actual variety calculation, and desktop/mobile rendering.
+Simple module regressions cover partial upgrades, RV caps, old all-or-none codes,
+reloads/sharing, separate Advanced values, the real solver payload and Quick Potato gating.

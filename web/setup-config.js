@@ -1,5 +1,5 @@
 // Validate portable settings before touching the form or the browser's saved setup.
-import { FACILITIES, MAX_HOME_LEVEL, PERSONALITY_PAIRS, ANIIMO_FAMILIES } from './facility-config.js';
+import { FACILITIES, MAX_HOME_LEVEL, PERSONALITY_PAIRS, ANIIMO_FAMILIES, SIMPLE_MODULE_FIELDS, MODULE_MAX_LEVELS, simpleSetup } from './facility-config.js';
 
 const BOOL_FIELDS = [
     'strategy-level-up', 'strategy-priorities', 'force-e-mode', 'mode-simple', 'mode-advanced',
@@ -71,6 +71,19 @@ export function normalizeSetupSettings(input, defaults = {}) {
         const value = typeof data[key] === 'string' && data[key].trim() === ''
             ? (limits[0] === 0 ? 0 : defaults[key] ?? limits[0]) : data[key];
         settings[key] = String(number(value, key, ...limits));
+    }
+    if (own(data, 'simple-toolkit-upgrades') || SIMPLE_MODULE_FIELDS.some(({ id }) => own(data, id) || own(defaults, id))) {
+        const caps = simpleSetup(Number(settings['home-level'] || MAX_HOME_LEVEL)).modules;
+        let reduced = false;
+        for (const { id, module } of SIMPLE_MODULE_FIELDS) {
+            const value = own(data, id) ? data[id] : data['simple-toolkit-upgrades'] === false ? '0' : 'auto';
+            if (value === 'auto') { settings[id] = value; continue; }
+            const level = number(value, id, 0, Math.max(...MODULE_MAX_LEVELS[module]), true);
+            reduced ||= level > caps[module];
+            settings[id] = String(Math.min(level, caps[module]));
+        }
+        settings['simple-toolkit-upgrades'] = SIMPLE_MODULE_FIELDS.every(({ id }) => settings[id] === 'auto');
+        if (reduced) warnings.push('Simple module levels above the RV limit were reduced.');
     }
     if (own(data, 'rate-unit')) {
         if (!['second', 'minute', 'hour', 'day'].includes(data['rate-unit'])) throw new Error('Invalid rate unit');
@@ -150,7 +163,7 @@ export function normalizeSetupSettings(input, defaults = {}) {
     if (!['aniimo-best', 'aniimo-minimum', 'aniimo-custom'].some(key => own(data, key))) {
         warnings.push('Older setup: Aniimo mode was not included; using Best. Review the Aniimo settings.');
     }
-    const known = new Set([...BOOL_FIELDS, ...Object.keys(NUMBER_FIELDS), 'rate-unit', 'goalTarget', 'facilityTiers',
+    const known = new Set([...BOOL_FIELDS, ...Object.keys(NUMBER_FIELDS), ...SIMPLE_MODULE_FIELDS.map(({ id }) => id), 'rate-unit', 'goalTarget', 'facilityTiers',
         'levelUpStock', 'skippedRecipes', 'unlockedSpecial', 'priorities', 'aniimoLevels', 'roster',
         'mineral-detector-level', 'strategy-coins', 'strategy-exp', 'strategy-aniipods']);
     if (Object.keys(data).some(key => !known.has(key))) warnings.push('Unsupported setup fields were ignored.');

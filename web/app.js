@@ -2,7 +2,7 @@
 
 import {
     FACILITIES, FACILITY_CATEGORIES, FACILITY_CATEGORY_BY_NAME, FACILITY_FOOTPRINTS, FACILITY_OUTPUT_LIMITS, HOMELAND_PLOTS, HOMELAND_PLOT_SIZE,
-    MAX_HOME_LEVEL, ANIIMO_MAX, ANIIMO_FAMILIES, STORAGE_PLACEMENT_LIMITS, simpleSetup, homeLevelForSetup,
+    MAX_HOME_LEVEL, ANIIMO_MAX, ANIIMO_FAMILIES, STORAGE_PLACEMENT_LIMITS, simpleSetup, homeLevelForSetup, SIMPLE_MODULE_FIELDS,
     LEVEL_UP_COSTS, LEVEL_UP_TIMERS, LEVEL_UP_CHAINS, SPECIAL_RECIPES, SEASON, ANIIPOD_TIERS, PERSONALITY_PAIRS, personalityLetter, opposedPersonality,
 } from './facility-config.js';
 import {
@@ -371,6 +371,7 @@ function getPersistedFieldIds() {
         'target-amount', 'current-amount',
         'strategy-level-up', 'strategy-priorities', 'level-up-target', 'force-e-mode', 'rv-order-variety', 'simple-toolkit-upgrades',
         'mode-simple', 'mode-advanced', 'home-level',
+        ...SIMPLE_MODULE_FIELDS.map(field => field.id),
         'ecological-module-level', 'kitchen-module-level',
         'resource-detector-level', 'crafting-module-level', 'power-module-level',
         'rate-unit', 'season-on', 'season-wheat-budget', 'season-mutation-plots', 'season-points-min', 'festival-batch-amount',
@@ -652,6 +653,7 @@ function loadInputsFromStorage(data) {
             el.value = data[id];
         }
     });
+    renderSimpleModuleControls(data);
     levelUpTargetChosen = 'level-up-target' in data;
     layoutShowsWhole = document.getElementById('layout-whole').checked;
 }
@@ -695,8 +697,8 @@ async function initWasm() {
 }
 
 // --- Simple / advanced mode -----------------------------------------------------------
-// Simple mode takes just the RV (Homeland) level and assumes everything that level allows is built
-// and upgraded (see `simpleSetup` in facility-config.js). Advanced mode is the full per-facility
+// Simple mode assumes all facilities allowed at the RV level and accepts owned module levels
+// (see `simpleSetup` in facility-config.js). Advanced mode is the full per-facility
 // input. Switching modes never overwrites the advanced inputs; "Fill from RV level" copies a
 // simple setup into them on purpose.
 
@@ -720,10 +722,34 @@ function populateHomeLevels() {
     }
 }
 
+function getSimpleSetup() {
+    const levels = Object.fromEntries(SIMPLE_MODULE_FIELDS.map(({ id, module }) =>
+        [module, document.getElementById(id).value]));
+    return simpleSetup(selectedHomeLevel(), document.getElementById('simple-toolkit-upgrades').checked, levels);
+}
+
+function renderSimpleModuleControls(settings) {
+    const caps = simpleSetup(selectedHomeLevel()).modules;
+    for (const { id, module } of SIMPLE_MODULE_FIELDS) {
+        const select = document.getElementById(id);
+        const value = settings
+            ? settings[id] ?? (settings['simple-toolkit-upgrades'] === false ? '0' : 'auto')
+            : select.value || 'auto';
+        select.innerHTML = `<option value="auto">RV max (Lv.${caps[module]})</option><option value="0">Not upgraded (0)</option>`
+            + Array.from({ length: caps[module] }, (_, i) => `<option value="${i + 1}">Lv.${i + 1}</option>`).join('');
+        select.value = value === 'auto' ? 'auto' : String(Math.max(0, Math.min(caps[module], numberOrDefault(value, 0))));
+    }
+    const automatic = SIMPLE_MODULE_FIELDS.filter(({ id }) => document.getElementById(id).value === 'auto').length;
+    const all = document.getElementById('simple-toolkit-upgrades');
+    all.checked = automatic === SIMPLE_MODULE_FIELDS.length;
+    all.indeterminate = automatic > 0 && !all.checked;
+}
+
 // One entry per built facility, e.g. "10 Farmland Lv.2".
 function renderSimpleSummary() {
+    renderSimpleModuleControls();
     const homeLevel = selectedHomeLevel();
-    const { facilities, modules } = simpleSetup(homeLevel, document.getElementById('simple-toolkit-upgrades').checked);
+    const { facilities, modules } = getSimpleSetup();
     const chip = (count, name, level) => `
         <div class="chip"><span><span class="chip-count">${count}</span> ${name}</span>${level ? `<span class="chip-level">${level}</span>` : ''}</div>`;
     const built = FACILITIES
@@ -750,7 +776,8 @@ function renderSimpleSummary() {
     const active = modules.power_module > 0 && generators > 0;
     const note = document.getElementById('simple-emode-note');
     note?.classList.toggle('is-active', active);
-    document.getElementById('simple-emode-title').textContent = active ? 'E-Mode is available' : 'E-Mode unlocks at RV 12';
+    document.getElementById('simple-emode-title').textContent = active ? 'E-Mode is available'
+        : homeLevel < 12 ? 'E-Mode unlocks at RV 12' : 'E-Mode needs a Power Module';
     document.getElementById('simple-emode-copy').textContent = active
         ? `Power Module Lv.${modules.power_module} + ${generators} Crackle Generator${generators === 1 ? '' : 's'}. Auto-selects powered or Aniimo production.`
         : 'Requires a Power Module and Crackle Generator.';
@@ -787,18 +814,30 @@ function fillAdvancedFrom(homeLevel) {
     document.getElementById('crafting-module-level').value = modules.crafting_module;
     document.getElementById('power-module-level').value = modules.power_module;
     document.getElementById('home-level').value = String(homeLevel);
+    renderSimpleModuleControls();
     followLevelUpTarget(homeLevel);
     renderStrategy();
     saveInputsToStorage();
 }
 
 function attachModeHandlers() {
-    document.getElementById('simple-toolkit-upgrades').addEventListener('change', renderSimpleSummary);
+    document.getElementById('simple-toolkit-upgrades').addEventListener('change', event => {
+        SIMPLE_MODULE_FIELDS.forEach(({ id }) => {
+            document.getElementById(id).value = event.target.checked ? 'auto' : '0';
+        });
+        renderSimpleSummary();
+        saveInputsToStorage();
+    });
+    document.getElementById('simple-module-levels').addEventListener('change', () => {
+        renderSimpleSummary();
+        saveInputsToStorage();
+    });
     document.getElementById('mode-simple').addEventListener('change', applyConfigMode);
     document.getElementById('mode-advanced').addEventListener('change', applyConfigMode);
     document.getElementById('home-level').addEventListener('change', () => {
         renderSimpleSummary();
         renderStrategy();
+        saveInputsToStorage();
     });
     document.getElementById('fill-btn').addEventListener('click', () => {
         fillAdvancedFrom(numberOrDefault(document.getElementById('fill-level').value, MAX_HOME_LEVEL));
@@ -2944,7 +2983,7 @@ function getPlanInputValues() {
     // `attachFacilityTierHandlers`), sent straight through as a list of tiers per facility; see
     // `JsPlanInput::facilities` in wasm.rs for the shape (`[{count, level}, ...]` per facility).
     if (isSimpleMode()) {
-        const { facilities, modules } = simpleSetup(selectedHomeLevel(), document.getElementById('simple-toolkit-upgrades').checked);
+        const { facilities, modules } = getSimpleSetup();
         return {
             currency: 'coins',
             priorities: activePriorities(),
@@ -4670,6 +4709,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     initFacilityTiers(null);
     populateHomeLevels();
     populateLevelUpTargets();
+    renderSimpleModuleControls();
     defaultConfigData = structuredClone(currentConfigData());
     let savedData = readStorage();
     let shareNotice = '';
