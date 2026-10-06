@@ -108,13 +108,15 @@ const getInputsCode = app.slice(app.indexOf('function getPlanInputValues()'), ap
 for (const simple of [true, false]) {
     const getInputs = new Function('document', 'isSimpleMode', 'simpleSetup', 'selectedHomeLevel',
         'activePriorities', 'levelUpInput', 'excludedRecipes', 'seasonActive', 'FACILITIES', 'facilityTiers',
-        'numberOrDefault', `${getInputsCode}\nreturn getPlanInputValues;`)(
-        { getElementById: id => ({ checked: id === 'force-e-mode', value: '1' }) },
+        'numberOrDefault', 'isLevelUpStrategy', 'floatOrDefault', `${getInputsCode}\nreturn getPlanInputValues;`)(
+        { getElementById: id => ({ checked: ['force-e-mode', 'rv-order-variety', 'simple-toolkit-upgrades'].includes(id), value: '1' }) },
         () => simple, () => ({ facilities: forcedInput.facilities, modules: forcedInput.modules }), () => 12,
         () => [], () => forcedInput.level_up, () => [], () => false,
-        [{ name: 'Crackle Generator' }], forcedInput.facilities, Number);
+        [{ name: 'Crackle Generator' }], forcedInput.facilities, Number, () => true, Number);
     const input = getInputs();
     assert.equal(input.force_e_mode, true);
+    assert.equal(input.order_variety, true);
+    assert.equal(input.season_points_per_day, 0);
     assert.deepEqual(input.level_up, forcedInput.level_up);
     assert.deepEqual(input.priorities, [], 'RV plans do not require Home Coins only');
 }

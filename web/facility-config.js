@@ -15,7 +15,8 @@
 // the last count. Simple mode uses both (see `simpleSetup`). The 2026-10-03 recording confirms
 // RV13 caps for every production/environment facility selected in its build menu; Crafting Table
 // and Claw Game Cooker retain their earlier evidence. Higher caps are not newly verified by that
-// recording: Farmland, Woodland and Mine follow the game's pattern, others keep their last count.
+// recording: Farmland, Woodland and Mine follow the game's pattern, others keep their last count. The five RV14 increases reported in upstream issue #33
+// are included without changing the video-confirmed RV13 limits.
 //
 // Facilities marked "Not yet verified in game" in their tooltip haven't had their numbers
 // confirmed in game yet.
@@ -41,13 +42,13 @@ export const FACILITIES = [
     {
         name: 'Well', slug: 'well', defaultCount: 0, category: 'Materials', hasWorker: true, ability: 'Water', personality: 'Faithful',
         unlocks: { 1: 4, 2: 8, 3: 11, 4: 13, 5: 17 },
-        counts: [0, 0, 0, 1, 1, 1, 1, 2],
+        counts: [0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3],
         tooltip: "Lv.1: Well Water, Quick Well Water&#10;Lv.2: Fresh Water&#10;Lv.3: Quick Fresh Water&#10;Lv.4: Deep Rock Spring Water, Quick Deep Rock Spring Water&#10;Lv.5: Natural Mineral Spring Water, Quick Natural Mineral Spring Water"
     },
     {
         name: 'Tidewhisper Sandcastle', slug: 'tidewhisper-sandcastle', defaultCount: 0, category: 'Aniimo Materials', hasWorker: true, ability: 'Leisure', personality: 'Judicious', family: 'Susuta',
         unlocks: { 1: 5, 2: 8, 3: 13 },
-        counts: [0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+        counts: [0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2],
         tooltip: "Requires a Susuta-family Aniimo with Leisure.&#10;Lv.1: Sea Salt&#10;Lv.2: Quick Sea Salt&#10;Lv.3: Pearl (needs Warm)"
     },
     {
@@ -156,7 +157,7 @@ export const FACILITIES = [
     {
         name: 'Joy Wheel Loom', slug: 'joy-wheel-loom', defaultCount: 0, category: 'Materials Processing', hasWorker: true, ability: 'Wind', personality: 'Faithful',
         unlocks: { 1: 7, 2: 10, 3: 15, 4: 19 },
-        counts: [0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+        counts: [0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2],
         tooltip: "Lv.1: Cotton Thread&#10;Lv.2: Woolen Yarn, Cotton Fabric&#10;Lv.3: Palm Rope, Wool Fabric&#10;Lv.4: Dyed Cotton Fabric"
     },
     {
@@ -174,13 +175,13 @@ export const FACILITIES = [
     {
         name: 'Woodworking Bench', slug: 'woodworking-bench', defaultCount: 0, category: 'Materials Processing', hasWorker: true, ability: 'Artisanship', personality: 'Energetic',
         unlocks: { 1: 6, 2: 10, 3: 14, 4: 18 },
-        counts: [0, 0, 0, 0, 0, 1, 1, 1, 1, 2],
+        counts: [0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3],
         tooltip: "Lv.1: Rough Lumber&#10;Lv.2: Standard Planks&#10;Lv.3: Laminated Beams&#10;Lv.4: Densified Timber Component&#10;Turns Wood Blocks into RV level-up materials."
     },
     {
         name: 'Chimney Kiln', slug: 'chimney-kiln', defaultCount: 0, category: 'Materials Processing', hasWorker: true, ability: 'Fire', personality: 'Practical',
         unlocks: { 1: 6, 2: 10, 3: 14, 4: 18 },
-        counts: [0, 0, 0, 0, 0, 1, 1, 1, 1, 2],
+        counts: [0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3],
         tooltip: "Lv.1: Coarse-Sifted Ore&#10;Lv.2: Sintered Ore Brick&#10;Lv.3: Refined Ore&#10;Lv.4: Microcrystalline Ore Plate&#10;Turns Mineral Sand into RV level-up materials."
     },
 ];
@@ -393,7 +394,7 @@ export const ANIIMO_MAX = [null, 8, 11, 14, 17, 20, 22, 24, 26, 28, 30, 32, 34, 
 // Everything a player at `homeLevel` could have: each facility at its highest unlocked level, as
 // many as that RV level allows (see `counts`), and every module at its cap for that RV level. Returns the same shapes simple
 // mode sends to the solver: `{ facilities: { name: [{count, level}] }, modules }`.
-export function simpleSetup(homeLevel) {
+export function simpleSetup(homeLevel, toolkitUpgrades = true) {
     const facilities = {};
     FACILITIES.forEach(f => {
         const unlocked = Object.entries(f.unlocks || {})
@@ -406,7 +407,22 @@ export function simpleSetup(homeLevel) {
         facilities[f.name] = [{ count: atHomeLevel(f.counts, homeLevel), level: Math.max(...unlocked) }];
     });
     const modules = Object.fromEntries(
-        Object.entries(MODULE_MAX_LEVELS).map(([module, caps]) => [module, atHomeLevel(caps, homeLevel)])
+        Object.entries(MODULE_MAX_LEVELS).map(([module, caps]) => [module, toolkitUpgrades ? atHomeLevel(caps, homeLevel) : 0])
     );
     return { facilities, modules };
+}
+
+// Infer Advanced RV limits from all entered facilities and modules.
+export function homeLevelForSetup(input) {
+    for (let level = 1; level <= MAX_HOME_LEVEL; level++) {
+        const allowed = simpleSetup(level);
+        const fit = FACILITIES.every(f => {
+            const have = input.facilities?.[f.name] || [];
+            const count = have.reduce((sum, t) => sum + t.count, 0);
+            const cap = allowed.facilities[f.name][0];
+            return count <= cap.count && have.every(t => t.count === 0 || f.hasLevels === false || t.level <= cap.level);
+        });
+        if (fit && Object.entries(input.modules || {}).every(([name, n]) => n <= (allowed.modules[name] || 0))) return level;
+    }
+    return MAX_HOME_LEVEL;
 }

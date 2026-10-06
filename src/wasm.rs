@@ -746,6 +746,9 @@ pub struct JsPlanInput {
     /// In RV plans, the browser minimizes the team after finding the best pace with power.
     #[serde(default)]
     pub force_e_mode: bool,
+    /// Optional RV-first order variety; the worker keeps at least 95% of the best pace.
+    #[serde(default)]
+    pub order_variety: bool,
     /// Set for the level-up strategy: the next RV level-up's cost and what's in stock. The exact
     /// planner then finds the soonest level-up. With forced power, the browser minimizes the
     /// team at that pace; otherwise it earns as much as the pace leaves room for.
@@ -766,6 +769,8 @@ pub struct JsPlanInput {
     /// Maximum Moonray Wheat the plan may spend on event seeds per day. None/0 means unlimited.
     #[serde(default)]
     pub season_currency_per_day: Option<f64>,
+    #[serde(default)]
+    pub season_points_per_day: f64,
     /// Minimum plots of each event crop kept continuously cycling for mutation attempts.
     #[serde(default = "default_harvest_mutation_plots")]
     pub harvest_mutation_plots: u32,
@@ -1240,6 +1245,8 @@ pub struct JsProductionPlan {
     /// Raw output reserved for manual Harvest Moon orders; excluded from income and points.
     #[serde(default)]
     pub harvest_order_stock: Vec<JsHarvestOrderStock>,
+    #[serde(default)]
+    pub order_stock: Vec<(String, f64)>,
     /// Full-power E-Mode draw and configured grid capacity.
     #[serde(default)]
     pub power_used: u32,
@@ -1334,6 +1341,7 @@ fn empty_production_plan(success: bool, error: Option<String>) -> JsProductionPl
         priorities: vec![],
         season_points: None,
         harvest_order_stock: Vec::new(),
+        order_stock: Vec::new(),
         power_used: 0,
         power_capacity: 0,
         generators_used: 0,
@@ -1380,9 +1388,9 @@ pub fn find_plan(input_json: &str, on_progress: Option<js_sys::Function>) -> Str
         Ok(p) => p,
         Err(error) => return error,
     };
-    if prepared.input.force_e_mode {
+    if prepared.input.force_e_mode || prepared.input.order_variety {
         return serde_json::to_string(&empty_production_plan(false,
-            Some("Force E-Mode needs the exact planner. Please calculate again or turn off Force E-Mode.".to_string())))
+            Some("E-Mode and order variety need the exact planner. Please reload and calculate again.".to_string())))
             .unwrap_or_default();
     }
     if prepared.input.season {
@@ -1516,6 +1524,10 @@ struct JsStage {
     /// Minimize the Aniimo team while keeping the earlier production targets.
     #[serde(default)]
     free_aniimo: bool,
+    #[serde(default)]
+    order_variety: bool,
+    #[serde(default)]
+    variety_count: Option<u32>,
 }
 
 impl JsStage {
@@ -1526,6 +1538,12 @@ impl JsStage {
                 level_up: input.level_up.as_ref().zip(self.pace),
                 coins: self.coins.unwrap_or(0.0),
                 work,
+                order_variety: self.variety_count,
+            };
+        }
+        if self.order_variety {
+            return crate::exact::Goal::OrderVariety {
+                level_up: input.level_up.as_ref().zip(self.pace), minimum: self.variety_count,
             };
         }
         match (&input.level_up, self.pace, self.coins) {
@@ -1596,6 +1614,7 @@ pub fn exact_plan(input_json: &str, stage_json: &str, solution_json: &str) -> St
     let level_up = match goal {
         crate::exact::Goal::EarnWhileLevelingUp(level_up, _) | crate::exact::Goal::StockUp(level_up, ..) => Some(level_up),
         crate::exact::Goal::FreeAniimo { level_up: Some((level_up, _)), .. } => Some(level_up),
+        crate::exact::Goal::OrderVariety { level_up: Some((level_up, _)), .. } => Some(level_up),
         _ => None,
     };
     let Some(exact) = crate::exact::plan_from_values(
@@ -1626,6 +1645,7 @@ pub fn exact_plan(input_json: &str, stage_json: &str, solution_json: &str) -> St
     let plan = crate::exact::to_production_plan(&exact, &prepared.items, &currency, &prepared.facility_counts);
     let mut js = prepared.to_js(plan, Some(proof));
     js.level_up = report;
+    js.order_stock = exact.order_stock.iter().map(|(name, rate)| (name.clone(), *rate)).collect();
     js.staffing = exact.staffing.clone();
     js.grower_staffing = exact.grower_staffing.clone();
     js.power_used = exact.power_used;
@@ -1803,6 +1823,11 @@ impl PreparedInput {
         let requirements = embedded_aniimo_requirements();
         let grower_steps = embedded_grower_steps();
         let mut facility_counts = facility_counts;
+        if !input.season_points_per_day.is_finite() || input.season_points_per_day < 0.0 {
+            return Err(serde_json::to_string(&empty_production_plan(false,
+                Some("Minimum festival points must be a non-negative number.".to_string()))).unwrap_or_default());
+        }
+        if input.season { facility_counts.set_season_points_per_day(input.season_points_per_day); }
         facility_counts.set_harvest_order_items(harvest_raw);
         facility_counts.set_grower_steps(grower_steps.clone());
         // Best mode must not claim a generator tier's rated output from a weaker Lightning
@@ -1978,6 +2003,7 @@ impl PreparedInput {
             priorities: vec![],
             season_points,
             harvest_order_stock: Vec::new(),
+            order_stock: Vec::new(),
             power_used: 0,
             power_capacity: crate::models::grid_power_capacity(&self.facility_counts, &self.module_levels),
             generators_used: 0,

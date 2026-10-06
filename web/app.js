@@ -2,7 +2,7 @@
 
 import {
     FACILITIES, FACILITY_CATEGORIES, FACILITY_CATEGORY_BY_NAME, FACILITY_FOOTPRINTS, FACILITY_OUTPUT_LIMITS, HOMELAND_PLOTS, HOMELAND_PLOT_SIZE,
-    MAX_HOME_LEVEL, ANIIMO_MAX, ANIIMO_FAMILIES, STORAGE_PLACEMENT_LIMITS, simpleSetup,
+    MAX_HOME_LEVEL, ANIIMO_MAX, ANIIMO_FAMILIES, STORAGE_PLACEMENT_LIMITS, simpleSetup, homeLevelForSetup,
     LEVEL_UP_COSTS, LEVEL_UP_TIMERS, LEVEL_UP_CHAINS, SPECIAL_RECIPES, SEASON, ANIIPOD_TIERS, PERSONALITY_PAIRS, personalityLetter, opposedPersonality,
 } from './facility-config.js';
 import {
@@ -11,6 +11,7 @@ import {
 import { createShareUrl, readShareHash, urlWithoutShare } from './share-config.js';
 import { normalizeSetupSettings } from './setup-config.js';
 import { harvestBudgetStatus } from './harvest-budget.js';
+import { festivalCraftChecklist } from './festival-crafting.js';
 
 let wasmReady = false;
 
@@ -368,11 +369,11 @@ let preferredGoalTarget = '';
 function getPersistedFieldIds() {
     return [
         'target-amount', 'current-amount',
-        'strategy-level-up', 'strategy-priorities', 'level-up-target', 'force-e-mode',
+        'strategy-level-up', 'strategy-priorities', 'level-up-target', 'force-e-mode', 'rv-order-variety', 'simple-toolkit-upgrades',
         'mode-simple', 'mode-advanced', 'home-level',
         'ecological-module-level', 'kitchen-module-level',
         'resource-detector-level', 'crafting-module-level', 'power-module-level',
-        'rate-unit', 'season-on', 'season-wheat-budget', 'season-mutation-plots',
+        'rate-unit', 'season-on', 'season-wheat-budget', 'season-mutation-plots', 'season-points-min', 'festival-batch-amount',
         'layout-sim-on', 'layout-storage-count', 'layout-whole',
         'aniimo-best', 'aniimo-minimum', 'aniimo-custom'
     ];
@@ -720,7 +721,7 @@ function populateHomeLevels() {
 // One entry per built facility, e.g. "10 Farmland Lv.2".
 function renderSimpleSummary() {
     const homeLevel = selectedHomeLevel();
-    const { facilities, modules } = simpleSetup(homeLevel);
+    const { facilities, modules } = simpleSetup(homeLevel, document.getElementById('simple-toolkit-upgrades').checked);
     const chip = (count, name, level) => `
         <div class="chip"><span><span class="chip-count">${count}</span> ${name}</span>${level ? `<span class="chip-level">${level}</span>` : ''}</div>`;
     const built = FACILITIES
@@ -783,12 +784,14 @@ function fillAdvancedFrom(homeLevel) {
     document.getElementById('resource-detector-level').value = modules.resource_detector;
     document.getElementById('crafting-module-level').value = modules.crafting_module;
     document.getElementById('power-module-level').value = modules.power_module;
+    document.getElementById('home-level').value = String(homeLevel);
     followLevelUpTarget(homeLevel);
     renderStrategy();
     saveInputsToStorage();
 }
 
 function attachModeHandlers() {
+    document.getElementById('simple-toolkit-upgrades').addEventListener('change', renderSimpleSummary);
     document.getElementById('mode-simple').addEventListener('change', applyConfigMode);
     document.getElementById('mode-advanced').addEventListener('change', applyConfigMode);
     document.getElementById('home-level').addEventListener('change', () => {
@@ -871,20 +874,7 @@ const tierLevel = tiers => Math.max(0, ...(tiers || []).filter(t => t.count > 0)
 
 // The lowest RV level whose facilities and modules cover everything in `input`, for Advanced
 // mode, where the player enters what they have rather than their RV level.
-function homeLevelCovering(input) {
-    for (let level = 1; level <= MAX_HOME_LEVEL; level++) {
-        const allowed = simpleSetup(level);
-        const facilitiesFit = FACILITIES.every(f => {
-            const have = input.facilities[f.name];
-            if (tierCount(have) === 0) return true;
-            const cap = allowed.facilities[f.name];
-            return tierCount(have) <= tierCount(cap) && (f.hasLevels === false || tierLevel(have) <= tierLevel(cap));
-        });
-        const modulesFit = Object.entries(input.modules).every(([name, level_]) => level_ <= (allowed.modules[name] ?? 0));
-        if (facilitiesFit && modulesFit) return level;
-    }
-    return MAX_HOME_LEVEL;
-}
+function homeLevelCovering(input) { return homeLevelForSetup(input); }
 
 // Every change within reach of `base` (a plan input), as `{ label, input, group }`. Changes
 // sharing a `group` are one thing taken further and further (a module at each level up to what
@@ -1928,7 +1918,7 @@ function startProgress(input, runId) {
     // of it against every limit: the worker's steps map onto these (see `setStep`).
     const steps = [
         ...priorities.map(target => ({ key: `priority:${target}`, label: `Most ${priorityLabel(target, planContext.aniipod)}` })),
-        { key: 'plan', label: levelUp ? 'Fastest Level-Up' : priorities.length ? "Home Coins with What's Left" : 'Most Home Coins' },
+        { key: 'plan', label: levelUp ? (input.order_variety ? 'RV + Order Variety' : 'Fastest Level-Up') : priorities.length ? "Home Coins with What's Left" : 'Most Home Coins' },
         { key: 'layout', label: 'Homeland Layout' },
         { key: 'improve', label: 'Opportunities' },
         { key: 'minimum', label: 'Minimum Team Plan' },
@@ -1938,7 +1928,7 @@ function startProgress(input, runId) {
 }
 
 // The worker's solves that make up the card's 'plan' step; it's done once the plan is checked.
-const PLAN_SOLVES = ['level_up', 'final', 'free_aniimo', 'stock_up', 'check'];
+const PLAN_SOLVES = ['variety', 'level_up', 'final', 'free_aniimo', 'stock_up', 'check'];
 
 // Moves step `key` on: 'start', 'done', 'skip' or 'fail', with an optional note such as
 // "3 of 12", and for a solve, whether HiGHS proved its answer. The backup planner only appears
@@ -2285,6 +2275,7 @@ function renderSeason() {
 
 function attachSeasonHandlers() {
     document.getElementById('season-on').addEventListener('change', renderStrategy);
+    document.getElementById('festival-batch-build').addEventListener('click', renderFestivalChecklist);
     ['season-wheat-budget', 'season-mutation-plots'].forEach(id =>
         document.getElementById(id).addEventListener('input', renderSeasonBudgetNote));
     document.getElementById('season-notes').addEventListener('change', (e) => {
@@ -2293,6 +2284,22 @@ function attachSeasonHandlers() {
         if (e.target.checked) unlockedSpecial.add(name); else unlockedSpecial.delete(name);
         saveInputsToStorage();
     });
+}
+
+async function renderFestivalChecklist() {
+    const result = document.getElementById('festival-batch-result');
+    try {
+        if (!recipeIndex.length) await loadRecipeIndex();
+        const list = festivalCraftChecklist(recipeIndex,
+            Number(document.getElementById('festival-batch-amount').value), getPlanInputValues());
+        const rows = values => values.map(r => `<tr><td>${prettyItem(r.name)}</td><td>${r.need}</td><td>${r.batches}</td><td>${r.produced}</td><td>${r.facility} Lv.${r.facilityLevel}</td></tr>`).join('');
+        const table = values => `<table class="level-up-lines"><thead><tr><th>Item</th><th>Needed</th><th>Batches</th><th>Makes</th><th>Facility</th></tr></thead><tbody>${rows(values)}</tbody></table>`;
+        result.innerHTML = `${list.blocked.length ? `<p class="warning">Check before crafting: ${list.blocked.map(prettyItem).join('; ')}.</p>` : ''}
+            <p class="hint small">${list.wheat} Moonray Wheat for event seeds. These are standard crops; mutations are not guaranteed.</p>
+            <p class="assume-title">Gather first</p>${table(list.raw)}
+            <p class="assume-title">Craft in this order</p>${table(list.steps)}
+            <p class="hint small">Targets include extra ingredients needed by later dishes. Keep the requested amount of each finished dish; use the rest in the next steps. Checklist only: worker availability, owned inventory and completion time are not calculated.</p>`;
+    } catch (error) { result.textContent = error.message; }
 }
 
 // Every recipe plans may not use: the player's skips and any special recipe not unlocked.
@@ -2320,7 +2327,7 @@ function recipeLabel(recipe) {
 async function loadRecipeIndex() {
     try {
         recipeIndex = JSON.parse(await callWorker('get_all_items'))
-            .map(r => ({ name: r.name, facility: r.facility, facilityLevel: r.facility_level || 1, cost: r.cost || 0, seasonSeedCost: r.season_seed_cost || 0, environment: r.environment || null, jobs: r.jobs || [], ingredients: r.raw_materials || [], amounts: r.required_amount || [], yieldAmount: r.yield_amount || 1, byproduct: r.byproduct_item || null, byproductAmount: r.byproduct?.[1] || 0, turns: r.sell_currency === 'none' }))
+            .map(r => ({ season: r.season, moduleRequirement: r.module_requirement, name: r.name, facility: r.facility, facilityLevel: r.facility_level || 1, cost: r.cost || 0, seasonSeedCost: r.season_seed_cost || 0, environment: r.environment || null, jobs: r.jobs || [], ingredients: r.raw_materials || [], amounts: r.required_amount || [], yieldAmount: r.yield_amount || 1, byproduct: r.byproduct_item || null, byproductAmount: r.byproduct?.[1] || 0, turns: r.sell_currency === 'none' }))
             .sort((a, b) => a.facility.localeCompare(b.facility) || a.name.localeCompare(b.name));
         document.getElementById('skip-options').innerHTML =
             recipeIndex.map(r => `<option value="${recipeLabel(r)}"></option>`).join('');
@@ -2680,7 +2687,10 @@ function populateLevelUpTargets() {
 function renderStrategy() {
     renderSeason();
     const forced = document.getElementById('force-e-mode').checked;
-    document.getElementById('level-up-strategy-hint').textContent = forced
+    const variety = document.getElementById('rv-order-variety').checked;
+    document.getElementById('level-up-strategy-hint').textContent = variety
+        ? 'Keeps at least 95% of the best RV pace, then stocks a wider mix for orders.'
+        : forced
         ? 'Fastest level-up with E-Mode, then the smallest team. Spare Aniimo come before extra Home Coins.'
         : 'Gets your RV upgrade resources as quickly as possible, then earns extra Home Coins.';
     const levelUp = isLevelUpStrategy();
@@ -2716,6 +2726,7 @@ function renderStrategy() {
 }
 
 function attachStrategyHandlers() {
+    document.getElementById('rv-order-variety').addEventListener('change', renderStrategy);
     document.getElementById('force-e-mode').addEventListener('change', renderStrategy);
     document.getElementById('strategy-level-up').addEventListener('change', renderStrategy);
     document.getElementById('strategy-priorities').addEventListener('change', renderStrategy);
@@ -2825,7 +2836,7 @@ function renderLevelUp(plan) {
     // What's left over once everything is ready and paid for: costs that finish early keep coming
     // in while the slowest one finishes.
     const surplus = report.requirements
-        .map(r => ({ name: r.name, spare: Math.floor(r.have + r.per_second * report.seconds - r.need) }))
+        .map(r => ({ season: r.season, moduleRequirement: r.module_requirement, name: r.name, spare: Math.floor(r.have + r.per_second * report.seconds - r.need) }))
         .concat((report.leftovers || []).map(([name, amount]) => ({ name, spare: Math.floor(amount) })))
         .filter(r => r.spare >= 1)
         .map(r => `${formatNumber(r.spare)} ${r.name === 'coins' ? 'Home Coins' : ITEM_NAMES[r.name] || prettyItem(r.name)}`);
@@ -2931,12 +2942,14 @@ function getPlanInputValues() {
     // `attachFacilityTierHandlers`), sent straight through as a list of tiers per facility; see
     // `JsPlanInput::facilities` in wasm.rs for the shape (`[{count, level}, ...]` per facility).
     if (isSimpleMode()) {
-        const { facilities, modules } = simpleSetup(selectedHomeLevel());
+        const { facilities, modules } = simpleSetup(selectedHomeLevel(), document.getElementById('simple-toolkit-upgrades').checked);
         return {
             currency: 'coins',
             priorities: activePriorities(),
             prioritize_byproducts: false,
             force_e_mode: document.getElementById('force-e-mode').checked,
+            order_variety: isLevelUpStrategy() && document.getElementById('rv-order-variety').checked,
+            season_points_per_day: seasonActive() ? Math.max(0, floatOrDefault(document.getElementById('season-points-min').value, 0)) : 0,
             level_up: levelUpInput(),
             exclude: excludedRecipes(),
             season: seasonActive(),
@@ -2968,6 +2981,8 @@ function getPlanInputValues() {
         priorities: activePriorities(),
         prioritize_byproducts: false,
         force_e_mode: document.getElementById('force-e-mode').checked,
+            order_variety: isLevelUpStrategy() && document.getElementById('rv-order-variety').checked,
+            season_points_per_day: seasonActive() ? Math.max(0, floatOrDefault(document.getElementById('season-points-min').value, 0)) : 0,
         level_up: levelUpInput(),
         exclude: excludedRecipes(),
         season: seasonActive(),
@@ -3870,6 +3885,18 @@ function renderEnvironmentDiagram(layout, mode, building, rows = [], unit = null
 // needs more than one building unit, that group splits into one table per unit (see
 // `splitByEnvironmentUnit`) so it's clear which crops go in which physical building. Everything
 // else falls back to the original per-facility-category grouping (FACILITY_CATEGORIES).
+function renderOrderVariety(plan) {
+    const report = plan.order_variety;
+    document.getElementById('order-variety-card').hidden = !report;
+    const target = document.getElementById('order-variety-stock');
+    if (!report) { target.innerHTML = ''; return; }
+    const extra = plan.level_up?.seconds > 0 ? Math.max(0, (plan.level_up.seconds / report.fastest_seconds - 1) * 100) : 0;
+    document.getElementById('order-variety-note').textContent =
+        `${report.count} extra items stocked daily; RV resources take ${extra.toFixed(1)}% longer than the fastest plan. ${report.proven ? '' : 'Variety is the best found within the search time.'}`;
+    target.innerHTML = `<table class="level-up-lines"><thead><tr><th>Keep for orders</th><th>Held / day</th></tr></thead>
+        <tbody>${(plan.order_stock || []).map(([name, rate]) => `<tr><td>${prettyItem(name)}</td><td>${formatNumber(rate * 86400)}</td></tr>`).join('')}</tbody></table>`;
+}
+
 function renderHarvestOrderStock(plan) {
     const rows = plan.harvest_order_stock || [];
     document.getElementById('harvest-order-card').hidden = rows.length === 0;
@@ -3885,6 +3912,7 @@ function renderHarvestOrderStock(plan) {
 }
 
 function renderFacilityPlan(plan) {
+    renderOrderVariety(plan);
     renderHarvestOrderStock(plan);
     const container = document.getElementById('facility-plan-container');
     const steps = plan.coin_items || [];

@@ -3,7 +3,7 @@ import { FACILITIES, MAX_HOME_LEVEL, PERSONALITY_PAIRS, ANIIMO_FAMILIES } from '
 
 const BOOL_FIELDS = [
     'strategy-level-up', 'strategy-priorities', 'force-e-mode', 'mode-simple', 'mode-advanced',
-    'season-on', 'layout-sim-on', 'layout-whole', 'aniimo-best', 'aniimo-minimum', 'aniimo-custom',
+    'rv-order-variety', 'simple-toolkit-upgrades', 'season-on', 'layout-sim-on', 'layout-whole', 'aniimo-best', 'aniimo-minimum', 'aniimo-custom',
 ];
 const NUMBER_FIELDS = {
     'target-amount': [0, 1e15], 'current-amount': [0, 1e15],
@@ -11,6 +11,7 @@ const NUMBER_FIELDS = {
     'ecological-module-level': [0, 99, true], 'kitchen-module-level': [0, 99, true],
     'resource-detector-level': [0, 99, true], 'crafting-module-level': [0, 99, true],
     'power-module-level': [0, 99, true], 'season-wheat-budget': [0, 1e12],
+    'season-points-min': [0, 1e12], 'festival-batch-amount': [1, 100000, true],
     'season-mutation-plots': [0, 10, true], 'layout-storage-count': [1, 24, true],
 };
 const RADIO_GROUPS = [
