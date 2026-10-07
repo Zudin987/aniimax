@@ -338,7 +338,7 @@ struct Model<'a> {
     /// `(variable, weight)` for tiny preference terms in the objective, so a solve's real
     /// production objective can be recovered without them.
     tiebreak: Vec<(usize, f64)>,
-    order_core: Option<&'a OrderCore>,
+    order_core: Option<OrderCore>,
 }
 
 /// What each environment building a plan sets up costs in the objective: far too little to give
@@ -427,7 +427,7 @@ fn build_model<'a>(
         power_capacity,
         tiebreak: Vec::new(),
         order_core: match goal {
-            Goal::OrderVariety { core, .. } | Goal::FreeAniimo { order_core: core, .. } => core,
+            Goal::OrderVariety { core, .. } | Goal::FreeAniimo { order_core: core, .. } => core.cloned(),
             _ => None,
         },
     };
@@ -1758,7 +1758,7 @@ fn plan_from(model: &Model, value: f64, upper_bound: f64, proven_optimal: bool, 
         sold,
         harvest_reserve_units,
         order_stock,
-        order_core: model.order_core.cloned(),
+        order_core: model.order_core.clone(),
         environment,
         pairs,
         pace,
