@@ -735,7 +735,7 @@ function renderSimpleModuleControls(settings) {
         const value = settings
             ? settings[id] ?? (settings['simple-toolkit-upgrades'] === false ? '0' : 'auto')
             : select.value || 'auto';
-        select.innerHTML = `<option value="auto">RV max (Lv.${caps[module]})</option><option value="0">Not upgraded (0)</option>`
+        select.innerHTML = `<option value="auto">RV max (Lv.${caps[module]})</option><option value="0">Lv.0</option>`
             + Array.from({ length: caps[module] }, (_, i) => `<option value="${i + 1}">Lv.${i + 1}</option>`).join('');
         select.value = value === 'auto' ? 'auto' : String(Math.max(0, Math.min(caps[module], numberOrDefault(value, 0))));
     }
