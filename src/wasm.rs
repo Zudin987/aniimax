@@ -1247,6 +1247,9 @@ pub struct JsProductionPlan {
     pub harvest_order_stock: Vec<JsHarvestOrderStock>,
     #[serde(default)]
     pub order_stock: Vec<(String, f64)>,
+    /// Checked solver allocations, retaining crew/environment variant names for later solves.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub order_allocations: Option<crate::exact::OrderCore>,
     /// Full-power E-Mode draw and configured grid capacity.
     #[serde(default)]
     pub power_used: u32,
@@ -1342,6 +1345,7 @@ fn empty_production_plan(success: bool, error: Option<String>) -> JsProductionPl
         season_points: None,
         harvest_order_stock: Vec::new(),
         order_stock: Vec::new(),
+        order_allocations: None,
         power_used: 0,
         power_capacity: 0,
         generators_used: 0,
@@ -1528,6 +1532,8 @@ struct JsStage {
     order_variety: bool,
     #[serde(default)]
     variety_count: Option<u32>,
+    #[serde(default)]
+    order_core: Option<crate::exact::OrderCore>,
 }
 
 impl JsStage {
@@ -1539,11 +1545,12 @@ impl JsStage {
                 coins: self.coins.unwrap_or(0.0),
                 work,
                 order_variety: self.variety_count,
+                order_core: self.order_core.as_ref(),
             };
         }
         if self.order_variety {
             return crate::exact::Goal::OrderVariety {
-                level_up: input.level_up.as_ref().zip(self.pace), minimum: self.variety_count,
+                level_up: input.level_up.as_ref().zip(self.pace), minimum: self.variety_count, core: self.order_core.as_ref(),
             };
         }
         match (&input.level_up, self.pace, self.coins) {
@@ -1646,6 +1653,21 @@ pub fn exact_plan(input_json: &str, stage_json: &str, solution_json: &str) -> St
     let mut js = prepared.to_js(plan, Some(proof));
     js.level_up = report;
     js.order_stock = exact.order_stock.iter().map(|(name, rate)| (name.clone(), *rate)).collect();
+    if stage.order_variety || stage.variety_count.is_some() {
+        let all: std::collections::HashMap<&str, &ProductionItem> = prepared.items.iter().map(|item| (item.name.as_str(), item)).collect();
+        let gatherer_units: std::collections::BTreeMap<String, u32> = exact.units.iter()
+            .filter(|(name, _)| all.get(name.as_str()).is_some_and(|recipe| recipe.raw_materials.is_none()))
+            .map(|(name, units)| (name.clone(), *units)).collect();
+        js.order_allocations = Some(crate::exact::OrderCore {
+            gatherer_rates: gatherer_units.keys().filter_map(|name|
+                exact.recipe_rates.get(name).map(|rate| (name.clone(), *rate))).collect(),
+            gatherer_units,
+            processed_stock: exact.order_stock.keys()
+                .filter(|name| all.get(name.as_str()).is_some_and(|recipe| recipe.raw_materials.is_some()))
+                .cloned().collect(),
+            minimum_raw: None,
+        });
+    }
     js.staffing = exact.staffing.clone();
     js.grower_staffing = exact.grower_staffing.clone();
     js.power_used = exact.power_used;
@@ -2004,6 +2026,7 @@ impl PreparedInput {
             season_points,
             harvest_order_stock: Vec::new(),
             order_stock: Vec::new(),
+            order_allocations: None,
             power_used: 0,
             power_capacity: crate::models::grid_power_capacity(&self.facility_counts, &self.module_levels),
             generators_used: 0,

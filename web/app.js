@@ -1969,7 +1969,7 @@ function startProgress(input, runId) {
 }
 
 // The worker's solves that make up the card's 'plan' step; it's done once the plan is checked.
-const PLAN_SOLVES = ['variety', 'level_up', 'final', 'free_aniimo', 'stock_up', 'check'];
+const PLAN_SOLVES = ['variety', 'raw_variety', 'level_up', 'final', 'free_aniimo', 'stock_up', 'check'];
 
 // Moves step `key` on: 'start', 'done', 'skip' or 'fail', with an optional note such as
 // "3 of 12", and for a solve, whether HiGHS proved its answer. The backup planner only appears
@@ -2730,7 +2730,7 @@ function renderStrategy() {
     const forced = document.getElementById('force-e-mode').checked;
     const variety = document.getElementById('rv-order-variety').checked;
     document.getElementById('level-up-strategy-hint').textContent = variety
-        ? 'Keeps at least 95% of the best RV pace, then stocks a wider mix for orders.'
+        ? 'Keeps 95% of the best RV pace. Crafted goods first; raw extras use spare units.'
         : forced
         ? 'Fastest level-up with E-Mode, then the smallest team. Spare Aniimo come before extra Home Coins.'
         : 'Gets your RV upgrade resources as quickly as possible, then earns extra Home Coins.';
@@ -3932,8 +3932,12 @@ function renderOrderVariety(plan) {
     const target = document.getElementById('order-variety-stock');
     if (!report) { target.innerHTML = ''; return; }
     const extra = plan.level_up?.seconds > 0 ? Math.max(0, (plan.level_up.seconds / report.fastest_seconds - 1) * 100) : 0;
+    const crafted = report.processed_count;
+    const raw = report.raw_count ?? 0;
+    const mix = crafted === undefined ? `${report.count} items`
+        : `${crafted} crafted item${crafted === 1 ? '' : 's'}, ${raw} raw extra${raw === 1 ? '' : 's'}`;
     document.getElementById('order-variety-note').textContent =
-        `${report.count} extra items stocked daily; RV resources take ${extra.toFixed(1)}% longer than the best RV plan found. ${report.proven ? '' : 'Variety is the best found within the search time.'}`;
+        `${mix} stocked daily. Raw extras use spare units. RV resources take ${extra.toFixed(1)}% longer. ${report.proven ? '' : 'Variety is the best found within the search time.'}`;
     target.innerHTML = `<table class="level-up-lines"><thead><tr><th>Keep for orders</th><th>Held / day</th></tr></thead>
         <tbody>${(plan.order_stock || []).map(([name, rate]) => `<tr><td>${prettyItem(name)}</td><td>${formatNumber(rate * 86400)}</td></tr>`).join('')}</tbody></table>`;
 }

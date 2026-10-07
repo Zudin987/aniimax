@@ -19,7 +19,23 @@ review concerns issue templates. Its E-Mode and localization PRs remain open.
 First find the best resource pace for the entered facilities, worker setup,
 inventory, E-Mode rules and festival limits. Keep at least 95% of that pace
 (at most about 5.3% longer resource gathering, excluding the fixed upgrade timer),
-then maximize the number of distinct extra products retained daily.
+then maximize distinct crafted products retained daily. Raw ingredients cannot
+compete with crafted products for variety.
+
+Updated on 2026-10-07 after the RV14 screenshot showed raw crops/ores appearing
+as order variety. Rechecked fork main `4ab766925a76e841f24a8bcf349b51c8ac9e98d3`,
+upstream main and open issues/PRs/Actions before changing the planner. Upstream
+main and the four open issue bodies were unchanged; no upstream writes were made.
+
+Among equally broad crafted plans, prefer fewer gathering units. Rebuild and
+independently check that plan, then protect its gathering allocations, working
+supply rates and crafted stock. These come directly from the solver so roster
+and uncovered variants retain their identities. A separate search adds raw stock only if it assigns an additional
+whole gathering unit beyond those allocations. Surplus output from a protected
+ingredient unit alone does not qualify as a spare slot. This phase has a
+five-second limit; without a feasible answer, keep the checked crafted plan.
+Required RV ingredients and the six festival reserves still run even when no
+spare slots remain.
 
 Each retained product gets the smallest regular/quick recipe batch yield in
 the available variants per day. Quick, electric, uncovered and roster variants
@@ -28,15 +44,15 @@ before sales and RV resources; merely consuming an ingredient does not count
 as stocking it. Six raw festival reserves are excluded from this extra-stock
 count, because they are already retained separately.
 
-After breadth, maximize extra coin income; when power is available, minimize
-the Aniimo team without losing the RV pace, breadth or income. Force E-Mode
+After crafted then raw breadth, maximize extra coin income; when power is available, minimize
+the Aniimo team without losing the RV pace, protected allocations, stock or income. Force E-Mode
 still requires real eligible powered work; all previous manual exclusions hold.
 Variety is not applied if the RV target is already funded or unreachable.
 Facilities can remain idle when ingredients, workers, tiers, grid capacity or
 RV pace prevent another product. Real order lists/quantities are not known,
 so breadth is an order-readiness heuristic, not a guaranteed coverage percentage.
 
-The report separates retained output from income and compares RV resource
+The report counts crafted items and raw extras separately from income and compares RV resource
 time with the best pace found. Timed-out searches are labeled; the 95% figure
 is relative to the best feasible pace found, not a proof of the unknown optimum.
 If the later income search finds no plan before timing out, the already-found
@@ -59,9 +75,11 @@ standard crop inputs and does not guess mutation probabilities.
 ## Regression coverage
 
 Native tests cover retained balances, shared processor limits, duplicate quick
-variants, the RV pace floor, forged plans and mandatory points with coin goals.
+variants, the RV pace floor, protected gathering allocations, spare-unit raw
+stock, forged plans and mandatory points with coin goals.
 Real WASM/HiGHS tests cover Automatic, Force E-Mode and roster variety, points
-behind coin/EXP priorities, impossible targets and income-refinement timeouts. JS tests cover corrected
+behind coin/EXP priorities, impossible targets, fully occupied gatherers, RV14
+with festival reserves and both raw-search/income-refinement timeouts. JS tests cover corrected
 RV inference, setup compatibility and exact event quantities/crafting order.
 Browser smoke covers import/persistence, Fill, pre-calculation checklist,
 actual variety calculation, and desktop/mobile rendering.
