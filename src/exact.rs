@@ -677,6 +677,18 @@ fn build_model<'a>(
                         .map(|(_, v)| (*v, 1.0)).collect();
                     extra.push((kept, -1.0));
                     model.constrain(extra, ComparisonOp::Ge, protected as f64);
+                    for &(recipe, units) in &units_of {
+                        if recipe.raw_materials.is_some() || made_item(&recipe.name, &all) != name { continue; }
+                        let Some((_, rate)) = rate_of.iter().find(|(r, _)| r.name == recipe.name) else { continue };
+                        // An additional assigned unit must actually make its share of the daily
+                        // stock. Otherwise a zero-rate variant can pretend to be a spare unit,
+                        // then disappear when the checked plan removes idle assignments.
+                        let stock_time = per_second * recipe.production_time / recipe.yield_amount as f64;
+                        let old_units = core.gatherer_units.get(&recipe.name).copied().unwrap_or(0) as f64;
+                        let old_rate = core.gatherer_rates.get(&recipe.name).copied().unwrap_or(0.0);
+                        model.constrain(vec![(*rate, recipe.production_time), (units, -stock_time)],
+                            ComparisonOp::Ge, old_rate * recipe.production_time * (1.0 - 1e-4) - old_units * stock_time);
+                    }
                 }
             }
         }
@@ -1912,6 +1924,19 @@ pub fn check_plan(
         for name in &core.processed_stock {
             if !all.get(name.as_str()).is_some_and(|r| r.raw_materials.is_some()) || !plan.order_stock.contains_key(name) {
                 return Err(format!("raw variety displaced crafted order stock: {name}"));
+            }
+        }
+        for (name, &units) in &plan.units {
+            let Some(recipe) = all.get(name.as_str()).filter(|r| r.raw_materials.is_none()) else { continue };
+            let Some(&kept) = plan.order_stock.get(made_item(name, &all)) else { continue };
+            let protected = core.gatherer_units.get(name).copied().unwrap_or(0);
+            if units > protected {
+                let minimum = core.gatherer_rates.get(name).copied().unwrap_or(0.0) * (1.0 - 1e-4)
+                    + (units - protected) as f64 * kept / recipe.yield_amount as f64;
+                let actual = plan.recipe_rates.get(name).copied().unwrap_or(0.0);
+                if actual * recipe.production_time + TOLERANCE < minimum * recipe.production_time {
+                    return Err(format!("raw order stock needs working spare units: {name}"));
+                }
             }
         }
         let mut raw_count = 0;

@@ -73,6 +73,13 @@ fn raw_order_stock_requires_a_spare_unit_after_crafted_goods_and_rv_gathering() 
         let mut forged = plan.clone();
         forged.recipe_rates.insert("quick_wheat".into(), 0.0);
         assert!(check_plan(&forged, &items, "coins", &counts, &modules, Some(&cost)).unwrap_err().contains("protected gathering output"));
+        if raw_expected > 0 {
+            let extra = plan.units.iter().find(|(name, units)| name.as_str() != "flour"
+                && **units > core.gatherer_units.get(*name).copied().unwrap_or(0)).unwrap().0;
+            let mut forged = plan.clone();
+            forged.recipe_rates.insert(extra.clone(), core.gatherer_rates.get(extra).copied().unwrap_or(0.0) * (1.0 - 1e-4));
+            assert!(check_plan(&forged, &items, "coins", &counts, &modules, Some(&cost)).unwrap_err().contains("working spare units"));
+        }
         let final_core = OrderCore { minimum_raw: Some(raw_expected as u32), ..core };
         let income = solve_exact(&items, "coins", &counts, &modules,
             Goal::OrderVariety { level_up: Some((&cost, 1.0)), minimum: Some(1), core: Some(&final_core) },
