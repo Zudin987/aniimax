@@ -149,6 +149,8 @@ pub struct ExactPlan {
     pub harvest_reserve_units: BTreeMap<String, u32>,
     /// Additional daily order stock, excluded from sales, recipe use and RV resources.
     pub order_stock: BTreeMap<String, f64>,
+    /// RV/crafted-goods gathering allocations protected before adding raw order stock.
+    pub order_core: Option<OrderCore>,
     pub environment: Vec<ExactEnvironment>,
     /// Overlapping pairs of environment buildings (see [`ExactPair`]).
     pub pairs: Vec<ExactPair>,
@@ -181,8 +183,8 @@ pub enum Goal<'a> {
     /// (each as a share of its cost): spare Bench and Kiln time processes whatever the level-up
     /// doesn't need yet, instead of leaving it raw.
     StockUp(&'a LevelUp, f64, f64),
-    /// Maximize distinct retained products at an RV pace, then coins at that breadth.
-    OrderVariety { level_up: Option<(&'a LevelUp, f64)>, minimum: Option<u32> },
+    /// Crafted variety first; raw variety may use additional whole gathering units only.
+    OrderVariety { level_up: Option<(&'a LevelUp, f64)>, minimum: Option<u32>, core: Option<&'a OrderCore> },
     /// Keep the production targets already found, then free whole Aniimo slots for other
     /// Homeland stations. Generators and environment residents count toward the team too.
     FreeAniimo {
@@ -191,7 +193,16 @@ pub enum Goal<'a> {
         coins: f64,
         work: &'a [AniimoWork],
         order_variety: Option<u32>,
+        order_core: Option<&'a OrderCore>,
     },
+}
+
+/// The checked RV/crafted-goods plan's allocations, protected in later raw/income/staffing solves.
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct OrderCore {
+    pub gatherer_units: BTreeMap<String, u32>,
+    pub processed_stock: Vec<String>,
+    pub minimum_raw: Option<u32>,
 }
 
 /// One normal-mode job's contribution to a team row. With `per_unit`, `seconds` is the
@@ -327,6 +338,7 @@ struct Model<'a> {
     /// `(variable, weight)` for tiny preference terms in the objective, so a solve's real
     /// production objective can be recovered without them.
     tiebreak: Vec<(usize, f64)>,
+    order_core: Option<&'a OrderCore>,
 }
 
 /// What each environment building a plan sets up costs in the objective: far too little to give
@@ -414,6 +426,10 @@ fn build_model<'a>(
         constraints: Vec::new(),
         power_capacity,
         tiebreak: Vec::new(),
+        order_core: match goal {
+            Goal::OrderVariety { core, .. } | Goal::FreeAniimo { order_core: core, .. } => core,
+            _ => None,
+        },
     };
 
     // Seeds are paid in coins, so they only come off a coin total.
@@ -622,12 +638,13 @@ fn build_model<'a>(
         model.constrain(reserved, ComparisonOp::Eq, 1.0);
     }
     let variety = match goal {
-        Goal::OrderVariety { minimum, .. } => Some(minimum),
-        Goal::FreeAniimo { order_variety: Some(minimum), .. } => Some(Some(minimum)),
+        Goal::OrderVariety { minimum, core, .. } => Some((minimum, core)),
+        Goal::FreeAniimo { order_variety: Some(minimum), order_core, .. } => Some((Some(minimum), order_core)),
         _ => None,
     };
     let mut stock_vars = Vec::new();
-    if let Some(minimum) = variety {
+    let mut raw_stock_vars = Vec::new();
+    if let Some((minimum, core)) = variety {
         // One indicator per real product, not per quick, crew or electric variant.
         // This is actual retained output: a recipe merely using the item does not count.
         let mut amounts: BTreeMap<&str, f64> = BTreeMap::new();
@@ -640,12 +657,44 @@ fn build_model<'a>(
         }
         for (name, amount) in amounts {
             let per_second = amount / PACE_UNIT;
-            let kept = model.add(0.0, (0.0, 1.0), true, VarKind::OrderStock(name, per_second));
+            let processed = all.get(name).is_some_and(|item| item.raw_materials.is_some());
+            let allowed = if processed { core.is_none_or(|c| c.processed_stock.iter().any(|n| n == name)) }
+                else { core.is_some() };
+            let kept = model.add(0.0, (0.0, if allowed { 1.0 } else { 0.0 }), true, VarKind::OrderStock(name, per_second));
             balance.entry(name).or_default().push((kept, -per_second));
-            stock_vars.push((kept, 1.0));
+            if processed { stock_vars.push((kept, 1.0)); }
+            else {
+                raw_stock_vars.push((kept, 1.0));
+                if let Some(core) = core {
+                    // A raw stock item needs a whole unit beyond those already used for RV and
+                    // crafted goods. Surplus within a protected ingredient plot is not a free slot.
+                    let protected: u32 = core.gatherer_units.iter().filter(|(recipe, _)|
+                        made_item(recipe, &all) == name).map(|(_, n)| *n).sum();
+                    let mut extra: Vec<_> = units_of.iter().filter(|(recipe, _)|
+                        recipe.raw_materials.is_none() && made_item(&recipe.name, &all) == name)
+                        .map(|(_, v)| (*v, 1.0)).collect();
+                    extra.push((kept, -1.0));
+                    model.constrain(extra, ComparisonOp::Ge, protected as f64);
+                }
+            }
         }
         if let Some(minimum) = minimum {
             model.constrain(stock_vars.clone(), ComparisonOp::Ge, minimum as f64);
+        }
+        if let Some(core) = core {
+            for (name, count) in &core.gatherer_units {
+                let terms = units_of.iter().filter(|(r, _)| r.name == *name && r.raw_materials.is_none())
+                    .map(|(_, v)| (*v, 1.0)).collect();
+                model.constrain(terms, ComparisonOp::Ge, *count as f64);
+            }
+            for name in &core.processed_stock {
+                let terms = stock_vars.iter().filter(|(v, _)| matches!(&model.kinds[*v],
+                    VarKind::OrderStock(n, _) if *n == name.as_str())).copied().collect();
+                model.constrain(terms, ComparisonOp::Ge, 1.0);
+            }
+            if let Some(minimum) = core.minimum_raw {
+                model.constrain(raw_stock_vars.clone(), ComparisonOp::Ge, minimum as f64);
+            }
         }
     }
     // A floor naming a currency ("aniimo_exp", "aniipods") keeps a plan making that much of it
@@ -732,9 +781,23 @@ fn build_model<'a>(
     for terms in balance.into_values() {
         model.constrain(terms, ComparisonOp::Ge, 0.0);
     }
-    if matches!(goal, Goal::OrderVariety { minimum: None, .. }) {
+    if matches!(goal, Goal::OrderVariety { minimum: None, core: None, .. }) {
         model.objective.fill(0.0);
         for &(v, _) in &stock_vars { model.objective[v] = 1.0; }
+        // Prefer a smaller gathering footprint among equally broad crafted plans, so later
+        // raw stock has real spare units. Its total penalty is below 0.1 of one stock item.
+        let capacity: f64 = units_of.iter().filter(|(r, _)| r.raw_materials.is_none())
+            .map(|(_, v)| model.bounds[*v].1).sum();
+        let weight = 0.1 / (capacity + 1.0);
+        for &(recipe, v) in &units_of {
+            if recipe.raw_materials.is_none() {
+                model.objective[v] -= weight;
+                model.tiebreak.push((v, weight));
+            }
+        }
+    } else if matches!(goal, Goal::OrderVariety { core: Some(core), .. } if core.minimum_raw.is_none()) {
+        model.objective.fill(0.0);
+        for &(v, _) in &raw_stock_vars { model.objective[v] = 1.0; }
     }
 
     // Owned units per facility and level. Normal recipes share the remaining physical machines
@@ -1695,6 +1758,7 @@ fn plan_from(model: &Model, value: f64, upper_bound: f64, proven_optimal: bool, 
         sold,
         harvest_reserve_units,
         order_stock,
+        order_core: model.order_core.cloned(),
         environment,
         pairs,
         pace,
@@ -1821,6 +1885,29 @@ pub fn check_plan(
             return Err(format!("invalid order stock {name}"));
         }
         *made.entry(name.as_str()).or_default() -= kept;
+    }
+    if let Some(core) = &plan.order_core {
+        for (name, &count) in &core.gatherer_units {
+            if !all.get(name.as_str()).is_some_and(|r| r.raw_materials.is_none())
+                || plan.units.get(name).copied().unwrap_or(0) < count {
+                return Err(format!("raw variety displaced a protected gathering unit: {name}"));
+            }
+        }
+        for name in &core.processed_stock {
+            if !all.get(name.as_str()).is_some_and(|r| r.raw_materials.is_some()) || !plan.order_stock.contains_key(name) {
+                return Err(format!("raw variety displaced crafted order stock: {name}"));
+            }
+        }
+        let mut raw_count = 0;
+        for name in plan.order_stock.keys().filter(|name| all.get(name.as_str()).is_some_and(|r| r.raw_materials.is_none())) {
+            raw_count += 1;
+            let assigned: u32 = plan.units.iter().filter(|(r, _)| made_item(r, &all) == name.as_str()).map(|(_, n)| *n).sum();
+            let protected: u32 = core.gatherer_units.iter().filter(|(r, _)| made_item(r, &all) == name.as_str()).map(|(_, n)| *n).sum();
+            if assigned <= protected { return Err(format!("raw order stock needs a spare unit: {name}")); }
+        }
+        if core.minimum_raw.is_some_and(|minimum| raw_count < minimum) {
+            return Err("raw variety lost its spare-unit stock".to_string());
+        }
     }
     let minimum_points = facility_counts.season_points_per_day();
     if minimum_points > 0.0 && target_rate(plan, items, crate::models::SEASON_POINTS) * PACE_UNIT + TOLERANCE < minimum_points {
@@ -2420,6 +2507,9 @@ pub fn to_production_plan(
             return format!("Keep 1 unit's output raw for Harvest Moon orders; craft when an order arrives{extra}");
         }
         if let Some(kept) = exact.order_stock.get(made) {
+            if recipe.raw_materials.is_none() && exact.order_core.is_some() {
+                return format!("Keep {:.0}/day for orders from spare units; extra output follows the plan", kept * PACE_UNIT);
+            }
             return format!("Keep {:.0}/day for orders; extra output follows the plan", kept * PACE_UNIT);
         }
         // Made, not sold, not all used up and not sellable: kept for the level-up.

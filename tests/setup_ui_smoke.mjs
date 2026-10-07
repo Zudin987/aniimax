@@ -376,12 +376,30 @@ try {
     assert.equal(await page.locator('#error-message').isVisible(), false);
     assert.equal(await page.locator('#order-variety-card').isVisible(), true);
     assert.ok(await page.locator('#order-variety-stock tbody tr').count() >= 3);
-    assert.match(await page.locator('#order-variety-note').innerText(), /extra items stocked daily/);
+    assert.match(await page.locator('#order-variety-note').innerText(), /crafted items.*raw extra.*spare units/);
     await page.locator('#order-variety-card').screenshot({ path: 'test-results/order-variety-desktop.png' });
     await page.setViewportSize({ width: 390, height: 844 });
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), false);
     await page.locator('#order-variety-card').screenshot({ path: 'test-results/order-variety-mobile.png' });
     await page.setViewportSize({ width: 1000, height: 900 });
+
+    // RV14 matches the reported setup: required festival raw stock remains, but ordinary
+    // raw order extras must explicitly come from spare gathering units.
+    await load(encodeSetupCode({ 'home-level': '14', 'mode-simple': true, 'mode-advanced': false,
+        'strategy-level-up': true, 'strategy-priorities': false, 'level-up-target': '15',
+        'rv-order-variety': true, 'season-on': true, 'season-wheat-budget': '600', 'season-mutation-plots': '1',
+        'simple-toolkit-upgrades': false, 'force-e-mode': false,
+        'aniimo-best': false, 'aniimo-minimum': true, 'aniimo-custom': false }));
+    await page.locator('#optimize-btn').click();
+    await page.waitForFunction(() => !document.getElementById('optimize-btn').disabled, null, { timeout: 180_000 });
+    assert.equal(await page.locator('#error-message').isVisible(), false);
+    assert.equal(await page.locator('#order-variety-card').isVisible(), true);
+    assert.equal(await page.locator('#harvest-order-stock tbody tr').count(), 6);
+    assert.match(await page.locator('#order-variety-note').innerText(), /crafted items.*raw extra.*spare units/);
+    const spareRows = page.locator('#facility-plan-container tr').filter({ hasText: 'for orders from spare units' });
+    assert.ok(await spareRows.count() > 0, 'RV14 has spare gathering capacity for optional raw stock');
+    await page.locator('#order-variety-card').screenshot({ path: 'test-results/order-variety-rv14.png' });
+    await page.locator('#facility-plan-container').screenshot({ path: 'test-results/order-variety-rv14-facilities.png' });
 
     // A cheap real solve verifies that resource readiness does not claim the RV upgrade is instant.
     await load(encodeSetupCode({ facilityTiers: { 'Nimbus Bed': [{ count: 1, level: 2 }] },

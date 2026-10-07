@@ -1528,6 +1528,8 @@ struct JsStage {
     order_variety: bool,
     #[serde(default)]
     variety_count: Option<u32>,
+    #[serde(default)]
+    order_core: Option<crate::exact::OrderCore>,
 }
 
 impl JsStage {
@@ -1539,11 +1541,12 @@ impl JsStage {
                 coins: self.coins.unwrap_or(0.0),
                 work,
                 order_variety: self.variety_count,
+                order_core: self.order_core.as_ref(),
             };
         }
         if self.order_variety {
             return crate::exact::Goal::OrderVariety {
-                level_up: input.level_up.as_ref().zip(self.pace), minimum: self.variety_count,
+                level_up: input.level_up.as_ref().zip(self.pace), minimum: self.variety_count, core: self.order_core.as_ref(),
             };
         }
         match (&input.level_up, self.pace, self.coins) {

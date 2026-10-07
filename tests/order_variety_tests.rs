@@ -1,4 +1,4 @@
-use aniimax::exact::{check_plan, net_rates, solve_exact, Goal, LevelUp, PACE_UNIT};
+use aniimax::exact::{check_plan, net_rates, solve_exact, Goal, LevelUp, OrderCore, PACE_UNIT};
 use aniimax::models::{FacilityCounts, ModuleLevels, ProductionItem, SeasonTerms, SEASON_POINTS};
 use std::time::Duration;
 
@@ -19,15 +19,16 @@ fn variety_retains_real_net_output_at_rv_pace_without_double_counting_variants()
     let items = vec![wheat, quick, flour, bread];
     let modules = ModuleLevels::default();
     let cost = LevelUp { cost: vec![("coins".into(), 100.0)], stock: vec![] };
-    for (machines, expected) in [(2, 3), (1, 2)] {
+    for (machines, expected) in [(2, 2), (1, 1)] {
         let counts = FacilityCounts::only(&[("Farmland", 1, 1), ("Carousel Mill", machines, 1)]);
         let run = |goal| solve_exact(&items, "coins", &counts, &modules, goal, Some(Duration::from_secs(5)), None).unwrap();
         let fastest = run(Goal::LevelUp(&cost));
         let pace = fastest.pace.unwrap() * 0.95;
-        let broad = run(Goal::OrderVariety { level_up: Some((&cost, pace)), minimum: None });
+        let broad = run(Goal::OrderVariety { level_up: Some((&cost, pace)), minimum: None, core: None });
         assert_eq!(broad.order_stock.len(), expected);
+        assert!(!broad.order_stock.contains_key("wheat"), "ingredients do not compete with crafted variety");
         assert!(!broad.order_stock.contains_key("quick_wheat"));
-        let final_plan = run(Goal::OrderVariety { level_up: Some((&cost, pace)), minimum: Some(expected as u32) });
+        let final_plan = run(Goal::OrderVariety { level_up: Some((&cost, pace)), minimum: Some(expected as u32), core: None });
         check_plan(&final_plan, &items, "coins", &counts, &modules, Some(&cost)).unwrap();
         assert!(final_plan.pace.unwrap() >= pace * 0.9998);
         let net = net_rates(&final_plan, &items);
@@ -36,6 +37,49 @@ fn variety_retains_real_net_output_at_rv_pace_without_double_counting_variants()
         let mut forged = final_plan.clone();
         forged.order_stock.insert("wheat".into(), 100.0);
         assert!(check_plan(&forged, &items, "coins", &counts, &modules, Some(&cost)).is_err());
+    }
+}
+
+#[test]
+fn raw_order_stock_requires_a_spare_unit_after_crafted_goods_and_rv_gathering() {
+    let wheat = item("wheat", "Farmland", 10.0, 1.0);
+    let quick = item("quick_wheat", "Farmland", 5.0, 1.0);
+    let carrot = item("carrot", "Farmland", 10.0, 1.0);
+    let mut flour = item("flour", "Carousel Mill", 1.0, 10.0);
+    flour.raw_materials = Some(vec!["wheat".into()]); flour.required_amount = Some(vec![1]);
+    let items = vec![wheat, quick, carrot, flour];
+    let modules = ModuleLevels::default();
+    let cost = LevelUp { cost: vec![("coins".into(), 100.0)], stock: vec![] };
+    for (plots, raw_expected) in [(1, 0), (2, 1), (3, 2)] {
+        let counts = FacilityCounts::only(&[("Farmland", plots, 1), ("Carousel Mill", 1, 1)]);
+        let core = OrderCore { gatherer_units: [("quick_wheat".into(), 1)].into(),
+            processed_stock: vec!["flour".into()], minimum_raw: None };
+        let goal = Goal::OrderVariety { level_up: Some((&cost, 1.0)), minimum: Some(1), core: Some(&core) };
+        let plan = solve_exact(&items, "coins", &counts, &modules, goal, Some(Duration::from_secs(5)), None).unwrap();
+        check_plan(&plan, &items, "coins", &counts, &modules, Some(&cost)).unwrap();
+        assert_eq!(plan.order_stock.len(), raw_expected + 1);
+        assert!(plan.order_stock.contains_key("flour"));
+        assert!(plan.units["quick_wheat"] >= 1);
+        if plots == 1 {
+            // This one ingredient unit has enormous surplus, but still has no spare physical slot.
+            let mut forged = plan.clone();
+            forged.order_stock.insert("wheat".into(), 1.0 / PACE_UNIT);
+            assert!(check_plan(&forged, &items, "coins", &counts, &modules, Some(&cost)).unwrap_err().contains("spare unit"));
+        }
+        let mut forged = plan.clone();
+        forged.order_stock.remove("flour");
+        assert!(check_plan(&forged, &items, "coins", &counts, &modules, Some(&cost)).unwrap_err().contains("crafted order stock"));
+        let final_core = OrderCore { minimum_raw: Some(raw_expected as u32), ..core };
+        let income = solve_exact(&items, "coins", &counts, &modules,
+            Goal::OrderVariety { level_up: Some((&cost, 1.0)), minimum: Some(1), core: Some(&final_core) },
+            Some(Duration::from_secs(5)), None).unwrap();
+        check_plan(&income, &items, "coins", &counts, &modules, Some(&cost)).unwrap();
+        assert_eq!(income.order_stock.len(), raw_expected + 1, "income refinement must preserve both stock goals");
+        if raw_expected > 0 {
+            let mut forged = income.clone();
+            forged.order_stock.retain(|name, _| name == "flour");
+            assert!(check_plan(&forged, &items, "coins", &counts, &modules, Some(&cost)).unwrap_err().contains("spare-unit stock"));
+        }
     }
 }
 

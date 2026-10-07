@@ -72,3 +72,23 @@ test('real festival checklist keeps every finished target plus ingredients for l
     assert.throws(() => festivalCraftChecklist(recipes, 1.5));
     assert.throws(() => festivalCraftChecklist(recipes.filter(r => r.name !== 'rock_candy'), 1), /Missing recipe/);
 });
+
+test('variety report distinguishes crafted goods and spare-unit raw extras and clears old results', () => {
+    const app = fs.readFileSync(new URL('../web/app.js', import.meta.url), 'utf8');
+    const elements = new Map(['order-variety-card', 'order-variety-note', 'order-variety-stock']
+        .map(id => [id, { hidden: true, innerHTML: '', textContent: '' }]));
+    const source = app.slice(app.indexOf('function renderOrderVariety('), app.indexOf('function renderHarvestOrderStock('));
+    const render = new Function('document', 'prettyItem', 'formatNumber', source + '\nreturn renderOrderVariety;')(
+        { getElementById: id => elements.get(id) }, name => name.replaceAll('_', ' '), String);
+    render({ order_variety: { count: 3, processed_count: 2, raw_count: 1, fastest_seconds: 100, proven: true },
+        level_up: { seconds: 104 }, order_stock: [['wheatmeal', 1 / 86400], ['bread', 1 / 86400], ['wheat', 5 / 86400]] });
+    assert.equal(elements.get('order-variety-card').hidden, false);
+    assert.match(elements.get('order-variety-note').textContent, /2 crafted items, 1 raw extra stocked daily.*spare units.*4.0%/);
+    assert.match(elements.get('order-variety-stock').innerHTML, /wheatmeal/);
+    assert.match(elements.get('order-variety-stock').innerHTML, /Held \/ day/);
+    render({ order_variety: { count: 3, fastest_seconds: 100, proven: false }, order_stock: [] });
+    assert.match(elements.get('order-variety-note').textContent, /^3 items.*best found/);
+    render({ success: true });
+    assert.equal(elements.get('order-variety-card').hidden, true);
+    assert.equal(elements.get('order-variety-stock').innerHTML, '');
+});

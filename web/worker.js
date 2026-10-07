@@ -39,6 +39,8 @@ async function newHighs() {
 const EXACT_TIME_LIMIT = 30;
 // Staffing is a refinement of an already valid production plan, so keep its extra wait short.
 const STAFFING_TIME_LIMIT = 5;
+// Raw extras are optional and only fill spare units after the crafted plan is checked.
+const RAW_VARIETY_TIME_LIMIT = 5;
 
 // HiGHS options for every solve.
 const SOLVE_OPTIONS = { mip_rel_gap: 0, time_limit: EXACT_TIME_LIMIT };
@@ -160,6 +162,25 @@ async function exactPlanJson(pkg, payload, step = () => {}, first = () => {}) {
         varietyProven = breadth.proven;
         varietySolution = breadth;
         allProven &&= breadth.proven;
+        // Rebuild/check the crafted plan before protecting its gathering footprint. Using
+        // display rows is safe here: gatherers dedicate whole units and retain variant names.
+        const corePlan = JSON.parse(exact_plan(payload, JSON.stringify(stage),
+            JSON.stringify({ values: breadth.values, proven: breadth.proven, bound: 0 })));
+        if (!corePlan.success) throw Object.assign(new Error('Could not verify the crafted order plan. Please calculate again or turn off Add order variety.'), { noFallback: true });
+        stage.order_core = {
+            gatherer_units: Object.fromEntries(corePlan.coin_items.filter(row => row.status === 'producing' && row.is_grower)
+                .map(row => [row.item_name, row.facility_count])),
+            processed_stock: corePlan.order_stock.map(([name]) => name),
+            minimum_raw: null,
+        };
+        step('raw_variety', 'start');
+        const raw = await solveModel(JSON.parse(exact_problem(payload, JSON.stringify(stage))),
+            { ...SOLVE_OPTIONS, time_limit: RAW_VARIETY_TIME_LIMIT });
+        step('raw_variety', 'done', raw?.proven);
+        stage.order_core.minimum_raw = raw ? Math.max(0, Math.round(raw.objective)) : 0;
+        varietyProven &&= !!raw?.proven;
+        allProven &&= !!raw?.proven;
+        if (raw) varietySolution = raw;
     }
     const staffingFirst = !!(input.force_e_mode && stage.pace && !varietyActive);
     if (staffingFirst) {
@@ -256,7 +277,8 @@ async function exactPlanJson(pkg, payload, step = () => {}, first = () => {}) {
     plan.level_up_note = levelUpNote;
     if (varietyActive) {
         plan.order_variety = { fastest_seconds: 86400 / fastestPace, minimum_pace: stage.pace,
-            count: plan.order_stock?.length || 0, proven: varietyProven };
+            count: plan.order_stock?.length || 0, processed_count: stage.order_core.processed_stock.length,
+            raw_count: (plan.order_stock?.length || 0) - stage.order_core.processed_stock.length, proven: varietyProven };
     }
     return JSON.stringify(plan);
 }
