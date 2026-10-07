@@ -61,9 +61,17 @@
                             <select id="home-level"></select>
                         </div>
                     </div>
-                    <p class="hint">Uses all facilities at your RV level. Use Advanced to enter what you own.</p>
-                    <label><input type="checkbox" id="simple-toolkit-upgrades" checked> Assume all Toolkit upgrades</label>
-                    <p class="hint small">Untick if not upgraded. Advanced lets you set each module level.</p>
+                    <p class="hint">Uses all facilities at your RV level. Edit facilities in Advanced.</p>
+                    <p class="assume-title">Toolkit modules</p>
+                    <label><input type="checkbox" id="simple-toolkit-upgrades" checked> Use RV max for all modules</label>
+                    <p class="hint small">Set the levels you own. 0 = not upgraded.</p>
+                    <div class="stock-grid" id="simple-module-levels">
+                        <div class="input-field"><label for="simple-ecological-module-level">Ecological Module</label><select id="simple-ecological-module-level"><option value="auto">RV max</option></select></div>
+                        <div class="input-field"><label for="simple-kitchen-module-level">Kitchen Module</label><select id="simple-kitchen-module-level"><option value="auto">RV max</option></select></div>
+                        <div class="input-field"><label for="simple-resource-detector-level">Resource Detector</label><select id="simple-resource-detector-level"><option value="auto">RV max</option></select></div>
+                        <div class="input-field"><label for="simple-crafting-module-level">Crafting Module</label><select id="simple-crafting-module-level"><option value="auto">RV max</option></select></div>
+                        <div class="input-field"><label for="simple-power-module-level">Power Module</label><select id="simple-power-module-level"><option value="auto">RV max</option></select></div>
+                    </div>
                     <details class="explain simple-details">
                         <summary id="simple-summary-title">Facilities and modules</summary>
                         <div id="simple-summary"></div>

@@ -6,6 +6,7 @@ import path from 'node:path';
 import { chromium } from 'playwright';
 import { encodeSetupCode, encodeLayoutCode } from '../web/share-code.js';
 import { createShareUrl } from '../web/share-config.js';
+import { SIMPLE_MODULE_FIELDS } from '../web/facility-config.js';
 
 const root = fileURLToPath(new URL('../web/', import.meta.url));
 const server = createServer(async (request, response) => {
@@ -270,6 +271,9 @@ try {
         'simple-toolkit-upgrades': false, 'season-on': true, 'force-e-mode': false,
         'strategy-level-up': true, 'strategy-priorities': false }));
     assert.equal(await page.locator('#simple-toolkit-upgrades').isChecked(), false);
+    for (const { id } of SIMPLE_MODULE_FIELDS) assert.equal(await page.locator('#' + id).inputValue(), '0',
+        'legacy unticked setup restores every Simple module to zero');
+    assert.equal(await page.locator('#simple-emode-title').innerText(), 'E-Mode needs a Power Module');
     await page.locator('#festival-batch summary').click();
     await page.locator('#festival-batch-amount').fill('3');
     await page.locator('#festival-batch-build').click();
@@ -287,7 +291,72 @@ try {
     await page.locator('#festival-batch-build').click();
     await page.waitForFunction(() => document.getElementById('festival-batch-result').textContent.includes('80 Moonray Wheat'));
     await page.locator('#festival-batch summary').click();
+
+    // Partial Toolkit ownership is editable directly in Simple, before any plan exists.
+    const partialModules = { 'simple-ecological-module-level': '1', 'simple-kitchen-module-level': '0',
+        'simple-resource-detector-level': '1', 'simple-crafting-module-level': 'auto',
+        'simple-power-module-level': 'auto' };
+    await load(encodeSetupCode({ 'home-level': '9', 'mode-simple': true, 'mode-advanced': false,
+        'simple-toolkit-upgrades': true, ...partialModules, 'ecological-module-level': '2',
+        'season-on': false, 'force-e-mode': false, 'strategy-level-up': false,
+        'strategy-priorities': true, 'aniimo-best': true, 'aniimo-minimum': false, 'aniimo-custom': false }));
+    assert.equal(await page.locator('#results-section').isVisible(), false);
+    for (const { id } of SIMPLE_MODULE_FIELDS) {
+        assert.equal(await page.locator('#' + id).isVisible(), true);
+        assert.equal(await page.locator('#' + id).inputValue(), partialModules[id]);
+    }
+    assert.equal(await page.locator('#simple-toolkit-upgrades').evaluate(el => el.indeterminate), true);
+    await page.locator('#simple-ecological-module-level').selectOption('2');
+    partialModules['simple-ecological-module-level'] = '2';
+    assert.equal((await config())['simple-ecological-module-level'], '2');
+    await page.locator('#setup-copy-code').click();
+    await page.waitForFunction(() => !document.getElementById('setup-export-panel').hidden);
+    const partialCode = await page.locator('#setup-export-value').inputValue();
+    await page.locator('#home-level').selectOption('3');
+    assert.equal(await page.locator('#simple-ecological-module-level').inputValue(), '1');
+    assert.equal((await config())['simple-resource-detector-level'], '0', 'lowering RV saves clamped module levels');
+    await page.reload();
+    await page.waitForFunction(() => document.getElementById('version').textContent.includes('0.16.0'));
+    assert.equal(await page.locator('#simple-resource-detector-level').inputValue(), '0');
+    assert.equal(await page.locator('#simple-ecological-module-level').inputValue(), '1');
+    await load(partialCode);
+    assert.equal(await page.locator('#home-level').inputValue(), '9');
+    for (const { id } of SIMPLE_MODULE_FIELDS) assert.equal(await page.locator('#' + id).inputValue(), partialModules[id],
+        'import must restore levels above the previously selected RV cap');
+    await page.reload();
+    await page.waitForFunction(() => document.getElementById('version').textContent.includes('0.16.0'));
+    for (const { id } of SIMPLE_MODULE_FIELDS) assert.equal(await page.locator('#' + id).inputValue(), partialModules[id]);
+    await page.locator('#simple-config').screenshot({ path: 'test-results/simple-modules-desktop.png' });
+    await page.setViewportSize({ width: 390, height: 844 });
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), false,
+        'the individual Simple module controls must fit on mobile');
+    await page.locator('#simple-config').screenshot({ path: 'test-results/simple-modules-mobile.png' });
+    await page.setViewportSize({ width: 1000, height: 900 });
+
+    // The master control resets all modules together; the real worker receives owned levels.
+    await page.locator('label:has(#simple-toolkit-upgrades)').click();
+    for (const { id } of SIMPLE_MODULE_FIELDS) assert.equal(await page.locator('#' + id).inputValue(), 'auto');
+    await page.locator('label:has(#simple-toolkit-upgrades)').click();
+    for (const { id } of SIMPLE_MODULE_FIELDS) assert.equal(await page.locator('#' + id).inputValue(), '0');
+    await load(partialCode);
+    await page.locator('#home-level').selectOption('3');
+    await page.evaluate(() => {
+        const original = Worker.prototype.postMessage;
+        Worker.prototype.postMessage = function(message, ...args) {
+            if (message.type === 'find_plan') window.simpleModulePayload = JSON.parse(message.payload);
+            return original.call(this, message, ...args);
+        };
+        window.restoreWorkerPostMessage = () => { Worker.prototype.postMessage = original; };
+    });
+    await page.locator('#optimize-btn').click();
+    await page.waitForFunction(() => !document.getElementById('optimize-btn').disabled, null, { timeout: 120_000 });
+    assert.equal(await page.locator('#error-message').isVisible(), false);
+    assert.equal(await page.locator('#results-content').isVisible(), true);
+    assert.deepEqual(await page.evaluate(() => window.simpleModulePayload.modules),
+        { ecological_module: 1, kitchen_module: 0, resource_detector: 0, crafting_module: 0, power_module: 0 });
+    await page.evaluate(() => window.restoreWorkerPostMessage());
     await page.locator('label:has(#mode-advanced)').click();
+    assert.equal(await page.locator('#ecological-module-level').inputValue(), '2', 'Simple does not overwrite Advanced module levels');
     await page.locator('#fill-level').selectOption('14');
     await page.locator('#fill-btn').click();
     for (const [name, count] of [['Well',3], ['Tidewhisper Sandcastle',2], ['Joy Wheel Loom',2],
@@ -342,7 +411,7 @@ try {
     assert.equal(await page.locator('#home-level').inputValue(), '11');
     assert.match(await page.locator('#setup-share-hint').innerText(), /saving is unavailable/);
     assert.deepEqual(errors, [], 'browser/WASM should not raise uncaught errors');
-    console.log('Setup UI/WASM smoke passed: import/export, family restore and staffing, old codes, shared links, raw order stock, budget feedback, RV upgrade timers, desktop/mobile and storage denial.');
+    console.log('Setup UI/WASM smoke passed: import/export, Simple module levels and solver payload, family restore and staffing, old codes, shared links, raw order stock, budget feedback, RV upgrade timers, desktop/mobile and storage denial.');
 } catch (error) {
     await mkdir(new URL('../test-results/', import.meta.url), { recursive: true });
     await page.screenshot({ path: 'test-results/setup-failure.png', fullPage: true });

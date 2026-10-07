@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import fs from 'node:fs';
-import { FACILITIES, simpleSetup, homeLevelForSetup } from '../web/facility-config.js';
+import { FACILITIES, simpleSetup, homeLevelForSetup, SIMPLE_MODULE_FIELDS } from '../web/facility-config.js';
 import { normalizeSetupSettings } from '../web/setup-config.js';
 import { encodeSetupCode, readSetupImport } from '../web/share-code.js';
 import { festivalCraftChecklist } from '../web/festival-crafting.js';
@@ -36,9 +36,11 @@ test('RV14 Fill counts increase exactly the reported facilities and inference st
 
 test('new options round trip while old setup codes inherit conservative defaults', async () => {
     const defaults = { 'home-level': '14', 'rv-order-variety': false, 'simple-toolkit-upgrades': true,
-        'season-points-min': '0', 'festival-batch-amount': '1' };
+        'season-points-min': '0', 'festival-batch-amount': '1',
+        ...Object.fromEntries(SIMPLE_MODULE_FIELDS.map(({ id }) => [id, 'auto'])) };
     const data = { ...defaults, 'rv-order-variety': true, 'simple-toolkit-upgrades': false,
-        'season-points-min': '24', 'festival-batch-amount': '3' };
+        'season-points-min': '24', 'festival-batch-amount': '3',
+        ...Object.fromEntries(SIMPLE_MODULE_FIELDS.map(({ id }) => [id, '0'])) };
     const imported = await readSetupImport(encodeSetupCode(data));
     assert.deepEqual(normalizeSetupSettings(imported.settings, defaults).settings, data);
     assert.deepEqual(normalizeSetupSettings({ 'home-level': '14' }, defaults).settings, defaults);

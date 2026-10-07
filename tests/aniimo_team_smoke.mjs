@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { aniimoTeamCount } from '../web/aniimo-team.js';
+import { SIMPLE_MODULE_FIELDS } from '../web/facility-config.js';
 
 const row = (facility, ability, busy, bonus = true, level = 4) => ({
     facility, status: 'producing', facility_count: 1,
@@ -106,7 +107,7 @@ assert.equal(JSON.parse(replies.at(-1).result).error, budgetError);
 const app = fs.readFileSync(new URL('../web/app.js', import.meta.url), 'utf8');
 const getInputsCode = app.slice(app.indexOf('function getPlanInputValues()'), app.indexOf('// parseInt/parseFloat'));
 for (const simple of [true, false]) {
-    const getInputs = new Function('document', 'isSimpleMode', 'simpleSetup', 'selectedHomeLevel',
+    const getInputs = new Function('document', 'isSimpleMode', 'getSimpleSetup', 'selectedHomeLevel',
         'activePriorities', 'levelUpInput', 'excludedRecipes', 'seasonActive', 'FACILITIES', 'facilityTiers',
         'numberOrDefault', 'isLevelUpStrategy', 'floatOrDefault', `${getInputsCode}\nreturn getPlanInputValues;`)(
         { getElementById: id => ({ checked: ['force-e-mode', 'rv-order-variety', 'simple-toolkit-upgrades'].includes(id), value: '1' }) },
@@ -120,7 +121,8 @@ for (const simple of [true, false]) {
     assert.deepEqual(input.level_up, forcedInput.level_up);
     assert.deepEqual(input.priorities, [], 'RV plans do not require Home Coins only');
 }
-const persisted = new Function(app.slice(app.indexOf('function getPersistedFieldIds()'), app.indexOf('// Reads and parses'))
-    + '\nreturn getPersistedFieldIds();')();
+const persisted = new Function('SIMPLE_MODULE_FIELDS', app.slice(app.indexOf('function getPersistedFieldIds()'), app.indexOf('// Reads and parses'))
+    + '\nreturn getPersistedFieldIds();')(SIMPLE_MODULE_FIELDS);
 assert.ok(persisted.includes('force-e-mode'), 'The setting survives a page reload');
+for (const { id } of SIMPLE_MODULE_FIELDS) assert.ok(persisted.includes(id), `${id} survives saves and sharing`);
 console.log('Aniimo team and E-Mode staffing smoke checks passed.');

@@ -13,7 +13,7 @@ Updated for the full release, with a joint LP-based facility-allocation engine f
 ## Features
 
 **Web app**
-- **Simple or Advanced Setup**: Simple mode only asks for your RV level and assumes everything that level allows is built and upgraded; advanced mode sets every facility's count and level (and can start from the simple-mode setup)
+- **Simple or Advanced Setup**: Simple mode assumes all facilities at your RV level and lets you set each owned module level (0 = not upgraded, RV max = automatic). Advanced sets individual facility counts and levels too.
 - **Force E-Mode**: Tick "Force E-Mode (free Aniimo slots)" to require a station actually running with power. With Level up, the planner finds the fastest RV pace with E-Mode, then minimizes the Aniimo team instead of maximizing extra Home Coins. One Lightning Aniimo runs each active generator, which can serve many connected stations; repeaters extend coverage within the power limit. Spare Aniimo slots can be used at star stations for decorations.
 - **Live Production Plan**: Set your facilities to get the best achievable rate and what every facility should produce; no target amount needed
 - **Goal Timing**: Add a target amount afterward to see how long it'll take; updates instantly as you type, no re-solving
