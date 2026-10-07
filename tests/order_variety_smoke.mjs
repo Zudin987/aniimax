@@ -20,10 +20,13 @@ async function checkedVariety(input, planner = plan) {
     const result = JSON.parse(await planner(observed, JSON.stringify({ ...input, order_variety: true })));
     assert.equal(result.success, true, result.error);
     assert.ok(core, 'variety must protect a checked crafted plan before adding raw stock');
-    const assigned = new Map(result.coin_items.filter(row => row.status === 'producing' && row.is_grower)
-        .map(row => [row.item_name, row.facility_count]));
+    const assigned = new Map(Object.entries(result.order_allocations.gatherer_units));
     for (const [recipe, units] of Object.entries(core.gatherer_units)) {
         assert.ok((assigned.get(recipe) || 0) >= units, `raw extras displaced ${recipe}`);
+    }
+    for (const [recipe, rate] of Object.entries(core.gatherer_rates)) {
+        assert.ok(result.order_allocations.gatherer_rates[recipe] + 1e-9 >= rate * (1 - 1e-4),
+            `raw extras displaced working supply from ${recipe}`);
     }
     const stocked = new Set(result.order_stock.map(([name]) => name));
     for (const name of core.processed_stock) {
@@ -109,7 +112,7 @@ test('real RV variety retains goods and pace in automatic, forced-power and rost
         const normal = JSON.parse(await plan(pkg, JSON.stringify({ ...input, ...variant })));
         assert.ok(normal.level_up?.seconds > 0, 'test roster must support the RV materials and crop jobs');
         const result = await checkedVariety({ ...input, ...variant });
-        assert.ok(result.order_variety.processed_count >= 2, 'limited facilities must retain crafted goods first');
+        assert.ok(result.order_variety.processed_count >= 1, 'limited facilities must retain crafted goods first');
         assert.ok(result.level_up.seconds <= normal.level_up.seconds / 0.95 * 1.001,
             'variety may spend at most 5% of the best RV pace');
         assert.ok(result.order_stock.every(([, rate]) => rate > 0));

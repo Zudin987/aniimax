@@ -162,17 +162,12 @@ async function exactPlanJson(pkg, payload, step = () => {}, first = () => {}) {
         varietyProven = breadth.proven;
         varietySolution = breadth;
         allProven &&= breadth.proven;
-        // Rebuild/check the crafted plan before protecting its gathering footprint. Using
-        // display rows is safe here: gatherers dedicate whole units and retain variant names.
+        // Protect checked solver allocations, including working rates and exact variant names.
+        // Display rows strip crew/environment suffixes and cannot identify those assignments.
         const corePlan = JSON.parse(exact_plan(payload, JSON.stringify(stage),
             JSON.stringify({ values: breadth.values, proven: breadth.proven, bound: 0 })));
         if (!corePlan.success) throw Object.assign(new Error('Could not verify the crafted order plan. Please calculate again or turn off Add order variety.'), { noFallback: true });
-        stage.order_core = {
-            gatherer_units: Object.fromEntries(corePlan.coin_items.filter(row => row.status === 'producing' && row.is_grower)
-                .map(row => [row.item_name, row.facility_count])),
-            processed_stock: corePlan.order_stock.map(([name]) => name),
-            minimum_raw: null,
-        };
+        stage.order_core = corePlan.order_allocations;
         step('raw_variety', 'start');
         const raw = await solveModel(JSON.parse(exact_problem(payload, JSON.stringify(stage))),
             { ...SOLVE_OPTIONS, time_limit: RAW_VARIETY_TIME_LIMIT });

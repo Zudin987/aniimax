@@ -198,9 +198,11 @@ pub enum Goal<'a> {
 }
 
 /// The checked RV/crafted-goods plan's allocations, protected in later raw/income/staffing solves.
-#[derive(Debug, Clone, Default, serde::Deserialize)]
+#[derive(Debug, Clone, Default, serde::Deserialize, serde::Serialize)]
 pub struct OrderCore {
     pub gatherer_units: BTreeMap<String, u32>,
+    #[serde(default)]
+    pub gatherer_rates: BTreeMap<String, f64>,
     pub processed_stock: Vec<String>,
     pub minimum_raw: Option<u32>,
 }
@@ -686,6 +688,14 @@ fn build_model<'a>(
                 let terms = units_of.iter().filter(|(r, _)| r.name == *name && r.raw_materials.is_none())
                     .map(|(_, v)| (*v, 1.0)).collect();
                 model.constrain(terms, ComparisonOp::Ge, *count as f64);
+            }
+            for (name, rate) in &core.gatherer_rates {
+                // Preserve the checked supply, not an assigned-but-idle unit that disappears
+                // when rates are rebuilt. Scale by cycle time for numerical stability.
+                let terms = rate_of.iter().filter(|(r, _)| r.name == *name && r.raw_materials.is_none())
+                    .map(|(r, v)| (*v, r.production_time)).collect();
+                let seconds = all.get(name.as_str()).map_or(1.0, |r| r.production_time);
+                model.constrain(terms, ComparisonOp::Ge, rate * seconds * (1.0 - 1e-4));
             }
             for name in &core.processed_stock {
                 let terms = stock_vars.iter().filter(|(v, _)| matches!(&model.kinds[*v],
@@ -1891,6 +1901,12 @@ pub fn check_plan(
             if !all.get(name.as_str()).is_some_and(|r| r.raw_materials.is_none())
                 || plan.units.get(name).copied().unwrap_or(0) < count {
                 return Err(format!("raw variety displaced a protected gathering unit: {name}"));
+            }
+        }
+        for (name, &rate) in &core.gatherer_rates {
+            if !rate.is_finite() || rate <= 0.0 || !core.gatherer_units.contains_key(name)
+                || plan.recipe_rates.get(name).copied().unwrap_or(0.0) + 1e-9 < rate * (1.0 - 1e-4) {
+                return Err(format!("raw variety displaced protected gathering output: {name}"));
             }
         }
         for name in &core.processed_stock {

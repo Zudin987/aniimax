@@ -28,8 +28,9 @@ upstream main and open issues/PRs/Actions before changing the planner. Upstream
 main and the four open issue bodies were unchanged; no upstream writes were made.
 
 Among equally broad crafted plans, prefer fewer gathering units. Rebuild and
-independently check that plan, then protect its gathering allocations and
-crafted stock. A separate search adds raw stock only if it assigns an additional
+independently check that plan, then protect its gathering allocations, working
+supply rates and crafted stock. These come directly from the solver so roster
+and uncovered variants retain their identities. A separate search adds raw stock only if it assigns an additional
 whole gathering unit beyond those allocations. Surplus output from a protected
 ingredient unit alone does not qualify as a spare slot. This phase has a
 five-second limit; without a feasible answer, keep the checked crafted plan.

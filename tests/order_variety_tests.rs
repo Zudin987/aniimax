@@ -53,6 +53,7 @@ fn raw_order_stock_requires_a_spare_unit_after_crafted_goods_and_rv_gathering() 
     for (plots, raw_expected) in [(1, 0), (2, 1), (3, 2)] {
         let counts = FacilityCounts::only(&[("Farmland", plots, 1), ("Carousel Mill", 1, 1)]);
         let core = OrderCore { gatherer_units: [("quick_wheat".into(), 1)].into(),
+            gatherer_rates: [("quick_wheat".into(), 0.2)].into(),
             processed_stock: vec!["flour".into()], minimum_raw: None };
         let goal = Goal::OrderVariety { level_up: Some((&cost, 1.0)), minimum: Some(1), core: Some(&core) };
         let plan = solve_exact(&items, "coins", &counts, &modules, goal, Some(Duration::from_secs(5)), None).unwrap();
@@ -69,6 +70,9 @@ fn raw_order_stock_requires_a_spare_unit_after_crafted_goods_and_rv_gathering() 
         let mut forged = plan.clone();
         forged.order_stock.remove("flour");
         assert!(check_plan(&forged, &items, "coins", &counts, &modules, Some(&cost)).unwrap_err().contains("crafted order stock"));
+        let mut forged = plan.clone();
+        forged.recipe_rates.insert("quick_wheat".into(), 0.0);
+        assert!(check_plan(&forged, &items, "coins", &counts, &modules, Some(&cost)).unwrap_err().contains("protected gathering output"));
         let final_core = OrderCore { minimum_raw: Some(raw_expected as u32), ..core };
         let income = solve_exact(&items, "coins", &counts, &modules,
             Goal::OrderVariety { level_up: Some((&cost, 1.0)), minimum: Some(1), core: Some(&final_core) },
