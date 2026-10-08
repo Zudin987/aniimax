@@ -34,6 +34,52 @@ test('RV14 Fill counts increase exactly the reported facilities and inference st
     }
 });
 
+// Issue #33 follow-up: placement counts are caps AFTER reaching an RV, not the
+// Farmland/Woodland counts required on the previous RV's level-up screen.
+// Independently pin the reported milestones and test every RV1–20 Fill level.
+test('RV1–20 facility caps follow reported milestones without altering RV13 footage', () => {
+    const milestones = {
+        'Farmland': { 1: 4, 2: 6, 3: 8, 4: 10, 5: 12, 6: 14, 7: 16, 8: 18, 9: 20,
+            10: 22, 11: 24, 12: 26, 13: 28, 14: 30, 15: 32, 16: 34,
+            17: 36, 18: 38, 19: 40, 20: 40 },
+        'Woodland': { 1: 0, 2: 3, 3: 4, 4: 5, 5: 6, 6: 7, 7: 8, 8: 9,
+            9: 10, 10: 11, 11: 12, 12: 13, 13: 14, 14: 15, 15: 16,
+            16: 17, 17: 18, 18: 19, 19: 20, 20: 20 },
+        'Well': { 1: 0, 4: 1, 8: 2, 14: 3, 19: 4 },
+        'Tidewhisper Sandcastle': { 1: 0, 5: 1, 14: 2 },
+        'Dewy House': { 1: 0, 6: 1, 17: 2 },
+        'Nimbus Bed': { 1: 0, 10: 1, 16: 2 },
+        'Starfall Hammock': { 1: 0, 12: 1, 18: 2 },
+        'Heat Furnace': { 1: 0, 7: 1, 12: 2, 17: 3 },
+        'Cooling Unit': { 1: 0, 7: 1, 13: 2, 17: 3 },
+        'Sunlamp': { 1: 0, 9: 1, 13: 2, 19: 3 },
+        'Crackle Generator': { 1: 0, 12: 1, 15: 2, 18: 3 },
+        'Blazing Stove': { 1: 0, 8: 1, 15: 2 },
+        'Pickling Jar': { 1: 0, 8: 1, 15: 2 },
+        'Joy Wheel Loom': { 1: 0, 7: 1, 14: 2 },
+        'Woodworking Bench': { 1: 0, 6: 1, 10: 2, 14: 3, 18: 4 },
+        'Chimney Kiln': { 1: 0, 6: 1, 10: 2, 14: 3, 18: 4 },
+    };
+    for (const [name, changes] of Object.entries(milestones)) {
+        let expected = 0;
+        for (let rv = 1; rv <= 20; rv++) {
+            if (Object.hasOwn(changes, rv)) expected = changes[rv];
+            assert.equal(simpleSetup(rv).facilities[name][0].count, expected,
+                `${name} Max. Placement at RV${rv}`);
+        }
+    }
+    // The 2026-10-03 video proves these caps only at RV13.
+    for (const [name, expected] of [['Farmland', 28], ['Woodland', 14], ['Mine', 7],
+        ['Well', 2], ['Dewy House', 1], ['Nimbus Bed', 1], ['Starfall Hammock', 1],
+        ['Woodworking Bench', 2], ['Chimney Kiln', 2], ['Joy Wheel Loom', 1],
+        ['Heat Furnace', 2], ['Cooling Unit', 2], ['Sunlamp', 2]]) {
+        assert.equal(simpleSetup(13).facilities[name][0].count, expected, name);
+    }
+    for (let rv = 1; rv <= 20; rv++) {
+        assert.equal(homeLevelForSetup(simpleSetup(rv)), rv, `Advanced RV inference for RV${rv}`);
+    }
+});
+
 test('new options round trip while old setup codes inherit conservative defaults', async () => {
     const defaults = { 'home-level': '14', 'rv-order-variety': false, 'simple-toolkit-upgrades': true,
         'season-points-min': '0', 'festival-batch-amount': '1',
