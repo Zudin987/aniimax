@@ -6,7 +6,7 @@ import path from 'node:path';
 import { chromium } from 'playwright';
 import { encodeSetupCode, encodeLayoutCode } from '../web/share-code.js';
 import { createShareUrl } from '../web/share-config.js';
-import { SIMPLE_MODULE_FIELDS } from '../web/facility-config.js';
+import { SIMPLE_MODULE_FIELDS, simpleSetup } from '../web/facility-config.js';
 
 const root = fileURLToPath(new URL('../web/', import.meta.url));
 const server = createServer(async (request, response) => {
@@ -357,10 +357,19 @@ try {
     await page.evaluate(() => window.restoreWorkerPostMessage());
     await page.locator('label:has(#mode-advanced)').click();
     assert.equal(await page.locator('#ecological-module-level').inputValue(), '2', 'Simple does not overwrite Advanced module levels');
-    await page.locator('#fill-level').selectOption('14');
-    await page.locator('#fill-btn').click();
-    for (const [name, count] of [['Well',3], ['Tidewhisper Sandcastle',2], ['Joy Wheel Loom',2],
-        ['Woodworking Bench',3], ['Chimney Kiln',3]]) assert.equal((await config()).facilityTiers[name][0].count, count);
+    // Check the actual Advanced Fill button for RV14–20, not only the underlying table.
+    for (let rv = 14; rv <= 20; rv++) {
+        await page.locator('#fill-level').selectOption(String(rv));
+        await page.locator('#fill-btn').click();
+        const actual = (await config()).facilityTiers;
+        for (const name of ['Farmland', 'Woodland', 'Well', 'Tidewhisper Sandcastle',
+            'Dewy House', 'Nimbus Bed', 'Starfall Hammock', 'Heat Furnace',
+            'Cooling Unit', 'Sunlamp', 'Crackle Generator', 'Blazing Stove',
+            'Pickling Jar', 'Joy Wheel Loom', 'Woodworking Bench', 'Chimney Kiln']) {
+            assert.equal(actual[name][0].count, simpleSetup(rv).facilities[name][0].count,
+                `Advanced Fill ${name} RV${rv}`);
+        }
+    }
 
     // A real UI solve displays retained variety and a bounded RV tradeoff.
     await load(encodeSetupCode({ 'home-level': '3', 'mode-simple': false, 'mode-advanced': true,
