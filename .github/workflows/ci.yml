@@ -38,6 +38,7 @@ jobs:
       - name: JavaScript syntax
         run: |
           node --check web/app.js
+          node --check web/context-help.js
           node --check web/facility-config.js
           node --check web/worker.js
           node --check web/layout.js
