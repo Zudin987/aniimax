@@ -2663,6 +2663,8 @@ tr:hover .skip-row,
     flex-wrap: wrap;
     align-items: center;
     gap: 0.4rem 1rem;
+    min-width: 0;
+    max-width: 100%;
 }
 
 .layout-storage-control,
@@ -2685,6 +2687,12 @@ tr:hover .skip-row,
     width: auto;
     min-width: 6.5rem;
     padding: 0.25rem 0.45rem;
+}
+
+.layout-actions {
+    flex-wrap: wrap;
+    min-width: 0;
+    max-width: 100%;
 }
 
 .layout-connection-space > rect {

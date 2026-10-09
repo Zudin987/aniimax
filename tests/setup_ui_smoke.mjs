@@ -570,8 +570,19 @@ try {
     await page.locator('#layout-card').screenshot({ path: 'test-results/power-rv15-six-storage-whole.png' });
     await page.locator('#layout-whole').uncheck();
     await page.setViewportSize({ width: 390, height: 844 });
-    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), false,
-        'the added Power gap control must fit mobile');
+    const mobileLayout = await page.evaluate(() => ({
+        viewport: window.innerWidth, pageWidth: document.documentElement.scrollWidth,
+        cardRight: document.getElementById('layout-card').getBoundingClientRect().right,
+        controlsRight: document.querySelector('.layout-controls').getBoundingClientRect().right,
+        controlEdges: [...document.querySelectorAll('.layout-controls label, .layout-controls button')]
+            .map(el => el.getBoundingClientRect().right),
+    }));
+    // Allow one pixel for subpixel rounding, and check the actual new controls, rather than
+    // attributing any overflow in a long production report to the Power gap dropdown.
+    assert.ok(mobileLayout.pageWidth <= mobileLayout.viewport + 1, 'mobile report must fit the viewport');
+    assert.ok(mobileLayout.cardRight <= mobileLayout.viewport, 'layout card must fit mobile');
+    assert.ok(mobileLayout.controlEdges.every(right => right <= mobileLayout.controlsRight + 1),
+        'layout controls must wrap within the card');
     await page.locator('#layout-card').screenshot({ path: 'test-results/power-rv15-mobile.png' });
     await page.setViewportSize({ width: 1000, height: 900 });
     const productionBeforeGap = await page.locator('#facility-plan-container').innerText();
@@ -583,7 +594,7 @@ try {
     await page.locator('#layout-power-gap').selectOption('1.5');
     await checkPower(4, 1.5, 6);
     assert.equal((await config())['layout-power-gap'], '1.5');
-    await writeFile('test-results/power-rv15-layouts.json', JSON.stringify({ twoStoragePower, sixStoragePower }));
+    await writeFile('test-results/power-rv15-layouts.json', JSON.stringify({ twoStoragePower, sixStoragePower, mobileLayout }));
     await page.evaluate(() => window.restorePowerLayoutObserver());
 
     // Storage denial still permits a reviewed import for this visit.
