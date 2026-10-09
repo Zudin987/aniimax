@@ -1560,7 +1560,7 @@ function renderHomelandLayout(plan) {
         cells: cells.map(({ x, y, w, h }) => ({ x, y, w, h })),
         storageCount,
         generatorCount: plan.generators_used || 0,
-        powerGap: numberOrDefault(document.getElementById('layout-power-gap').value, 1.5),
+        powerGap: Number(document.getElementById('layout-power-gap').value || 1.5),
     });
 }
 
