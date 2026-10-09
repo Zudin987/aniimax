@@ -175,6 +175,7 @@ try {
         'generated facility buttons must preserve multiline help');
     await page.keyboard.press('Escape');
     const strategyHelp = page.getByRole('button', { name: 'About Strategy', exact: true });
+    await page.locator('label:has(#strategy-level-up)').click();
     await strategyHelp.click();
     assert.match(await helpCard.innerText(), /95%/);
     await page.keyboard.press('Escape');
@@ -184,6 +185,7 @@ try {
         'dynamic help must use the current settings, rather than cached text');
     await page.keyboard.press('Escape');
     await page.locator('#rv-order-variety').check();
+    await page.locator('label:has(#strategy-priorities)').click();
     await page.locator('#facilitiesToggle').click();
     const recipeTimeHelp = page.locator('#facilitiesModal').getByRole('button', { name: 'About Time', exact: true }).first();
     await recipeTimeHelp.click();
