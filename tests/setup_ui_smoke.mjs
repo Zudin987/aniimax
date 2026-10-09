@@ -76,7 +76,9 @@ try {
     await rvHelp.focus();
     assert.equal(await helpCard.isVisible(), true);
     assert.equal(await rvHelp.getAttribute('aria-describedby'), 'context-help');
+    await rvHelp.hover();
     await page.keyboard.press('Escape');
+    await rvHelp.locator('span').hover();
     assert.equal(await helpCard.isVisible(), false);
     assert.equal(await rvHelp.getAttribute('aria-expanded'), 'false');
     assert.equal(await rvHelp.getAttribute('aria-describedby'), null);

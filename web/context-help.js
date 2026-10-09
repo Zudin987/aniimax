@@ -16,6 +16,7 @@ export function initContextHelp() {
     document.body.append(card);
     let target = null;
     let pinned = false;
+    let dismissed = null;
     let closeTimer;
     let previousDescription;
 
@@ -47,6 +48,7 @@ export function initContextHelp() {
     }
     function show(button) {
         cancelClose();
+        dismissed = null;
         if (target !== button) {
             hide();
             target = button;
@@ -78,9 +80,10 @@ export function initContextHelp() {
     document.addEventListener('pointerover', event => {
         if (card.contains(event.target)) return cancelClose();
         const button = buttonAt(event.target);
-        if (button && event.pointerType !== 'touch' && !pinned) show(button);
+        if (button && button !== dismissed && event.pointerType !== 'touch' && !pinned) show(button);
     });
     document.addEventListener('pointerout', event => {
+        if (dismissed?.contains(event.target) && !dismissed.contains(event.relatedTarget)) dismissed = null;
         if (event.pointerType === 'touch' || !target) return;
         if ((target.contains(event.target) || card.contains(event.target))
             && !target.contains(event.relatedTarget) && !card.contains(event.relatedTarget)) closeLater();
@@ -90,6 +93,7 @@ export function initContextHelp() {
         if (button) show(button);
     });
     document.addEventListener('focusout', () => {
+        dismissed = null;
         setTimeout(() => {
             if (target && document.activeElement !== target && !card.contains(document.activeElement)) hide();
         }, 0);
@@ -100,12 +104,13 @@ export function initContextHelp() {
             // Help never toggles a surrounding control or submits a form.
             event.preventDefault();
             event.stopPropagation();
-            if (pinned && target === button) hide();
+            if (pinned && target === button) { dismissed = button; hide(); }
             else { show(button); pinned = true; }
         } else if (!card.contains(event.target)) hide();
     }, true);
     document.addEventListener('keydown', event => {
         if (event.key === 'Escape' && target) {
+            dismissed = target;
             hide();
             event.stopPropagation();
             event.preventDefault();
