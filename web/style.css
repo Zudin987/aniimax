@@ -308,37 +308,42 @@ p {
     margin-bottom: 0.75rem;
 }
 
-/* Contextual help: compact icons with a full mouse/touch/keyboard target. */
+/* Small, muted help icons; the button keeps a larger interaction target. */
 .info-button {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     flex: none;
-    width: 28px;
-    height: 28px;
+    width: 24px;
+    height: 24px;
     padding: 0;
-    margin-left: 0.15rem;
+    margin: 0;
     border: none;
     border-radius: 50%;
     background: transparent;
-    color: var(--text-muted);
+    color: color-mix(in srgb, var(--text-muted) 85%, transparent);
     cursor: pointer;
     vertical-align: middle;
     text-transform: none;
     letter-spacing: normal;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
 }
 .info-button span {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 18px;
-    height: 18px;
+    width: 14px;
+    height: 14px;
     border: 1px solid currentColor;
     border-radius: 50%;
-    font: 600 12px Georgia, serif;
+    font: 600 10px/1 var(--font-body);
 }
 .info-button:hover, .info-button[aria-expanded="true"] { color: var(--accent); }
-.info-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.info-button:focus-visible { outline: 1.5px solid var(--accent); outline-offset: 1px; }
+@media (pointer: coarse) {
+    .info-button { width: 28px; height: 28px; }
+}
 .setting-with-help, .label-with-help, .title-with-help, .roster-family-control {
     display: flex;
     align-items: center;
@@ -2479,7 +2484,7 @@ tr:hover .skip-row,
     font-size: 0.84rem;
 }
 
-.emode-auto-note span:not(.emode-bolt) {
+.emode-auto-note span:not([aria-hidden="true"]) {
     font-size: 0.78rem;
     line-height: 1.45;
 }
