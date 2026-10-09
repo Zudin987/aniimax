@@ -2,13 +2,14 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { normalizeSetupSettings } from '../web/setup-config.js';
 import { createShareUrl, readShareHash, urlWithoutShare } from '../web/share-config.js';
-import { readSetupImport, encodeSetupCode, decodeLayoutCode } from '../web/share-code.js';
+import { readSetupImport, encodeSetupCode, encodeLayoutCode, decodeLayoutCode } from '../web/share-code.js';
 
 const defaults = {
     'mode-simple': true, 'mode-advanced': false, 'home-level': '19',
     'strategy-level-up': true, 'strategy-priorities': false,
     'aniimo-best': true, 'aniimo-minimum': false, 'aniimo-custom': false,
     'season-wheat-budget': '600', 'season-mutation-plots': '1',
+    'layout-power-gap': '1.5',
     facilityTiers: { Mine: [{ count: 0, level: 1 }] },
     roster: [], skippedRecipes: [], unlockedSpecial: [], levelUpStock: {}, aniimoLevels: {},
 };
@@ -22,7 +23,7 @@ const input = {
     priorities: [{ target: 'season_points', on: true }, { target: 'coins', on: true }],
     levelUpStock: { wood_block: 123 }, aniimoLevels: { Earth: 4, Water: 3 },
     'force-e-mode': true, 'season-on': true, 'season-wheat-budget': '768',
-    'season-mutation-plots': '2', 'layout-storage-count': '24', 'rate-unit': 'day', goalTarget: 'coins',
+    'season-mutation-plots': '2', 'layout-storage-count': '24', 'layout-power-gap': '0.5', 'rate-unit': 'day', goalTarget: 'coins',
 };
 
 test('complete setup codes and compressed upstream-compatible links preserve setup and Unicode', async () => {
@@ -46,6 +47,7 @@ test('older names and missing fields use clean defaults, independently of previo
     assert.deepEqual(settings.facilityTiers.Mine, [{ count: 2, level: 3 }]);
     assert.equal(settings['resource-detector-level'], '2');
     assert.equal(settings['season-mutation-plots'], '1');
+    assert.equal(settings['layout-power-gap'], '1.5', 'older codes retain the default connection space');
     assert.deepEqual(settings.roster, []);
     assert.equal(settings['aniimo-best'], true);
     assert.match(warnings.join(' '), /Older setup/);
@@ -61,6 +63,7 @@ test('older names and missing fields use clean defaults, independently of previo
 test('invalid structures, non-finite values and conflicting modes are rejected before application', () => {
     for (const bad of [null, [], {}, { ...input, facilityTiers: [] },
         { ...input, 'home-level': 'NaN' }, { ...input, 'season-wheat-budget': -1 },
+        { ...input, 'layout-power-gap': '1.25' }, { ...input, 'layout-power-gap': '2.5' },
         { ...input, 'mode-simple': true }, { ...input, 'aniimo-custom': 'false' },
         { ...input, facilityTiers: { Mine: [{ count: -2, level: 1 }] } },
         { ...input, levelUpStock: { wood_block: 'Infinity' } },
@@ -68,6 +71,19 @@ test('invalid structures, non-finite values and conflicting modes are rejected b
         { ...input, roster: [{ count: 1, family: 'Nimbi" onclick="bad()', abilities: { Leisure: 4 } }] },
         { ...input, priorities: [{ target: 'coins', on: true }, { target: 'coins', on: true }] }]) {
         assert.throws(() => normalizeSetupSettings(bad, defaults));
+    }
+});
+
+test('layout-only codes preserve reserved spaces and reject malformed coordinates', () => {
+    const drawn = { homeLevel: 15, layout: {
+        storage: { x: 0, y: 0, w: 2, h: 2 },
+        pieces: [{ members: [{ facility: 'Crafting Table', x: 3, y: 0, w: 4, h: 4, electric: true }] }],
+        powerGap: 1.5, powerSpaces: [{ x: 7, y: 1.25, w: 1.5, h: 1.5, facility: 'Crafting Table' }],
+    } };
+    assert.deepEqual(decodeLayoutCode(encodeLayoutCode(drawn)), drawn);
+    for (const powerSpaces of [null, [{ x: 7, y: 1, w: '1.5', h: 1.5 }],
+        [{ x: 7, y: 1, w: -1, h: 1.5 }], [{ x: Infinity, y: 1, w: 1.5, h: 1.5 }]]) {
+        assert.throws(() => encodeLayoutCode({ ...drawn, layout: { ...drawn.layout, powerSpaces } }));
     }
 });
 

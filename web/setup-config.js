@@ -13,6 +13,7 @@ const NUMBER_FIELDS = {
     'power-module-level': [0, 99, true], 'season-wheat-budget': [0, 1e12],
     'season-points-min': [0, 1e12], 'festival-batch-amount': [1, 100000, true],
     'season-mutation-plots': [0, 10, true], 'layout-storage-count': [1, 24, true],
+    'layout-power-gap': [0, 2],
 };
 const RADIO_GROUPS = [
     ['mode-simple', 'mode-advanced'], ['strategy-level-up', 'strategy-priorities'],
@@ -88,6 +89,9 @@ export function normalizeSetupSettings(input, defaults = {}) {
     if (own(data, 'rate-unit')) {
         if (!['second', 'minute', 'hour', 'day'].includes(data['rate-unit'])) throw new Error('Invalid rate unit');
         settings['rate-unit'] = data['rate-unit'];
+    }
+    if (own(data, 'layout-power-gap') && ![0, 0.5, 1, 1.5, 2].includes(Number(settings['layout-power-gap']))) {
+        throw new Error('Choose a supported Power gap size');
     }
     if (own(data, 'goalTarget')) {
         if (data.goalTarget !== '' && !PRIORITIES.has(data.goalTarget)) throw new Error('Invalid goal target');

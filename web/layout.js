@@ -1,4 +1,4 @@
-// Places a whole homeland around a single Storage Unit, so the Aniimo hauling each finished batch
+// Places a whole homeland around Storage Units, so the Aniimo hauling each finished batch
 // walk as little as they can: a piece's cost is its trips (finished batches) per hour times its
 // straight-line distance to the Storage Unit, center to center, and the layout keeps the total low.
 //
@@ -39,11 +39,12 @@ const CLUSTER_PACK_MOST = 12;
 // Everything is in tiles, with the Storage Unit's center at the origin. `options.cells`, if
 // given, are the open parts of the homeland (disjoint rectangles, in the same frame): every piece
 // has to lie within them, though one may span two that meet.
-// Returns `{ storage, pieces, unplaced, tried }`: each piece with its members (a cluster's
+// `powerGap` reserves an empty square beside each electric member. Returns
+// `{ storage, pieces, powerSpaces, unplaced, tried }`: each piece with its members (a cluster's
 // buildings then plots) at their final places and its cost, the indices of any piece there was
 // no room for, and how many spots were tried.
 export function layOut(pieces, options = {}) {
-    const { storage = { w: 2, h: 2 }, storages = null, passes = 6, cells = null } = options;
+    const { storage = { w: 2, h: 2 }, storages = null, passes = 6, cells = null, powerGap = 0 } = options;
     const storageRect = { x: -storage.w / 2, y: -storage.h / 2, w: storage.w, h: storage.h };
     const storageRects = storages?.length ? storages.map(r => ({ ...r })) : [storageRect];
     const storageDistance = (x, y) => Math.min(...storageRects.map(s =>
@@ -69,9 +70,9 @@ export function layOut(pieces, options = {}) {
             x2: Math.max(...cells.map(c => c.x + c.w)), y2: Math.max(...cells.map(c => c.y + c.h)),
         }
         : { x: -reach, y: -reach, x2: reach, y2: reach };
-    const offsets = latticeByDistance(extent, STEP);
+    const offsets = latticeByDistance(extent, STEP, storageDistance);
     // Environment buildings stand on whole tiles, which is plenty for them and far fewer to try.
-    const clusterOffsets = latticeByDistance(extent, 1);
+    const clusterOffsets = latticeByDistance(extent, 1, storageDistance);
 
     // What's down: rectangles by piece, found through a coarse grid; coverage squares by cluster;
     // and the rectangles that must stay out of every square.
@@ -80,8 +81,9 @@ export function layOut(pieces, options = {}) {
     const squares = new Map();
     const sensitive = new Map();
     const occupy = (key, spot) => {
-        placedRects.set(key, spot.rects);
-        spot.rects.forEach(r => cellsOf(r).forEach(c => {
+        const occupied = [...spot.rects, ...(spot.connections || [])];
+        placedRects.set(key, occupied);
+        occupied.forEach(r => cellsOf(r).forEach(c => {
             if (!grid.has(c)) grid.set(c, new Set());
             grid.get(c).add(key);
         }));
@@ -125,11 +127,23 @@ export function layOut(pieces, options = {}) {
                 if (!rects.every(r => free(r, i))) continue;
                 const touchy = rects.filter((r, j) => shape.members[j].sensitive);
                 if (touchy.some(r => inOtherSquare(r, i))) continue;
+                const connections = [];
+                let connected = true;
+                if (powerGap > 0) {
+                    for (let j = 0; j < rects.length; j++) {
+                        if (!shape.members[j].electric) continue;
+                        const space = spacesBeside(rects[j], powerGap).find(r => free(r, i)
+                            && ![...rects, ...connections].some(other => overlaps(r, other)));
+                        if (!space) { connected = false; break; }
+                        connections.push({ ...space, facility: shape.members[j].facility });
+                    }
+                }
+                if (!connected) continue;
                 if (firstFit === null) firstFit = distance;
                 const cost = shape.members.reduce((sum, m) => sum + m.weight * storageDistance(m.x + x + m.w / 2, m.y + y + m.h / 2), 0)
                     // Pieces nobody visits still go as close as they can, to keep the homeland tight.
-                    + EPSILON * Math.hypot(shape.cx + x, shape.cy + y);
-                if (!best || cost < best.cost - EPSILON) best = { cost, x, y, shape, rects, sensitive: touchy };
+                    + EPSILON * storageDistance(shape.cx + x, shape.cy + y);
+                if (!best || cost < best.cost - EPSILON) best = { cost, x, y, shape, rects, connections, sensitive: touchy };
             }
         }
         return best;
@@ -201,7 +215,7 @@ export function layOut(pieces, options = {}) {
     // Nothing moves out while pieces are first put down, so once a piece of some shape finds no
     // room, no later one of that shape will: they're skipped rather than searched for again.
     const noRoom = new Set();
-    const shapeOf = i => (pieces[i].cluster ? null : JSON.stringify(pieces[i].members.map(m => [m.x, m.y, m.w, m.h, !!m.sensitive])));
+    const shapeOf = i => (pieces[i].cluster ? null : JSON.stringify(pieces[i].members.map(m => [m.x, m.y, m.w, m.h, !!m.sensitive, !!m.electric])));
     for (const i of order) {
         const shape = shapeOf(i);
         const spot = shape !== null && noRoom.has(shape) ? null : place(i);
@@ -232,6 +246,7 @@ export function layOut(pieces, options = {}) {
     return {
         storage: storageRects[0],
         storages: storageRects,
+        powerSpaces: [...placed.values()].flatMap(spot => spot.connections || []),
         unplaced,
         tried,
         pieces: pieces.map((piece, i) => {
@@ -249,10 +264,14 @@ export function layOut(pieces, options = {}) {
 
 // Lays the homeland out within its open `cells` (in homeland tiles), trying the Storage Unit at
 // the middle of the open area and at the middles of the open plots nearest it, and keeping
-// whichever walks least with everything placed. Returns what `layOut` does, moved into the
+// fitting active generators and minimizing relay-dependent machines, then estimated walking.
+// `options.powerGap` defaults to 1.5 tiles when generators are active. Returns `layOut` moved into the
 // homeland's own frame, plus `storageAt`, the Storage Unit's center.
-export function layOutHomeland(pieces, cells, storage = { w: 2, h: 2 }, storageCount = 1, generatorCount = 0) {
+export function layOutHomeland(pieces, cells, storage = { w: 2, h: 2 }, storageCount = 1, generatorCount = 0, options = {}) {
     const requested = Math.max(1, Math.min(24, Math.round(Number(storageCount) || 1)));
+    const count = Math.max(0, Math.round(Number(generatorCount) || 0));
+    const gap = Number(options.powerGap ?? 1.5);
+    const powerGap = count > 0 ? snap(Math.max(0, Math.min(2, Number.isFinite(gap) ? gap : 1.5))) : 0;
     const area = cells.reduce((sum, c) => sum + c.w * c.h, 0);
     const mid = {
         x: cells.reduce((sum, c) => sum + (c.x + c.w / 2) * c.w * c.h, 0) / area,
@@ -274,31 +293,39 @@ export function layOutHomeland(pieces, cells, storage = { w: 2, h: 2 }, storageC
         // First get a demand map from the old single-storage solution. Then distribute any extra
         // Storage Units through the open plots and re-pack every facility around all of them.
         // This keeps the original robust packing algorithm while making hauling use the nearest SU.
-        let out = layOut(pieces, { storage, cells: relative });
+        let out = layOut(pieces, { storage, cells: relative, powerGap });
         tried += out.tried;
         if (requested > 1) {
             let storageRects = chooseStorageRects(out, relative, storage, requested);
             if (storageRects.length > 1) {
-                out = layOut(pieces, { storage, cells: relative, storages: storageRects });
+                out = layOut(pieces, { storage, cells: relative, storages: storageRects, powerGap });
                 tried += out.tried;
                 // One refinement uses the re-packed demand points, then settles the layout again.
                 storageRects = chooseStorageRects(out, relative, storage, requested);
-                out = layOut(pieces, { storage, cells: relative, storages: storageRects });
+                out = layOut(pieces, { storage, cells: relative, storages: storageRects, powerGap });
                 tried += out.tried;
             }
         }
+        // Check power before choosing a layout. A short haul is not a useful winner if the
+        // active generators cannot fit; among complete layouts, prefer fewer relay-dependent
+        // machines before comparing the estimated hauling distance.
+        const power = placeGenerators(out, relative, count, powerGap);
         const cost = out.pieces.reduce((sum, p) => sum + p.cost, 0);
         const better = !best || out.unplaced.length < best.out.unplaced.length
-            || (out.unplaced.length === best.out.unplaced.length && cost < best.cost - EPSILON);
-        if (better) best = { out, cost, at };
+            || (out.unplaced.length === best.out.unplaced.length && (
+                power.unplacedGenerators < best.power.unplacedGenerators
+                || (power.unplacedGenerators === best.power.unplacedGenerators && (
+                    power.needsPowerPole < best.power.needsPowerPole
+                    || (power.needsPowerPole === best.power.needsPowerPole && cost < best.cost - EPSILON)))));
+        if (better) best = { out, power, cost, at };
     }
     if (!best) {
-        const fallback = layOut(pieces, { storage, cells });
-        return { ...fallback, storageAt: { x: 0, y: 0 }, requestedStorages: requested };
+        const fallback = layOut(pieces, { storage, cells, powerGap });
+        const power = placeGenerators(fallback, cells, count, powerGap);
+        return { ...fallback, ...power, powerGap, powerSpaces: [...fallback.powerSpaces, ...power.powerSpaces],
+            storageAt: { x: 0, y: 0 }, requestedStorages: requested };
     }
-    const { out, at } = best;
-    const relative = cells.map(cell => ({ x: cell.x - at.x, y: cell.y - at.y, w: cell.w, h: cell.h }));
-    const power = placeGenerators(out, relative, Math.max(0, Math.round(Number(generatorCount) || 0)));
+    const { out, power, at } = best;
     const move = r => ({ ...r, x: r.x + at.x, y: r.y + at.y });
     const storages = (out.storages || [out.storage]).map(move);
     const generators = power.generators.map(g => ({
@@ -313,42 +340,73 @@ export function layOutHomeland(pieces, cells, storage = { w: 2, h: 2 }, storageC
         storage: storages[0],
         storages,
         generators,
+        powerGap,
+        powerSpaces: [...out.powerSpaces, ...power.powerSpaces].map(move),
         needsPowerPole: power.needsPowerPole,
         unplacedGenerators: power.unplacedGenerators,
         pieces: out.pieces.map(p => ({ ...p, members: p.members.map(move) })),
     };
 }
 
-// Places active Crackle Generators after the production layout is packed. Their launch footprint
+// Places active Crackle Generators while preserving the reserved connection spaces. Their launch footprint
 // is 1x1 and their direct supply square is 11x11. Machines outside these direct squares are not
 // called invalid: Power Poles can extend a grid, so they are reported as needing pole coverage.
-function placeGenerators(out, cells, count) {
-    if (count <= 0) return { generators: [], needsPowerPole: 0, unplacedGenerators: 0 };
+function placeGenerators(out, cells, count, gap) {
+    if (count <= 0) return { generators: [], powerSpaces: [], needsPowerPole: 0, unplacedGenerators: 0 };
     const storages = out.storages || [out.storage];
     const members = out.pieces.flatMap(p => p.members);
     const occupied = [...storages, ...members];
+    const reserved = out.powerSpaces || [];
     const electric = members.filter(m => m.electric);
     const inside = r => cells.reduce((sum, cell) => sum + overlapArea(r, cell), 0) >= r.w * r.h - EPSILON;
+    const index = rectangles => {
+        const grid = new Map();
+        for (const r of rectangles) for (const cell of cellsOf(r)) {
+            if (!grid.has(cell)) grid.set(cell, []);
+            grid.get(cell).push(r);
+        }
+        return r => cellsOf(r).some(cell => grid.get(cell)?.some(other => overlaps(r, other)));
+    };
+    const hitsBuilding = index(occupied);
+    const hitsOccupied = index([...occupied, ...reserved]);
     const extent = {
         x: Math.floor(Math.min(...cells.map(c => c.x))),
         y: Math.floor(Math.min(...cells.map(c => c.y))),
         x2: Math.ceil(Math.max(...cells.map(c => c.x + c.w))),
         y2: Math.ceil(Math.max(...cells.map(c => c.y + c.h))),
     };
-    const candidates = [];
-    for (let x = extent.x; x <= extent.x2 - 1 + EPSILON; x += 1) {
-        for (let y = extent.y; y <= extent.y2 - 1 + EPSILON; y += 1) {
-            const rect = { x, y, w: 1, h: 1 };
-            if (inside(rect) && !occupied.some(other => overlaps(rect, other))) candidates.push(rect);
+    const scan = bounds => {
+        const candidates = [];
+        for (let x = bounds.x; x <= bounds.x2 - 1 + EPSILON; x += STEP) {
+            for (let y = bounds.y; y <= bounds.y2 - 1 + EPSILON; y += STEP) {
+                const rect = { x, y, w: 1, h: 1 };
+                if (inside(rect) && !hitsOccupied(rect)) candidates.push(rect);
+            }
         }
-    }
+        return candidates;
+    };
+    // Any generator directly covering a machine must stand within six tiles of its
+    // footprint. Start there instead of evaluating the empty outer plots; if none fits,
+    // scan all unlocked land so a relay-dependent generator can still be placed.
+    const near = electric.length ? {
+        x: Math.max(extent.x, Math.floor(Math.min(...electric.map(m => m.x))) - 6),
+        y: Math.max(extent.y, Math.floor(Math.min(...electric.map(m => m.y))) - 6),
+        x2: Math.min(extent.x2, Math.ceil(Math.max(...electric.map(m => m.x + m.w))) + 6),
+        y2: Math.min(extent.y2, Math.ceil(Math.max(...electric.map(m => m.y + m.h))) + 6),
+    } : extent;
+    let candidates = scan(near);
+    let expanded = near === extent;
     const generators = [];
+    const powerSpaces = [];
     const covered = new Set();
     const coverageOf = r => ({ x: r.x - 5, y: r.y - 5, w: 11, h: 11 });
     for (let n = 0; n < count; n++) {
         let best = null;
-        for (const rect of candidates) {
-            if (generators.some(g => overlaps(rect, g))) continue;
+        const consider = rect => {
+            if ([...generators, ...powerSpaces].some(g => overlaps(rect, g))) return;
+            const space = gap > 0 ? spacesBeside(rect, gap).find(r => inside(r)
+                && !hitsBuilding(r) && ![...generators, rect].some(other => overlaps(r, other))) : null;
+            if (gap > 0 && !space) return;
             const coverage = coverageOf(rect);
             let newly = 0;
             let distance = 0;
@@ -369,17 +427,25 @@ function placeGenerators(out, cells, count) {
                 )));
             }
             const score = newly * 1_000_000 - distance;
-            if (!best || score > best.score + EPSILON) best = { rect, coverage, score };
+            if (!best || score > best.score + EPSILON) best = { rect, space, coverage, score };
+        };
+        candidates.forEach(consider);
+        if (!best && !expanded) {
+            candidates = scan(extent);
+            expanded = true;
+            candidates.forEach(consider);
         }
         if (!best) break;
         const generator = { ...best.rect, coverage: best.coverage, facility: 'Crackle Generator' };
         generators.push(generator);
+        if (best.space) powerSpaces.push({ ...best.space, facility: 'Crackle Generator' });
         electric.forEach((m, i) => {
             if (overlaps(generator.coverage, m)) covered.add(i);
         });
     }
     return {
         generators,
+        powerSpaces,
         needsPowerPole: Math.max(0, electric.length - covered.size),
         unplacedGenerators: Math.max(0, count - generators.length),
     };
@@ -494,7 +560,8 @@ function orientations(members) {
         const turned = members.map(m => turn(m, turns));
         const minX = Math.min(...turned.map(m => m.x));
         const minY = Math.min(...turned.map(m => m.y));
-        const shifted = turned.map(m => ({ ...m, x: snap(m.x - minX), y: snap(m.y - minY) }));
+        const shift = m => ({ ...m, x: snap(m.x - minX), y: snap(m.y - minY) });
+        const shifted = turned.map(shift);
         const key = shifted.map(m => `${m.x},${m.y},${m.w},${m.h}`).sort().join('|');
         if (seen.has(key)) continue;
         seen.add(key);
@@ -507,6 +574,19 @@ function orientations(members) {
         out.push({ turns, members: shifted, cx, cy, spread });
     }
     return out;
+}
+
+// A configurable empty square beside a powered station. This is reserved ground, not a
+// guessed Power Pole footprint or a claim that the resulting relay network is connected.
+function spacesBeside(r, gap) {
+    const x = snap(r.x + (r.w - gap) / 2);
+    const y = snap(r.y + (r.h - gap) / 2);
+    return [
+        { x: r.x + r.w, y, w: gap, h: gap },
+        { x: r.x - gap, y, w: gap, h: gap },
+        { x, y: r.y - gap, w: gap, h: gap },
+        { x, y: r.y + r.h, w: gap, h: gap },
+    ];
 }
 
 // A cluster turned 0 to 3 quarter turns and mirrored or not, which turns its plan's arrangement
@@ -548,13 +628,13 @@ function turn(m, turns) {
 
 // Points `step` tiles apart across `extent` (`{ x, y, x2, y2 }`), nearest the origin first:
 // `[x, y, distance]`.
-function latticeByDistance(extent, step) {
+function latticeByDistance(extent, step, distance = (x, y) => Math.hypot(x, y)) {
     const points = [];
     for (let i = Math.floor(extent.x / step); i <= Math.ceil(extent.x2 / step); i++) {
         for (let j = Math.floor(extent.y / step); j <= Math.ceil(extent.y2 / step); j++) {
             const x = i * step;
             const y = j * step;
-            points.push([x, y, Math.hypot(x, y)]);
+            points.push([x, y, distance(x, y)]);
         }
     }
     return points.sort((a, b) => a[2] - b[2]);

@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
-import { readFile, mkdir } from 'node:fs/promises';
+import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { chromium } from 'playwright';
 import { encodeSetupCode, encodeLayoutCode } from '../web/share-code.js';
 import { createShareUrl } from '../web/share-config.js';
 import { SIMPLE_MODULE_FIELDS, simpleSetup } from '../web/facility-config.js';
+import { assertPowerLayout } from './layout_assertions.mjs';
 
 const root = fileURLToPath(new URL('../web/', import.meta.url));
 const server = createServer(async (request, response) => {
@@ -524,6 +525,66 @@ try {
         'the real layout worker must respect the verified RV13 storage placement limit');
     assert.equal((await config())['layout-storage-count'], '6', 'a constrained layout preserves the imported preference');
     await page.locator('#level-up-card').screenshot({ path: 'test-results/rv14-resource-timer.png' });
+
+    // Use real RV15 production and layout workers to check the connection space, including
+    // the two- and six-storage layouts reported by the user. Observe results without mocking.
+    await load(encodeSetupCode({ 'home-level': '15', 'mode-simple': true, 'mode-advanced': false,
+        'strategy-level-up': true, 'strategy-priorities': false, 'force-e-mode': true,
+        'rv-order-variety': false, 'season-on': false, 'layout-sim-on': false,
+        'aniimo-best': false, 'aniimo-minimum': true, 'aniimo-custom': false,
+        'layout-storage-count': '2', 'layout-power-gap': '1.5' }));
+    await page.evaluate(() => {
+        const original = Worker.prototype.postMessage;
+        window.powerLayoutResults = [];
+        Worker.prototype.postMessage = function(message, ...args) {
+            if (Array.isArray(message.pieces) && Array.isArray(message.cells)) {
+                this.addEventListener('message', event => {
+                    window.powerLayoutResults.push({ request: message, layout: event.data });
+                }, { once: true });
+            }
+            return original.call(this, message, ...args);
+        };
+        window.restorePowerLayoutObserver = () => { Worker.prototype.postMessage = original; };
+    });
+    await page.locator('#optimize-btn').click();
+    await page.waitForFunction(() => !document.getElementById('optimize-btn').disabled, null, { timeout: 120_000 });
+    assert.equal(await page.locator('#error-message').isVisible(), false);
+    const checkPower = async (n, gap, stores) => {
+        await page.waitForFunction(n => window.powerLayoutResults.length === n, n, { timeout: 120_000 });
+        const { request, layout } = await page.evaluate(() => window.powerLayoutResults.at(-1));
+        assert.ok(request.generatorCount > 0, 'Force E-Mode must create a real active generator');
+        assertPowerLayout(layout, request.cells, gap, stores, request.generatorCount);
+        assert.equal(await page.locator('#layout-diagram .layout-connection-space').count(), layout.powerSpaces.length);
+        return { request, layout };
+    };
+    const twoStoragePower = await checkPower(1, 1.5, 2);
+    await page.locator('#layout-card').screenshot({ path: 'test-results/power-rv15-two-storage.png' });
+    await page.locator('#layout-whole').check();
+    await page.locator('#layout-card').screenshot({ path: 'test-results/power-rv15-two-storage-whole.png' });
+    await page.locator('#layout-whole').uncheck();
+    await page.locator('#layout-storage-count').fill('6');
+    await page.locator('#layout-storage-count').blur();
+    const sixStoragePower = await checkPower(2, 1.5, 6);
+    await page.locator('#layout-card').screenshot({ path: 'test-results/power-rv15-six-storage.png' });
+    await page.locator('#layout-whole').check();
+    await page.locator('#layout-card').screenshot({ path: 'test-results/power-rv15-six-storage-whole.png' });
+    await page.locator('#layout-whole').uncheck();
+    await page.setViewportSize({ width: 390, height: 844 });
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), false,
+        'the added Power gap control must fit mobile');
+    await page.locator('#layout-card').screenshot({ path: 'test-results/power-rv15-mobile.png' });
+    await page.setViewportSize({ width: 1000, height: 900 });
+    const productionBeforeGap = await page.locator('#facility-plan-container').innerText();
+    await page.locator('#layout-power-gap').selectOption('0');
+    await checkPower(3, 0, 6);
+    assert.equal((await config())['layout-power-gap'], '0');
+    assert.equal(await page.locator('#facility-plan-container').innerText(), productionBeforeGap,
+        'changing connection space must keep the production plan');
+    await page.locator('#layout-power-gap').selectOption('1.5');
+    await checkPower(4, 1.5, 6);
+    assert.equal((await config())['layout-power-gap'], '1.5');
+    await writeFile('test-results/power-rv15-layouts.json', JSON.stringify({ twoStoragePower, sixStoragePower }));
+    await page.evaluate(() => window.restorePowerLayoutObserver());
 
     // Storage denial still permits a reviewed import for this visit.
     await page.evaluate(() => { Storage.prototype.setItem = () => { throw new Error('storage unavailable'); }; });

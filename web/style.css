@@ -2666,6 +2666,7 @@ tr:hover .skip-row,
 }
 
 .layout-storage-control,
+.layout-power-control,
 .layout-actions {
     display: inline-flex;
     align-items: center;
@@ -2678,6 +2679,21 @@ tr:hover .skip-row,
     width: 4.25rem;
     min-width: 4.25rem;
     padding: 0.25rem 0.45rem;
+}
+
+.layout-power-control select {
+    width: auto;
+    min-width: 6.5rem;
+    padding: 0.25rem 0.45rem;
+}
+
+.layout-connection-space > rect {
+    fill: var(--warning);
+    fill-opacity: 0.1;
+    stroke: var(--warning);
+    stroke-opacity: 0.85;
+    stroke-width: 0.06;
+    stroke-dasharray: 0.2 0.15;
 }
 
 .layout-share-hint {
