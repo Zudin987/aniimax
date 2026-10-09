@@ -2467,6 +2467,13 @@ tr:hover .skip-row,
     gap: 0.12rem;
 }
 
+.emode-auto-note > .title-with-help {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.25rem;
+}
+
 .emode-auto-note strong {
     color: var(--text);
     font-size: 0.84rem;
