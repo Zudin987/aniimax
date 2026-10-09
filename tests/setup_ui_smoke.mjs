@@ -248,6 +248,7 @@ try {
     const touchPage = await touchContext.newPage();
     touchPage.on('pageerror', error => errors.push(error.message));
     await touchPage.route('https://cdn.jsdelivr.net/**', route => route.abort());
+    await touchPage.addInitScript(({ key, saved }) => localStorage.setItem(key, JSON.stringify(saved)), { key, saved });
     await touchPage.goto(base);
     await touchPage.waitForFunction(() => document.getElementById('version').textContent.includes('0.16.0'));
     const touchHelp = touchPage.getByRole('button', { name: 'About RV level', exact: true });
