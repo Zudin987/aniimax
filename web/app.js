@@ -378,7 +378,7 @@ function getPersistedFieldIds() {
         'ecological-module-level', 'kitchen-module-level',
         'resource-detector-level', 'crafting-module-level', 'power-module-level',
         'rate-unit', 'season-on', 'season-wheat-budget', 'season-mutation-plots', 'season-points-min', 'festival-batch-amount',
-        'layout-sim-on', 'layout-storage-count', 'layout-whole',
+        'layout-sim-on', 'layout-storage-count', 'layout-power-gap', 'layout-whole',
         'aniimo-best', 'aniimo-minimum', 'aniimo-custom'
     ];
 }
@@ -1459,10 +1459,12 @@ function attachLayoutHandlers() {
     document.getElementById('layout-sim-on').addEventListener('change', () => {
         if (lastLayout) drawLayout(lastLayout);
     });
-    document.getElementById('layout-storage-count').addEventListener('change', () => {
-        saveInputsToStorage();
-        if (lastPlan?.success && lastPlanInput) renderHomelandLayout(lastPlan);
-    });
+    for (const id of ['layout-storage-count', 'layout-power-gap']) {
+        document.getElementById(id).addEventListener('change', () => {
+            saveInputsToStorage();
+            if (lastPlan?.success && lastPlanInput) renderHomelandLayout(lastPlan);
+        });
+    }
     document.getElementById('layout-replay').addEventListener('click', () => {
         if (layoutSim) resetLayoutSim(layoutSim);
     });
@@ -1537,10 +1539,10 @@ function renderHomelandLayout(plan) {
             noRoom.length ? `No room found in RV ${homeLevel}'s plots for: ${noRoom.join(', ')}.` : '',
             unplaced.length ? `Not placed, size unknown: ${unplaced.join(', ')}.` : '',
             layout.unplacedGenerators ? `${layout.unplacedGenerators} active Crackle Generator(s) could not be fitted.` : '',
-            layout.needsPowerPole ? `${layout.needsPowerPole} E-Mode machine(s) sit outside direct 11×11 generator coverage; connect them with Crackle Power Poles in game.` : '',
+            layout.needsPowerPole ? `${layout.needsPowerPole} E-Mode machine(s) need Power Pole coverage.` : '',
         ].filter(Boolean).join(' ');
         document.getElementById('layout-summary').textContent = `${trips > 0
-            ? `${formatNumber(Math.round(trips))} batch deliveries/hour before Hauling batching, to ${storages.length} Storage Unit${storages.length === 1 ? '' : 's'}, ${(walked / trips).toFixed(1)} tiles each on average, in the ${cells.length} plot${cells.length === 1 ? '' : 's'} open at RV ${homeLevel}.`
+            ? `${formatNumber(Math.round(trips))} batch deliveries/hour before Hauling batching, to ${storages.length} Storage Unit${storages.length === 1 ? '' : 's'}, an estimated ${(walked / trips).toFixed(1)} tiles each on average, in the ${cells.length} plot${cells.length === 1 ? '' : 's'} open at RV ${homeLevel}.`
             : 'Nothing in this plan needs hauling to storage.'}${notes ? ` ${notes}` : ''}`;
         lastLayout = { layout, homeLevel };
         drawLayout(lastLayout);
@@ -1558,6 +1560,7 @@ function renderHomelandLayout(plan) {
         cells: cells.map(({ x, y, w, h }) => ({ x, y, w, h })),
         storageCount,
         generatorCount: plan.generators_used || 0,
+        powerGap: Number(document.getElementById('layout-power-gap').value || 1.5),
     });
 }
 
@@ -1585,7 +1588,8 @@ function homelandSvg(layout, homeLevel) {
     // Zoomed to what's placed, a couple of tiles around it, unless the whole homeland is asked for.
     const storages = layout.storages?.length ? layout.storages : [layout.storage];
     const generators = layout.generators || [];
-    const placed = [...storages, ...generators.flatMap(g => [g, g.coverage]), ...layout.pieces.flatMap(p => p.members)];
+    const powerSpaces = layout.powerSpaces || [];
+    const placed = [...storages, ...powerSpaces, ...generators.flatMap(g => [g, g.coverage]), ...layout.pieces.flatMap(p => p.members)];
     const whole = layoutShowsWhole;
     const minX = whole ? -1 : Math.floor(Math.min(...placed.map(r => r.x))) - 2;
     const minY = whole ? -1 : Math.floor(Math.min(...placed.map(r => r.y))) - 2;
@@ -1642,6 +1646,11 @@ function homelandSvg(layout, homeLevel) {
             stroke="${tint}" stroke-opacity="0.8" stroke-dasharray="0.35,0.25" stroke-width="0.08" />`;
     }).join('');
     const powerCoverage = generators.map(g => `<rect x="${g.coverage.x}" y="${g.coverage.y}" width="${g.coverage.w}" height="${g.coverage.h}" class="layout-power-coverage" />`).join('');
+    const connectionSpaces = powerSpaces.map(r => `
+        <g class="layout-piece layout-connection-space" ${tipAttrs('E-Mode connection space', {
+            detail: `${r.facility || 'Powered station'} · leave this ground clear for connections`,
+            stats: `${r.w}×${r.h} tiles reserved · check Power Pole size and reach in game`,
+        })}><rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" rx="0.1" /></g>`).join('');
     const generatorShapes = generators.map((g, i) => `
         <g class="layout-piece layout-generator" ${tipAttrs('Crackle Generator', { detail: 'Active E-Mode generator', stats: '11×11 direct power coverage' })}>
             <rect x="${g.x + 0.04}" y="${g.y + 0.04}" width="${g.w - 0.08}" height="${g.h - 0.08}" rx="0.15" />
@@ -1661,6 +1670,7 @@ function homelandSvg(layout, homeLevel) {
         <g class="layout-plots">${plotShapes}</g>
         <g class="layout-coverage">${coverageShapes}</g>
         <g class="layout-power-ranges" pointer-events="none">${powerCoverage}</g>
+        ${connectionSpaces}
         ${shapes}
         ${generatorShapes}
         <g class="layout-coverage-edges" pointer-events="none">${coverageEdges}</g>

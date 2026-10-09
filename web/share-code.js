@@ -97,6 +97,10 @@ function validateLayout(drawn) {
         if (!Array.isArray(layout.generators) || layout.generators.length > 20) throw new Error('invalid layout generators');
         layout.generators.forEach(g => { rectangle(g); rectangle(g.coverage); });
     }
+    if (layout.powerSpaces !== undefined) {
+        if (!Array.isArray(layout.powerSpaces) || layout.powerSpaces.length > 4000) throw new Error('invalid connection spaces');
+        layout.powerSpaces.forEach(rectangle);
+    }
     // Imported coordinates and metadata are eventually rendered in SVG attributes. Reject
     // unexpected markup as well as non-finite numbers anywhere in the legacy snapshot.
     let nodes = 0;

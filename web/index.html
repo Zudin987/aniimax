@@ -437,6 +437,8 @@ Aniimo circles show the ability color and level. A ring means the personality bo
 
 Simulation follows completed batches into shared storage before starting downstream recipes. A ring shows batch progress; amber means waiting for materials.
 
+Generator placement and direct coverage are considered before estimated walking. Power gap reserves ground beside E-Mode machines and generators; machines beyond the 11×11 generator range still need Power Poles.
+
 Hauling travel time, carry capacity and obstacle pathfinding are not simulated. Walking is an estimate; this layout is not proven to be the shortest possible." aria-label="About Homeland Layout" aria-controls="context-help" aria-expanded="false"><span aria-hidden="true">i</span></button></h2>
                         <p class="hint" id="layout-summary"></p>
                         <div class="layout-controls">
@@ -446,6 +448,15 @@ Hauling travel time, carry capacity and obstacle pathfinding are not simulated. 
                                 <span class="setting-with-help"><label class="layout-storage-control">Storage Units
                                     <input type="number" id="layout-storage-count" aria-label="Storage Units in layout" value="2" min="1" max="24" step="1">
                                 </label><button type="button" class="info-button" data-help="Use the number of Storage Units you can place in game. The layout spreads them through production demand and repacks busy facilities around them. Verified RV placement limits are applied automatically." aria-label="About Storage Units" aria-controls="context-help" aria-expanded="false"><span aria-hidden="true">i</span></button></span>
+                                <span class="setting-with-help"><label class="layout-power-control" for="layout-power-gap">Power gap
+                                    <select id="layout-power-gap">
+                                        <option value="0">None</option>
+                                        <option value="0.5">0.5 tile</option>
+                                        <option value="1">1 tile</option>
+                                        <option value="1.5" selected>1.5 tiles</option>
+                                        <option value="2">2 tiles</option>
+                                    </select>
+                                </label><button type="button" class="info-button" data-help="Leaves an empty square beside each E-Mode machine and generator for connections. Amber outlines mark this space. Larger gaps can increase hauling distance. Check the Power Pole footprint and range in game, and choose enough space for your connections." aria-label="About Power gap" aria-controls="context-help" aria-expanded="false"><span aria-hidden="true">i</span></button></span>
                             </span>
                             <span class="layout-actions">
                                 <button type="button" class="toggle-button small" id="layout-copy-code">Copy layout-only code</button>
