@@ -12,6 +12,9 @@ import { createShareUrl, readShareHash, urlWithoutShare } from './share-config.j
 import { normalizeSetupSettings } from './setup-config.js';
 import { harvestBudgetStatus } from './harvest-budget.js';
 import { festivalCraftChecklist } from './festival-crafting.js';
+import { infoButton, initContextHelp } from './context-help.js';
+
+initContextHelp();
 
 let wasmReady = false;
 
@@ -281,7 +284,7 @@ function renderFacilityCards() {
     grid.innerHTML = FACILITY_CATEGORIES.map(category => {
         const cards = FACILITIES.filter(f => f.category === category).map(f => `
             <div class="facility-card">
-                <h4>${f.name} <span class="info-icon" data-tooltip="${f.tooltip}">?</span></h4>
+                <h4>${f.name} ${infoButton(f.name, f.tooltip.replaceAll('&#10;', '\n'))}</h4>
                 <div class="facility-tiers" data-facility="${f.name}"></div>
                 ${f.hasLevels === false ? '' : '<button type="button" class="add-tier-btn" data-facility="' + f.name + '">+ Add level</button>'}
             </div>
@@ -2104,18 +2107,17 @@ function renderRoster() {
                     <span class="roster-count" title="How many you have that are alike"><button type="button" data-count="${i}|-1" aria-label="One fewer">−</button><span>×${aniimo.count}</span><button type="button" data-count="${i}|1" aria-label="One more">+</button></span>
                     <button type="button" class="roster-x" data-remove="${i}" aria-label="Remove this Aniimo" title="Remove">✕</button>
                 </div>
-                <label class="roster-family-label">Family
+                <div class="roster-family-control"><label class="roster-family-label">Family
                     <select class="roster-family" data-family="${i}" aria-label="Aniimo family">
                         <option value="">Other / unspecified</option>
                         ${ANIIMO_FAMILIES.map(family => `<option value="${family}"${aniimo.family === family ? ' selected' : ''}>${family}</option>`).join('')}
                     </select>
-                </label>
+                </label>${infoButton('Aniimo family', 'Family matters for Leisure stations: Susuta → Sandcastle, Dewy → Dewy House, Nimbi → Nimbus Bed, Celestis → Starfall Hammock. Choose the family for evolved Aniimo too. Other / unspecified can work ordinary jobs, but cannot staff these four stations.')}</div>
                 <div class="roster-abilities">${abilities}${add}</div>
                 <div class="roster-personalities">${personalities}</div>
             </div>`;
     }).join('');
     editor.innerHTML = `${cards || '<p class="hint small">No Aniimo yet. Add the ones you have, or start from the Best plan\'s team.</p>'}
-        <p class="hint small">Family matters for Leisure stations: Susuta → Sandcastle, Dewy → Dewy House, Nimbi → Nimbus Bed, Celestis → Starfall Hammock. Choose the family for evolved Aniimo too. Other / unspecified can work ordinary jobs, but cannot staff these four stations.</p>
         <div class="roster-actions">
             <button type="button" class="skip-add-btn" data-roster="add">+ Add Aniimo</button>
             ${lastBestTeam?.length ? '<button type="button" class="skip-add-btn" data-roster="from-best">Start from the Best team</button>' : ''}
@@ -2243,7 +2245,7 @@ function renderRosterSummary(plan) {
     const dailyFood = have * 10 * 60 * 24;
     document.getElementById('aniimo-summary').innerHTML = roster.length
         ? `<table class="aniimo-table"><thead><tr><th>Aniimo</th><th>How many</th><th>Busy on average</th><th>Where</th></tr></thead><tbody>${rows}</tbody></table>
-           <p class="hint small">${working} of your ${have} Aniimo have work in this plan. All ${have} residents still eat: about <strong>${formatNumber(dailyFood)} food Energy/day</strong> at 10 Energy/min each. The calculator assumes the food bowl stays stocked; an empty bowl drops Aniimo work to 20%.</p>`
+           <p class="hint small">${working} of ${have} Aniimo working · <strong>${formatNumber(dailyFood)} food Energy/day</strong> ${infoButton('Food Energy', 'All residents eat 10 Energy/min, even while idle. The calculator assumes the food bowl stays stocked; an empty bowl drops Aniimo work to 20%.')}</p>`
         : '<p class="hint">Add the Aniimo you have under My Aniimo to plan with them.</p>';
     document.getElementById('aniimo-collapsed-summary').textContent = '';
     document.getElementById('aniimo-abilities').innerHTML = '';
@@ -2336,10 +2338,9 @@ async function renderFestivalChecklist() {
         const rows = values => values.map(r => `<tr><td>${prettyItem(r.name)}<br><span class="hint small">${r.facility} Lv.${r.facilityLevel}</span></td><td>${r.need}</td><td>${r.produced}<br><span class="hint small">${r.batches} batches</span></td></tr>`).join('');
         const table = values => `<table class="level-up-lines"><thead><tr><th>Item / facility</th><th>Needed</th><th>Produce</th></tr></thead><tbody>${rows(values)}</tbody></table>`;
         result.innerHTML = `${list.blocked.length ? `<p class="warning">Check before crafting: ${list.blocked.map(prettyItem).join('; ')}.</p>` : ''}
-            <p class="hint small">${list.wheat} Moonray Wheat for event seeds. Standard crops; mutations are not guaranteed.</p>
+            <p class="hint small">${list.wheat} Moonray Wheat for event seeds. ${infoButton('Checklist seed cost', 'Assumes standard crops. Mutations are not guaranteed.')}</p>
             <p class="assume-title">Gather first</p>${table(list.raw)}
-            <p class="assume-title">Craft in this order</p>${table(list.steps)}
-            <p class="hint small">Keep the requested amount of each dish; use surplus in later steps. Checklist only: inventory, workers and completion time are not calculated.</p>`;
+            <p class="assume-title">Craft in this order</p>${table(list.steps)}`;
     } catch (error) { result.textContent = error.message; }
 }
 
@@ -2839,7 +2840,7 @@ function renderLevelUp(plan) {
     label.textContent = `Resources for RV ${context.target}`;
     const timer = LEVEL_UP_TIMERS[context.target];
     document.getElementById('level-up-prerequisites').textContent =
-        `This is time to afford the upgrade. Meet placement, habitability, title and quest requirements in game.${timer ? ` RV ${context.target} then has a ${formatDuration(timer)} upgrade timer after you start it.` : ''}`;
+        timer ? `${formatDuration(timer)} in-game upgrade timer after you start it.` : '';
     const report = plan.level_up;
     if (context.unavailable) {
         time.textContent = '-';
@@ -2930,7 +2931,7 @@ function renderSeedTable(plan) {
     const per = levelUp
         ? `until RV ${planContext.target}`
         : { second: 'per second', minute: 'per minute', hour: 'per hour', day: 'per day' }[unit] || 'per second';
-    document.getElementById('seed-card-unit').textContent = `Seeds ${per}: one per planting, for every Farmland and Woodland crop in the plan.`;
+    document.getElementById('seed-card-unit').textContent = `Seeds ${per}.`;
     el.innerHTML = `
         <table>
             <thead><tr><th>Crop</th><th>Plots</th><th>Seeds</th><th>Cost</th></tr></thead>
@@ -3523,7 +3524,7 @@ function renderAniimoSummary(plan) {
             return `<tr><td data-label="Aniimo">${abilityTag(g.ability)} ${aniimoNeeds(g)}</td><td data-label="How many">${g.count}</td><td data-label="Busy on average">${g.busy.toFixed(1)}</td><td data-label="Where">${where}</td></tr>`;
         })
         .join('');
-    const haulingRow = `<tr><td data-label="Aniimo">${abilityTag('Hauling')} any level</td><td data-label="How many">1+</td><td data-label="Busy on average">?</td><td data-label="Where">Carries produce to storage. How much work this is isn't known yet; add more if produce piles up.</td></tr>`;
+    const haulingRow = `<tr><td data-label="Aniimo">${abilityTag('Hauling')} any level</td><td data-label="How many">1+</td><td data-label="Busy on average">?</td><td data-label="Where">Carries produce to storage. ${infoButton('Hauling', "The amount of hauling work is not known yet. Add more Aniimo if produce piles up.")}</td></tr>`;
 
     // The count above says how many; this is only said when it's more than the homeland holds.
     const cap = homelandHolds;
@@ -3586,7 +3587,7 @@ function renderAniimoSummary(plan) {
         </div>
         ${capNote}
         ${cap && total < cap ? `<p class="hint">${cap - total} Aniimo slot${cap - total === 1 ? '' : 's'} available for other Homeland stations, including stations that earn stars for decorations.</p>` : ''}
-        <p class="hint small">The shown minimum team consumes about <strong>${formatNumber(minimumFood)} food Energy/day</strong> at 10 Energy/min per Aniimo. Every extra resident also eats even while idle. Production assumes the food bowl stays stocked; an empty bowl drops Aniimo work to 20%.</p>
+        <p class="hint small"><strong>${formatNumber(minimumFood)} food Energy/day</strong> for this team. ${infoButton('Food Energy', 'Each Aniimo eats 10 Energy/min. Extra residents also eat while idle. Production assumes a stocked food bowl; an empty bowl drops Aniimo work to 20%.')}</p>
     `;
 }
 
@@ -4635,7 +4636,7 @@ function renderRecipeTables(recipes) {
             const cell = (label, value) => `<td data-label="${label}"${value === '-' ? ' class="empty"' : ''}>${value}</td>`;
             const rows = byFacility.get(f.name).map(r => `
                 <tr${r.verified === false ? ' class="unverified"' : ''}>
-                    <td class="recipe-name">${prettyItem(r.name)}${SPECIAL_NAMES.has(r.name) ? ' <span class="tag special" title="Takes a rare currency to unlock">special</span>' : ''}${r.season ? ` <span class="tag special" title="${SEASON.name} only">season</span>` : ''}${r.verified === false ? ' <span class="info-icon" data-tooltip="Not yet checked in game.">?</span>' : ''}</td>
+                    <td class="recipe-name">${prettyItem(r.name)}${SPECIAL_NAMES.has(r.name) ? ' <span class="tag special" title="Takes a rare currency to unlock">special</span>' : ''}${r.season ? ` <span class="tag special" title="${SEASON.name} only">season</span>` : ''}${r.verified === false ? infoButton('Unverified recipe', 'Not yet checked in game.') : ''}</td>
                     ${cell('Level', r.facility_level)}
                     ${cell('Inputs', formatRecipeInputs(r))}
                     ${cell('Yield', formatRecipeYield(r))}
@@ -4657,10 +4658,10 @@ function renderRecipeTables(recipes) {
                                     <th>Level</th>
                                     <th>Inputs</th>
                                     <th>Yield</th>
-                                    <th>Time <span class="info-icon" data-tooltip="Grow time for crops and trees, before watering takes an eighth off it twice. Everything else lists workload: at 100% Efficiency a processor gets through one workload a second, a gathering facility 1.25 on a level-2 recipe and 1.5 on a level-3 one. An Aniimo at the level a recipe needs works at 100%; higher levels are faster, up to level 4 (at a processor, 300% one level above, then +100% per level; at gathering facilities each level adds half a workload a second, reading as +50% on a level-1 recipe, +40% on a level-2 one and +33% on a level-3 one).">?</span></th>
+                                    <th>Time ${infoButton("Time", "Grow time for crops and trees, before watering takes an eighth off it twice. Everything else lists workload: at 100% Efficiency a processor gets through one workload a second, a gathering facility 1.25 on a level-2 recipe and 1.5 on a level-3 one. An Aniimo at the level a recipe needs works at 100%; higher levels are faster, up to level 4 (at a processor, 300% one level above, then +100% per level; at gathering facilities each level adds half a workload a second, reading as +50% on a level-1 recipe, +40% on a level-2 one and +33% on a level-3 one).")}</th>
                                     <th>Sell</th>
                                     <th>Module</th>
-                                    <th>Aniimo <span class="info-icon" data-tooltip="The lowest ability level that can make this, and the best Aniimo for it: level 4, the top, with the facility's personality (+20% speed). For crops and trees, the ability each job needs, in order.">?</span></th>
+                                    <th>Aniimo ${infoButton("Aniimo", "The lowest ability level that can make this, and the best Aniimo for it: level 4, the top, with the facility's personality (+20% speed). For crops and trees, the ability each job needs, in order.")}</th>
                                 </tr>
                             </thead>
                             <tbody>${rows}</tbody>
@@ -4813,8 +4814,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 // --- Hover tips --------------------------------------------------------------------------
 // One card for hover tips, shown at once instead of after the browser's delay. Diagram pieces
 // carry `data-tip` (see `tipAttrs`); anything else with a `title` shows it in the same card, the
-// title moved aside so the browser's own tip doesn't show as well. (The info icons' `data-tooltip`
-// is a CSS tip of its own; see style.css.)
+// title moved aside so the browser's own tip doesn't show as well. Setting and section help
+// uses the accessible info buttons in context-help.js.
 const tipCard = document.createElement('div');
 tipCard.className = 'tip-card';
 tipCard.setAttribute('role', 'tooltip');

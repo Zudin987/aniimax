@@ -59,6 +59,44 @@ try {
     await page.evaluate(({ key, saved }) => localStorage.setItem(key, JSON.stringify(saved)), { key, saved });
     await page.reload();
     await page.waitForFunction(() => document.getElementById('version').textContent.includes('0.16.0'));
+    const helpCard = page.locator('#context-help');
+    const rvHelp = page.getByRole('button', { name: 'About RV level', exact: true });
+    const beforeHelp = await config();
+    // Hover help stays readable when the pointer enters the card, and closes on leaving.
+    await rvHelp.hover();
+    await helpCard.waitFor({ state: 'visible' });
+    assert.match(await helpCard.innerText(), /every facility.*RV level/);
+    const hoverBox = await helpCard.boundingBox();
+    await page.mouse.move(hoverBox.x + hoverBox.width / 2, hoverBox.y + hoverBox.height / 2);
+    await page.waitForTimeout(200);
+    assert.equal(await helpCard.isVisible(), true, 'the help card must be hoverable');
+    await page.mouse.move(2, 2);
+    await helpCard.waitFor({ state: 'hidden' });
+    // Focus announces the help; Escape and Tab dismiss it without changing the form.
+    await rvHelp.focus();
+    assert.equal(await helpCard.isVisible(), true);
+    assert.equal(await rvHelp.getAttribute('aria-describedby'), 'context-help');
+    await page.keyboard.press('Escape');
+    assert.equal(await helpCard.isVisible(), false);
+    assert.equal(await rvHelp.getAttribute('aria-expanded'), 'false');
+    assert.equal(await rvHelp.getAttribute('aria-describedby'), null);
+    await rvHelp.click();
+    await page.mouse.move(2, 2);
+    await page.waitForTimeout(200);
+    assert.equal(await helpCard.isVisible(), true, 'click keeps help open after the pointer leaves');
+    await rvHelp.click();
+    assert.equal(await helpCard.isVisible(), false, 'a second click closes help');
+    await rvHelp.click();
+    await page.keyboard.press('Tab');
+    await helpCard.waitFor({ state: 'hidden' });
+    await page.getByRole('button', { name: 'About Aniimo Team', exact: true }).click();
+    assert.match(await helpCard.innerText(), /Best.*My Aniimo.*Minimum/s);
+    assert.equal(await page.locator('#aniimo-toggle').getAttribute('aria-expanded'), 'false',
+        'team help must not expand the team section');
+    await page.mouse.click(2, 2);
+    assert.equal(await helpCard.isVisible(), false, 'clicking outside dismisses help');
+    assert.deepEqual(await config(), beforeHelp, 'reading help must preserve saved settings');
+    assert.equal(await page.locator('#results-section').isVisible(), false, 'help must not calculate');
     // Exercise the deployed worker, WASM metadata and exact roster planner together.
     const evidence = await page.evaluate(async () => {
         const worker = new Worker('./worker.js', { type: 'module' });
@@ -124,11 +162,35 @@ try {
     assert.equal((await config())['target-amount'], '123');
     assert.deepEqual((await config()).skippedRecipes, ['quick_potato']);
     assert.equal(await page.locator('#results-section').isVisible(), false, 'Import must not calculate');
-    await page.locator('#emode-rules summary').click();
-    assert.match(await page.locator('#emode-rules').innerText(), /Mine, Well/);
-    assert.match(await page.locator('#emode-rules').innerText(), /Rough Lumber.*Coarse-Sifted Ore/);
+    await page.locator('#force-emode-info').click();
+    assert.match(await page.locator('#context-help').innerText(), /Mine, Well/);
+    assert.match(await page.locator('#context-help').innerText(), /Rough Lumber.*Coarse-Sifted Ore/);
     assert.equal((await config())['force-e-mode'], true, 'reading the rules must preserve imported settings');
-    await page.locator('#emode-rules summary').click();
+    await page.keyboard.press('Escape');
+    const mineHelp = page.getByRole('button', { name: 'About Mine', exact: true });
+    await mineHelp.click();
+    assert.match(await helpCard.innerText(), /Lv\.1: Rock\nLv\.2: Clay/,
+        'generated facility buttons must preserve multiline help');
+    await page.keyboard.press('Escape');
+    const strategyHelp = page.getByRole('button', { name: 'About Strategy', exact: true });
+    await strategyHelp.click();
+    assert.match(await helpCard.innerText(), /95%/);
+    await page.keyboard.press('Escape');
+    await page.locator('#rv-order-variety').uncheck();
+    await strategyHelp.click();
+    assert.match(await helpCard.innerText(), /Fastest level-up with E-Mode/,
+        'dynamic help must use the current settings, rather than cached text');
+    await page.keyboard.press('Escape');
+    await page.locator('#rv-order-variety').check();
+    await page.locator('#facilitiesToggle').click();
+    const recipeTimeHelp = page.locator('#facilitiesModal').getByRole('button', { name: 'About Time', exact: true }).first();
+    await recipeTimeHelp.click();
+    assert.match(await helpCard.innerText(), /Grow time.*workload/s);
+    await page.keyboard.press('Escape');
+    assert.equal(await page.locator('#facilitiesModal').isVisible(), true,
+        'Escape closes help before closing its parent modal');
+    await page.keyboard.press('Escape');
+    assert.equal(await page.locator('#facilitiesModal').isVisible(), false);
     await page.reload();
     await page.waitForFunction(() => document.getElementById('version').textContent.includes('0.16.0'));
     await page.locator('#setup-import-code').waitFor();
@@ -163,24 +225,48 @@ try {
     const beforeDetails = await config();
     assert.equal(await page.locator('#season-details p').first().isVisible(), false,
         'crafting details should be collapsed so the setup stays concise');
-    await page.locator('#season-details summary').click();
-    assert.equal(await page.locator('#season-details p').first().isVisible(), true);
-    assert.match(await page.locator('#season-details').innerText(), /Sugarcane, Moondew Radish, Waxing Moon Pepper, Apple, Fresh Water and Sea Salt/);
-    await page.locator('#season-details summary').click();
+    await page.locator('#season-info').click();
+    assert.equal(await page.locator('#context-help').isVisible(), true);
+    assert.match(await page.locator('#context-help').innerText(), /Sugarcane, Moondew Radish, Waxing Moon Pepper, Apple, Fresh Water and Sea Salt/);
+    await page.keyboard.press('Escape');
     assert.deepEqual(await config(), beforeDetails, 'reading help must not change the setup');
     await page.locator('#season-section').screenshot({ path: 'test-results/harvest-setup-desktop.png' });
     await page.setViewportSize({ width: 390, height: 844 });
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), false,
         'the compact Harvest Moon setup must fit on mobile');
-    const budgetHelp = await page.locator('#season-budget-help').boundingBox();
+    const budgetInput = await page.locator('#season-wheat-budget').boundingBox();
     const plotLabel = await page.locator('label[for="season-mutation-plots"]').boundingBox();
-    const plotHelp = await page.locator('#season-mutation-help').boundingBox();
+    const plotInput = await page.locator('#season-mutation-plots').boundingBox();
     const budgetNote = await page.locator('#season-budget-note').boundingBox();
-    assert.ok(plotLabel.y - budgetHelp.y - budgetHelp.height < 40,
+    assert.ok(plotLabel.y - budgetInput.y - budgetInput.height < 40,
         'stacked controls must not keep a desktop flex basis as empty vertical space');
-    assert.ok(budgetNote.y - plotHelp.y - plotHelp.height < 40,
+    assert.ok(budgetNote.y - plotInput.y - plotInput.height < 40,
         'the budget summary must sit close to the controls');
     await page.locator('#season-section').screenshot({ path: 'test-results/harvest-setup-mobile.png' });
+    // A real touch context verifies tap-to-toggle and viewport-safe positioning.
+    const touchContext = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    const touchPage = await touchContext.newPage();
+    touchPage.on('pageerror', error => errors.push(error.message));
+    await touchPage.route('https://cdn.jsdelivr.net/**', route => route.abort());
+    await touchPage.goto(base);
+    await touchPage.waitForFunction(() => document.getElementById('version').textContent.includes('0.16.0'));
+    const touchHelp = touchPage.getByRole('button', { name: 'About RV level', exact: true });
+    const touchCard = touchPage.locator('#context-help');
+    await touchHelp.tap();
+    assert.equal(await touchCard.isVisible(), true);
+    const touchBox = await touchCard.boundingBox();
+    assert.ok(touchBox.x >= 0 && touchBox.x + touchBox.width <= 390,
+        'help must fit inside the mobile viewport');
+    assert.ok(touchBox.y >= 0 && touchBox.y + touchBox.height <= 844);
+    await touchPage.screenshot({ path: 'test-results/context-help-mobile.png' });
+    await touchHelp.tap();
+    assert.equal(await touchCard.isVisible(), false, 'a second tap closes help');
+    await touchHelp.tap();
+    await touchPage.touchscreen.tap(2, 2);
+    assert.equal(await touchCard.isVisible(), false, 'an outside tap closes help');
+    assert.equal(await touchPage.locator('#home-level').inputValue(), '2');
+    assert.equal(await touchPage.locator('#results-section').isVisible(), false);
+    await touchContext.close();
     await page.setViewportSize({ width: 1000, height: 900 });
     await page.locator('#season-mutation-plots').fill('2');
     assert.match(await page.locator('#season-budget-note').innerText(), /Budget conflict.*768/);
@@ -424,7 +510,9 @@ try {
     assert.equal(await page.locator('#level-up-label').textContent(), 'Resources for RV 14');
     assert.equal(await page.locator('#level-up-time').innerText(), 'Ready now');
     assert.match(await page.locator('#level-up-prerequisites').innerText(), /6h.*upgrade timer/);
-    assert.match(await page.locator('#level-up-prerequisites').innerText(), /placement, habitability, title and quest/);
+    await page.getByRole('button', { name: 'About RV upgrade time', exact: true }).click();
+    assert.match(await page.locator('#context-help').innerText(), /placement, habitability, title and quest/);
+    await page.keyboard.press('Escape');
     assert.match(await page.locator('#layout-storage-hint').innerText(), /RV 13.*at most 5.*uses 5 of the 6/);
     await page.waitForFunction(() => document.querySelector('#layout-diagram svg'));
     assert.equal(await page.locator('#layout-diagram .layout-storages > g').count(), 5,
