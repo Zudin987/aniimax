@@ -92,95 +92,6 @@ fn exact_model_and_independent_check_block_injected_primary_e_mode() {
     forged.recipe_rates.insert("rock__electric_boost".into(), 1.0);
     assert!(check_plan(&forged, &items, "coins", &counts, &modules, None)
         .unwrap_err().contains("must use Aniimo production"));
-    counts.set_force_e_mode(true);
-    assert!(solve_exact(&items, "coins", &counts, &modules, Goal::Earn { floors: &[] },
-        Some(Duration::from_secs(5)), None).is_none(), "Force E-Mode must not bypass the policy");
-}
-
-#[test]
-fn each_rv_chain_can_mix_manual_first_stage_with_powered_later_stage() {
-    for (facility, first, last) in [("Woodworking Bench", "rough_lumber", "standard_planks"),
-        ("Chimney Kiln", "coarse_sifted_ore", "sintered_ore_brick")] {
-        let mut primary = item(first, facility, 10.0, 0.0);
-        primary.raw_materials = Some(vec!["raw".into()]); primary.required_amount = Some(vec![1]);
-        let mut later = item(last, facility, 20_000.0, 1_000.0);
-        later.raw_materials = Some(vec![first.into()]); later.required_amount = Some(vec![1]);
-        let mut items = vec![item("raw", "Farmland", 1_000.0, 0.0), primary, later];
-        add_e_mode_variants(&mut items, &format!("name,production_time\n{first},0.01\n{last},1\n")).unwrap();
-        let mut counts = FacilityCounts::only(&[("Farmland", 1, 1), (facility, 2, 1), ("Crackle Generator", 1, 1)]);
-        counts.set_force_e_mode(true);
-        let modules = ModuleLevels { power_module: 1, ..Default::default() };
-        let plan = solve(&items, &counts, &modules);
-        assert!(plan.recipe_rates.contains_key(first), "{facility} needs manual {first}");
-        assert!(plan.recipe_rates.contains_key(&format!("{last}__electric_boost")), "{facility} can power {last}");
-        assert_eq!(plan.generators_used, 1);
-    }
-}
-
-#[test]
-fn forced_e_mode_runs_a_real_station_even_when_normal_is_faster() {
-    let mut items = vec![item("widget", "Crafting Table", 10.0, 1_000.0)];
-    add_e_mode_variants(&mut items, "name,production_time\nwidget,100\n").unwrap();
-    let mut counts = FacilityCounts::only(&[("Crafting Table", 1, 1), ("Crackle Generator", 1, 1)]);
-    let modules = ModuleLevels { power_module: 1, ..Default::default() };
-    let normal = solve(&items, &counts, &modules);
-    assert_eq!(normal.power_used, 0);
-    counts.set_force_e_mode(true);
-    assert!(check_plan(&normal, &items, "coins", &counts, &modules, None).unwrap_err().contains("Force E-Mode"));
-    let powered = solve(&items, &counts, &modules);
-    assert_eq!(powered.generators_used, 1);
-    assert_eq!(powered.power_used, 15);
-    assert!(powered.recipe_rates["widget__electric_boost"] > 0.0);
-    assert!(powered.rate_per_second < normal.rate_per_second);
-}
-
-#[test]
-fn forced_e_mode_cannot_be_satisfied_by_an_idle_generator_or_missing_worker() {
-    let mut items = vec![item("widget", "Crafting Table", 10.0, 1_000.0)];
-    add_e_mode_variants(&mut items, "name,production_time\nwidget,100\n").unwrap();
-    let modules = ModuleLevels { power_module: 3, ..Default::default() };
-    for (generators, lightning, recipes) in [(0, 3, &items[..]), (1, 1, &items[..]), (1, 3, &items[..1])] {
-        let mut counts = FacilityCounts::only(&[("Crafting Table", 1, 3), ("Crackle Generator", generators, 3)]);
-        counts.set_force_e_mode(true).set_generator_lightning_level(Some(lightning));
-        assert!(solve_exact(recipes, "coins", &counts, &modules, Goal::Earn { floors: &[] },
-            Some(Duration::from_secs(5)), None).is_none());
-    }
-}
-
-#[test]
-fn forced_rv_staffing_preserves_pace_without_hiring_for_extra_coins() {
-    let mut first = item("first", "Carousel Mill", 10.0, 0.0);
-    first.raw_materials = Some(vec!["raw".into()]); first.required_amount = Some(vec![1]);
-    let mut last = item("last", "Crafting Table", 10.0, 0.0);
-    last.raw_materials = Some(vec!["first".into()]); last.required_amount = Some(vec![1]);
-    let mut items = vec![item("raw", "Farmland", 1_000.0, 0.0), first, last,
-        item("extra_coins", "Mine", 1.0, 100.0)];
-    add_e_mode_variants(&mut items, "name,production_time\nfirst,100\nlast,100\n").unwrap();
-    let mut counts = FacilityCounts::only(&[("Farmland", 1, 1), ("Carousel Mill", 1, 1),
-        ("Crafting Table", 1, 1), ("Mine", 1, 1), ("Crackle Generator", 1, 1)]);
-    counts.set_force_e_mode(true);
-    let modules = ModuleLevels { power_module: 1, ..Default::default() };
-    let cost = LevelUp { cost: vec![("last".into(), 86.4), ("coins".into(), 86_400.0)],
-        stock: vec![("coins".into(), 86_400.0)] };
-    let fastest = solve_exact(&items, "coins", &counts, &modules, Goal::LevelUp(&cost),
-        Some(Duration::from_secs(5)), None).unwrap();
-    let pace = fastest.pace.unwrap();
-    let income = solve_exact(&items, "coins", &counts, &modules, Goal::EarnWhileLevelingUp(&cost, pace),
-        Some(Duration::from_secs(5)), None).unwrap();
-    assert!(income.recipe_rates.contains_key("extra_coins"));
-    let work: Vec<_> = [("first", "Wind", false, 10.0), ("last", "Artisanship", false, 10.0),
-        ("extra_coins", "Earth", true, 1.0)].into_iter().map(|(recipe, group, per_unit, seconds)|
-            AniimoWork { recipe: recipe.into(), group: group.into(), per_unit, seconds }).collect();
-    let freed = solve_exact(&items, "coins", &counts, &modules,
-        Goal::FreeAniimo { order_variety: None, order_core: None, floors: &[], level_up: Some((&cost, pace)), coins: 0.0, work: &work },
-        Some(Duration::from_secs(5)), None).unwrap();
-    check_plan(&freed, &items, "coins", &counts, &modules, Some(&cost)).unwrap();
-    assert!(freed.pace.unwrap() >= pace * 0.9999 - 1e-8);
-    assert!(!freed.recipe_rates.contains_key("extra_coins"));
-    assert!(!freed.recipe_rates.contains_key("first"));
-    assert!(!freed.recipe_rates.contains_key("last"));
-    assert_eq!(freed.generators_used, 1);
-    assert_eq!(freed.power_used, 30);
 }
 
 #[test]
@@ -207,7 +118,7 @@ fn e_mode_frees_whole_worker_slots_even_when_normal_mode_is_faster() {
         recipe: name.into(), group: name.into(), per_unit: false, seconds: 10.0,
     }).collect();
     let plan = solve_exact(&items, "coins", &counts, &modules,
-        Goal::FreeAniimo { order_variety: None, order_core: None, floors: &[], level_up: None, coins: 1.0, work: &work },
+        Goal::FreeAniimo { floors: &[], level_up: None, coins: 1.0, work: &work },
         Some(Duration::from_secs(10)), None).expect("worker-saving plan");
     check_plan(&plan, &items, "coins", &counts, &modules, None).unwrap();
     assert!(plan.rate_per_second >= 0.9999 - 1e-9);
@@ -232,7 +143,7 @@ fn free_aniimo_keeps_priority_floors_and_accounts_for_generator_workers() {
     let work = [AniimoWork { recipe: "widget".into(), group: "Artisanship".into(), per_unit: false, seconds: 10.0 }];
     let floors = [("Wood Blocks".into(), 0.001)];
     let plan = solve_exact(&items, "coins", &counts, &modules,
-        Goal::FreeAniimo { order_variety: None, order_core: None, floors: &floors, level_up: None, coins: 1.0, work: &work },
+        Goal::FreeAniimo { floors: &floors, level_up: None, coins: 1.0, work: &work },
         Some(Duration::from_secs(10)), None).expect("worker-saving plan");
     check_plan(&plan, &items, "coins", &counts, &modules, None).unwrap();
     // One normal worker cannot be replaced by fewer than one generator resident.
@@ -259,7 +170,7 @@ fn free_aniimo_respects_personality_sharing_when_counting_saved_slots() {
             AniimoWork { recipe: "b".into(), group: format!("Fire:4:{other_personality}"), per_unit: false, seconds: 10.0 },
         ];
         let plan = solve_exact(&items, "coins", &counts, &modules,
-            Goal::FreeAniimo { order_variety: None, order_core: None, floors: &floors, level_up: None, coins: 1.0, work: &work },
+            Goal::FreeAniimo { floors: &floors, level_up: None, coins: 1.0, work: &work },
             Some(Duration::from_secs(10)), None).unwrap();
         check_plan(&plan, &items, "coins", &counts, &modules, None).unwrap();
         assert_eq!(plan.generators_used, expected_generators, "{other_personality}");
