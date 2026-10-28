@@ -83,7 +83,7 @@ const poweredInput = { ...input, aniimo: 'roster',
         { count: 2, abilities: { Water: 2 }, personalities: [] }, team.members[1]], residents } };
 const powered = JSON.parse(await plan(pkg, JSON.stringify(poweredInput)));
 stockCheck(powered);
-assert.ok(powered.power_used >= 0, 'automatic E-Mode is optional and should not be forced');
+assert.ok(powered.power_used <= powered.power_capacity, 'automatic E-Mode draw must fit the configured grid');
 const water = powered.coin_items.find(row => row.status === 'producing' && row.facility === 'Well');
 assert.doesNotMatch(water.item_name, /__electric/);
 assert.notEqual(water.crew, null);
