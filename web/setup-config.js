@@ -2,8 +2,8 @@
 import { FACILITIES, MAX_HOME_LEVEL, PERSONALITY_PAIRS, ANIIMO_FAMILIES, SIMPLE_MODULE_FIELDS, MODULE_MAX_LEVELS, simpleSetup } from './facility-config.js';
 
 const BOOL_FIELDS = [
-    'strategy-level-up', 'strategy-priorities', 'force-e-mode', 'mode-simple', 'mode-advanced',
-    'rv-order-variety', 'simple-toolkit-upgrades', 'season-on', 'layout-sim-on', 'layout-whole', 'aniimo-best', 'aniimo-minimum', 'aniimo-custom',
+    'strategy-level-up', 'strategy-priorities', 'mode-simple', 'mode-advanced',
+    'simple-toolkit-upgrades', 'season-on', 'layout-sim-on', 'layout-whole', 'aniimo-best', 'aniimo-minimum', 'aniimo-custom',
 ];
 const NUMBER_FIELDS = {
     'target-amount': [0, 1e15], 'current-amount': [0, 1e15],
