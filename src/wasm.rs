@@ -1828,11 +1828,26 @@ impl PreparedInput {
         // These are mandatory ingredients even if Recipe Notes are unticked. Report missing
         // facilities, levels, skipped raw recipes or incompatible workers before solving.
         let all: std::collections::HashMap<&str, &ProductionItem> = items.iter().map(|item| (item.name.as_str(), item)).collect();
+        // A listed electric timer is not usable unless the grid can power it AND a Lightning
+        // worker can actually start at least one owned generator. Without this check the early
+        // Harvest Moon validation incorrectly accepts an unstaffed or unpowered Well as a raw
+        // fresh-water supplier, then fails later in the optimizer with a generic error.
+        let electric_available = crate::models::grid_power_capacity(&facility_counts, &module_levels) > 0
+            && facility_counts.tiers("Crackle Generator").into_iter().any(|(count, tier)| {
+                let needed = crate::models::generator_required_lightning_level(tier);
+                count > 0 && match &crew {
+                    Some(roster) => roster.members.iter().any(|member| member.count > 0
+                        && member.level("Lightning") >= needed),
+                    None => facility_counts.generator_lightning_level()
+                        .is_none_or(|level| level >= needed),
+                }
+            });
         let mut required: std::collections::BTreeMap<&str, Vec<(u32, u32)>> = std::collections::BTreeMap::new();
         for raw in facility_counts.harvest_order_items() {
             let available = items.iter().filter(|item| item.raw_materials.is_none()
                 && crate::exact::made_item(&item.name, &all) == raw
                 && item.production_time > 0.0
+                && (!crate::models::is_electric_item(&item.name) || electric_available)
                 && facility_counts.can_produce(&item.facility, item.facility_level)
                 && item.module_requirement.as_ref().is_none_or(|(module, level)| module_levels.can_use(module, *level)))
                 .min_by_key(|item| item.facility_level);
