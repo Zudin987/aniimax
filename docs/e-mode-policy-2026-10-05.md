@@ -10,10 +10,9 @@ keep Rough Lumber on Aniimo; at Chimney Kiln, keep Coarse-Sifted Ore on Aniimo.
 Later recipes at those two stations remain eligible for E-Mode, as do other
 processing stations with known E-Mode timers.
 
-The rule applies to all setup modes, goals and staffing refinements, including
-Force E-Mode. Variant loading, model construction and the independent plan
-check enforce it. Force E-Mode needs a remaining eligible job; it cannot use a
-protected job or an idle generator to satisfy the requirement.
+The rule applies to all setup modes, goals and automatic staffing refinements.
+Variant loading, model construction and independent plan checking enforce it.
+The planner chooses E-Mode only when it is useful for a valid production plan.
 
 Known timers in `data/e_mode.csv`, including the screenshot-verified 30-minute
 Quick Fresh Water timer, remain intact as in-game evidence. Saved/imported
