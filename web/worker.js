@@ -39,8 +39,6 @@ async function newHighs() {
 const EXACT_TIME_LIMIT = 30;
 // Staffing is a refinement of an already valid production plan, so keep its extra wait short.
 const STAFFING_TIME_LIMIT = 5;
-// Raw extras are optional and only fill spare units after the crafted plan is checked.
-const RAW_VARIETY_TIME_LIMIT = 5;
 
 // HiGHS options for every solve.
 const SOLVE_OPTIONS = { mip_rel_gap: 0, time_limit: EXACT_TIME_LIMIT };
@@ -99,13 +97,9 @@ async function exactPlanJson(pkg, payload, step = () => {}, first = () => {}) {
     const input = JSON.parse(payload);
     const inputError = pkg.plan_input_error && JSON.parse(pkg.plan_input_error(payload));
     if (inputError) throw Object.assign(new Error(inputError), { noFallback: true });
-    if (input.force_e_mode && (!(input.modules?.power_module > 0) ||
-        !(input.facilities?.['Crackle Generator'] || []).some(tier => tier.count > 0))) {
-        throw Object.assign(new Error('Force E-Mode requires a Power Module and at least one Crackle Generator. Configure them or turn off Force E-Mode.'), { noFallback: true });
-    }
     const infeasible = () => Object.assign(new Error(input.season_points_per_day > 0
         ? 'The minimum festival points cannot fit this setup and Wheat budget. Lower the minimum, raise the budget or check recipes and workers.'
-        : 'No plan can meet these production targets.'), { noFallback: !!(input.season || input.order_variety) });
+        : 'No plan can meet these production targets.'), { noFallback: !!input.season });
     const stage = { floors: [] };
     let allProven = true;
     for (const problem of JSON.parse(exact_byproduct_problems(payload))) {
@@ -144,59 +138,17 @@ async function exactPlanJson(pkg, payload, step = () => {}, first = () => {}) {
             levelUpNote = 'unreachable';
         }
     }
-    // With forced power, RV pace comes first and staffing comes next. Preserving the maximum
-    // *extra* coin income here would rehire workers the player wants to use at star stations.
-    const varietyActive = !!(input.order_variety && stage.pace);
-    const fastestPace = stage.pace;
-    let varietyProven = null;
-    let varietySolution = null;
-    if (varietyActive) {
-        stage.pace *= 0.95;
-        stage.order_variety = true;
-        step('variety', 'start');
-        const breadth = await solveModel(JSON.parse(exact_problem(payload, JSON.stringify(stage))));
-        step('variety', 'done', breadth?.proven);
-        if (!breadth) throw Object.assign(new Error('Could not build order variety at the RV pace. Turn off Add order variety or check your setup.'), { noFallback: true });
-        // Indicators are whole products. Numerical noise must not demand one extra product.
-        stage.variety_count = Math.max(0, Math.round(breadth.objective));
-        varietyProven = breadth.proven;
-        varietySolution = breadth;
-        allProven &&= breadth.proven;
-        // Protect checked solver allocations, including working rates and exact variant names.
-        // Display rows strip crew/environment suffixes and cannot identify those assignments.
-        const corePlan = JSON.parse(exact_plan(payload, JSON.stringify(stage),
-            JSON.stringify({ values: breadth.values, proven: breadth.proven, bound: 0 })));
-        if (!corePlan.success) throw Object.assign(new Error('Could not verify the crafted order plan. Please calculate again or turn off Add order variety.'), { noFallback: true });
-        stage.order_core = corePlan.order_allocations;
-        step('raw_variety', 'start');
-        const raw = await solveModel(JSON.parse(exact_problem(payload, JSON.stringify(stage))),
-            { ...SOLVE_OPTIONS, time_limit: RAW_VARIETY_TIME_LIMIT });
-        step('raw_variety', 'done', raw?.proven);
-        stage.order_core.minimum_raw = raw ? Math.max(0, Math.round(raw.objective)) : 0;
-        varietyProven &&= !!raw?.proven;
-        allProven &&= !!raw?.proven;
-        if (raw) varietySolution = raw;
-    }
-    const staffingFirst = !!(input.force_e_mode && stage.pace && !varietyActive);
-    if (staffingFirst) {
-        stage.free_aniimo = true;
-        stage.coins = 0;
-    }
     let stageJson = JSON.stringify(stage);
     let problem = JSON.parse(exact_problem(payload, stageJson));
     if (!problem.lp) throw new Error('this setup isn\'t covered by the exact planner');
     step('final', 'start');
     const alone = stage.floors.length === 0 && !stage.pace;
     let solved = await solveModel(problem);
-    // A harder coin refinement may time out before finding an incumbent. Keep the breadth
-    // allocation: these goals have identical variables and only change the objective/floor.
-    // exact_plan re-solves its rates and independently checks every limit before accepting it.
-    if (!solved && varietySolution) solved = { ...varietySolution, proven: false, objective: 0 };
     if (!solved) throw infeasible();
     if (alone) first({ measure: 'coins', objective: solved.objective, proven: solved.proven });
     let proven = solved.proven && allProven;
-    let bound = staffingFirst ? 0 : solved.objective;
-    if (!proven && !staffingFirst) {
+    let bound = solved.objective;
+    if (!proven) {
         // The same model without whole units: the most any plan could earn.
         const relaxed = (await newHighs()).solve(problem.lp.replace(/\nGeneral\n[\s\S]*\nEnd/, '\nEnd'), {});
         if (Number.isFinite(relaxed.ObjectiveValue)) {
@@ -216,14 +168,9 @@ async function exactPlanJson(pkg, payload, step = () => {}, first = () => {}) {
             plan = JSON.parse(json);
         }
     }
-    if (!plan.success && varietySolution) {
-        proven = false;
-        plan = JSON.parse(exact_plan(payload, stageJson,
-            JSON.stringify({ values: varietySolution.values, proven: false, bound })));
-    }
     if (!plan.success) throw new Error(plan.error || 'the plan failed its check');
 
-    if (plan.power_capacity > 0 && !staffingFirst) {
+    if (plan.power_capacity > 0) {
         // Preserve coins, priorities and the RV pace, then minimize the Aniimo team. This is
         // deliberately separate from maximizing production: slower E-Mode can still cover a
         // material-limited station and free its worker for a star-generating station.
@@ -247,7 +194,7 @@ async function exactPlanJson(pkg, payload, step = () => {}, first = () => {}) {
     }
     // Power-enabled plans prefer spare Aniimo slots over speculative extra stock. RV material
     // production still covers the selected pace, even if the staffing search runs out of time.
-    if (stage.pace && !(plan.power_capacity > 0) && !varietyActive) {
+    if (stage.pace && !(plan.power_capacity > 0)) {
         const stockJson = JSON.stringify({ ...stage, coins: plan.rate_per_second });
         step('stock_up', 'start');
         const stocked = await solveModel(JSON.parse(exact_problem(payload, stockJson)));
@@ -257,24 +204,7 @@ async function exactPlanJson(pkg, payload, step = () => {}, first = () => {}) {
         if (stockedPlan?.success) plan = stockedPlan;
     }
     step('check', 'done');
-    if (input.force_e_mode && !(plan.power_used > 0)) {
-        throw new Error('No working E-Mode station was found. Check your generators, Lightning Aniimo and available recipes, or turn off Force E-Mode.');
-    }
-    plan.e_mode_forced = !!input.force_e_mode;
-    if (staffingFirst) {
-        plan.staffing_first = true;
-        plan.workforce_optimized = true;
-        plan.staffing_proven = proven;
-        // This solve minimizes workers; its objective/bound are not a coin-income proof.
-        plan.proven_optimal = false;
-        delete plan.upper_bound;
-    }
     plan.level_up_note = levelUpNote;
-    if (varietyActive) {
-        plan.order_variety = { fastest_seconds: 86400 / fastestPace, minimum_pace: stage.pace,
-            count: plan.order_stock?.length || 0, processed_count: stage.order_core.processed_stock.length,
-            raw_count: (plan.order_stock?.length || 0) - stage.order_core.processed_stock.length, proven: varietyProven };
-    }
     return JSON.stringify(plan);
 }
 
@@ -365,8 +295,6 @@ self.onmessage = async (event) => {
                     result = JSON.stringify({ success: false, error: fallbackReason });
                 } else if (JSON.parse(payload).season) {
                     result = JSON.stringify({ success: false, error: `No Harvest Moon plan found: ${fallbackReason}. Check the required raw facilities and Aniimo team, Wheat cap and event plots, then calculate again. The backup planner cannot preserve order stock.` });
-                } else if (JSON.parse(payload).force_e_mode) {
-                    result = JSON.stringify({ success: false, error: `No forced E-Mode plan found: ${fallbackReason}. Check your power setup and Lightning Aniimo, or turn off Force E-Mode.` });
                 } else if (JSON.parse(payload).aniimo?.startsWith('roster')) {
                     console.warn('Exact planner failed on a roster:', error);
                     result = JSON.stringify({ success: false, error: `No plan found with these Aniimo: ${fallbackReason}.` });
