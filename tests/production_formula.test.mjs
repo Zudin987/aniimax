@@ -42,6 +42,23 @@ test('Ore and RV crafting tiers preserve verified input and byproduct math', () 
     }
 });
 
+
+test('Real E-Mode data enables fast RV stages and powered raw production', () => {
+    const timers = csv('e_mode');
+    const examples = { rough_lumber: 27, coarse_sifted_ore: 27, rock: 900,
+        clay: 1800, fresh_water: 1800, quick_fresh_water: 1800 };
+    for (const [name, expected] of Object.entries(examples)) {
+        assert.equal(Number(timers[name]?.production_time), expected, name);
+    }
+    for (const [name, row] of Object.entries(timers)) {
+        assert.ok(Number.isFinite(Number(row.production_time)) && Number(row.production_time) > 0,
+            `E-Mode timer ${name} must be finite and positive`);
+    }
+    const source = fs.readFileSync(new URL('../data/e_mode.csv', import.meta.url), 'utf8');
+    const names = source.trim().split(/\r?\n/).slice(1).map(line => line.split(',')[0]);
+    assert.equal(new Set(names).size, names.length, 'E-Mode source cannot contain duplicate recipe names');
+});
+
 test('Deprecated options have no frontend or planner entry points', () => {
     const files = ['web/index.html', 'web/app.js', 'web/worker.js', 'web/setup-config.js',
         'src/wasm.rs', 'src/exact.rs', 'src/models.rs'];
