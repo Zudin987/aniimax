@@ -226,7 +226,6 @@ Verified 120% efficiency band: up to 500 / 660 / 800 / 1000 / 1200 draw.</span><
                     </div>
 
                     <div id="level-up-config">
-                        <div class="setting-with-help"><label><input type="checkbox" id="rv-order-variety"> Add order variety</label><button type="button" class="info-button" data-help="Keeps at least 95% of the best RV resource pace while reserving output for a wider range of orders. Crafted goods come first; raw extras use spare units. Held order stock is excluded from income and RV resources." aria-label="About Order variety" aria-controls="context-help" aria-expanded="false"><span aria-hidden="true">i</span></button></div>
                         <p id="level-up-strategy-hint" hidden>Gets your RV upgrade resources as quickly as possible, then earns extra Home Coins.</p>
                         <div class="input-row" id="level-up-target-row">
                             <div class="input-field">
@@ -240,17 +239,6 @@ Verified 120% efficiency band: up to 500 / 660 / 800 / 1000 / 1200 draw.</span><
                             <p class="assume-title">Owned resources <button type="button" class="info-button" data-help="Counts toward the level-up. Wood Blocks, Mineral Sand and lower tiers get processed up. Enter only what you already have in storage." aria-label="About Owned resources" aria-controls="context-help" aria-expanded="false"><span aria-hidden="true">i</span></button></p>
                             <div class="stock-grid" id="level-up-stock-grid"></div>
                         </details>
-                    </div>
-                </div>
-
-                <div class="emode-auto-note">
-                    <div>
-                        <div class="setting-with-help"><label><input type="checkbox" id="force-e-mode"> <strong>Force E-Mode (free Aniimo slots)</strong></label><button type="button" class="info-button" id="force-emode-info" data-help-source="force-emode-help emode-rules" aria-label="About Force E-Mode" aria-controls="context-help" aria-expanded="false"><span aria-hidden="true">i</span></button></div>
-                        <p id="force-emode-help" hidden>Requires a Power Module and Crackle Generator. Frees Aniimo slots; level-ups may take longer than Automatic.</p>
-                        <div id="emode-rules" hidden>
-                            <p>Mine, Well, Dewy House, Nimbus Bed, Tidewhisper Sandcastle, Floral Windmill, Farmland, Starfall Hammock and Woodland stay on Aniimo.</p>
-                            <p>Rough Lumber (Woodworking Bench) and Coarse-Sifted Ore (Chimney Kiln) also stay on Aniimo. Their later recipes and other processing jobs can use E-Mode when useful. Force E-Mode keeps these rules.</p>
-                        </div>
                     </div>
                 </div>
 
@@ -415,12 +403,6 @@ Verified 120% efficiency band: up to 500 / 660 / 800 / 1000 / 1200 draw.</span><
                         <h2>Harvest Moon Order Stock <button type="button" class="info-button" data-help="Keep this output raw in Storage and craft when orders arrive. Held stock earns no income or points. Daily amounts are planned production, rather than your existing inventory." aria-label="About Harvest Moon Order Stock" aria-controls="context-help" aria-expanded="false"><span aria-hidden="true">i</span></button></h2>
                         <div class="table-wrapper" id="harvest-order-stock"></div>
                     </div>
-                    <div class="card production-steps" id="order-variety-card" hidden>
-                        <h2>Order Variety <button type="button" class="info-button" data-help="Keep this daily output in Storage. It is excluded from income and RV resources. Actual order quantities vary." aria-label="About Order Variety" aria-controls="context-help" aria-expanded="false"><span aria-hidden="true">i</span></button></h2>
-                        <p class="hint" id="order-variety-note"></p>
-                        <div class="table-wrapper" id="order-variety-stock"></div>
-                    </div>
-
                     <div class="card production-steps">
                         <h2>What Each Facility Should Do <button type="button" class="info-button" data-help="Each row is one product. Split facilities have a row for each product. Crops are grouped by the environment that covers them.
 
