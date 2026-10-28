@@ -147,10 +147,6 @@ pub struct ExactPlan {
     pub sold: BTreeMap<String, f64>,
     /// Whole units whose output is retained raw for manual Harvest Moon order crafting.
     pub harvest_reserve_units: BTreeMap<String, u32>,
-    /// Additional daily order stock, excluded from sales, recipe use and RV resources.
-    pub order_stock: BTreeMap<String, f64>,
-    /// RV/crafted-goods gathering allocations protected before adding raw order stock.
-    pub order_core: Option<OrderCore>,
     pub environment: Vec<ExactEnvironment>,
     /// Overlapping pairs of environment buildings (see [`ExactPair`]).
     pub pairs: Vec<ExactPair>,
@@ -183,8 +179,6 @@ pub enum Goal<'a> {
     /// (each as a share of its cost): spare Bench and Kiln time processes whatever the level-up
     /// doesn't need yet, instead of leaving it raw.
     StockUp(&'a LevelUp, f64, f64),
-    /// Crafted variety first; raw variety may use additional whole gathering units only.
-    OrderVariety { level_up: Option<(&'a LevelUp, f64)>, minimum: Option<u32>, core: Option<&'a OrderCore> },
     /// Keep the production targets already found, then free whole Aniimo slots for other
     /// Homeland stations. Generators and environment residents count toward the team too.
     FreeAniimo {
@@ -192,19 +186,7 @@ pub enum Goal<'a> {
         level_up: Option<(&'a LevelUp, f64)>,
         coins: f64,
         work: &'a [AniimoWork],
-        order_variety: Option<u32>,
-        order_core: Option<&'a OrderCore>,
     },
-}
-
-/// The checked RV/crafted-goods plan's allocations, protected in later raw/income/staffing solves.
-#[derive(Debug, Clone, Default, serde::Deserialize, serde::Serialize)]
-pub struct OrderCore {
-    pub gatherer_units: BTreeMap<String, u32>,
-    #[serde(default)]
-    pub gatherer_rates: BTreeMap<String, f64>,
-    pub processed_stock: Vec<String>,
-    pub minimum_raw: Option<u32>,
 }
 
 /// One normal-mode job's contribution to a team row. With `per_unit`, `seconds` is the
@@ -216,10 +198,6 @@ pub struct AniimoWork {
     pub per_unit: bool,
     pub seconds: f64,
 }
-
-// A positive amount of real E-Mode work, well above solver rounding noise. Requiring only an
-// electric machine or generator would allow an idle allocation that vanishes during cleanup.
-const MIN_FORCED_E_MODE_WORK: f64 = 1e-3;
 
 /// What an RV level-up costs and what's already in stock, as `(item, amount)` with `"coins"` for
 /// coins, e.g. cost `[("coins", 69000.0), ("rough_lumber", 290.0), ("coarse_sifted_ore", 360.0)]`.
@@ -285,7 +263,6 @@ enum VarKind<'a> {
     Rate(&'a ProductionItem),
     Units(&'a ProductionItem),
     HarvestReserve(&'a ProductionItem),
-    OrderStock(&'a str, f64),
     /// One E-Mode recipe assigned to an owned machine at this exact facility tier.
     ElectricUnits { recipe: &'a ProductionItem, tier_level: u32 },
     /// A physical machine of an exact tier switched into E-Mode.
@@ -340,7 +317,6 @@ struct Model<'a> {
     /// `(variable, weight)` for tiny preference terms in the objective, so a solve's real
     /// production objective can be recovered without them.
     tiebreak: Vec<(usize, f64)>,
-    order_core: Option<OrderCore>,
 }
 
 /// What each environment building a plan sets up costs in the objective: far too little to give
@@ -428,10 +404,6 @@ fn build_model<'a>(
         constraints: Vec::new(),
         power_capacity,
         tiebreak: Vec::new(),
-        order_core: match goal {
-            Goal::OrderVariety { core, .. } | Goal::FreeAniimo { order_core: core, .. } => core.cloned(),
-            _ => None,
-        },
     };
 
     // Seeds are paid in coins, so they only come off a coin total.
@@ -486,15 +458,6 @@ fn build_model<'a>(
             units_of.push((recipe, units));
         }
         rate_of.push((recipe, rate));
-    }
-
-    if facility_counts.force_e_mode() {
-        model.constrain(
-            rate_of.iter().filter(|(recipe, _)| crate::models::is_electric_item(&recipe.name))
-                .map(|(recipe, rate)| (*rate, recipe.production_time)).collect(),
-            ComparisonOp::Ge,
-            MIN_FORCED_E_MODE_WORK,
-        );
     }
 
     // Crackle Generators are explicit whole units so roster plans can reserve a Lightning Aniimo
@@ -639,86 +602,6 @@ fn build_model<'a>(
         // An unavailable ingredient makes the setup infeasible, never silently removes a reserve.
         model.constrain(reserved, ComparisonOp::Eq, 1.0);
     }
-    let variety = match goal {
-        Goal::OrderVariety { minimum, core, .. } => Some((minimum, core)),
-        Goal::FreeAniimo { order_variety: Some(minimum), order_core, .. } => Some((Some(minimum), order_core)),
-        _ => None,
-    };
-    let mut stock_vars = Vec::new();
-    let mut raw_stock_vars = Vec::new();
-    if let Some((minimum, core)) = variety {
-        // One indicator per real product, not per quick, crew or electric variant.
-        // This is actual retained output: a recipe merely using the item does not count.
-        let mut amounts: BTreeMap<&str, f64> = BTreeMap::new();
-        for recipe in &recipes {
-            let name = made_item(&recipe.name, &all);
-            if recipe.sell_currency != "coins" || recipe.sell_value <= 0.0
-                || facility_counts.harvest_order_items().iter().any(|raw| raw == name) { continue; }
-            let amount = recipe.yield_amount as f64;
-            amounts.entry(name).and_modify(|old| *old = old.min(amount)).or_insert(amount);
-        }
-        for (name, amount) in amounts {
-            let per_second = amount / PACE_UNIT;
-            let processed = all.get(name).is_some_and(|item| item.raw_materials.is_some());
-            let allowed = if processed { core.is_none_or(|c| c.processed_stock.iter().any(|n| n == name)) }
-                else { core.is_some() };
-            let kept = model.add(0.0, (0.0, if allowed { 1.0 } else { 0.0 }), true, VarKind::OrderStock(name, per_second));
-            balance.entry(name).or_default().push((kept, -per_second));
-            if processed { stock_vars.push((kept, 1.0)); }
-            else {
-                raw_stock_vars.push((kept, 1.0));
-                if let Some(core) = core {
-                    // A raw stock item needs a whole unit beyond those already used for RV and
-                    // crafted goods. Surplus within a protected ingredient plot is not a free slot.
-                    let protected: u32 = core.gatherer_units.iter().filter(|(recipe, _)|
-                        made_item(recipe, &all) == name).map(|(_, n)| *n).sum();
-                    let mut extra: Vec<_> = units_of.iter().filter(|(recipe, _)|
-                        recipe.raw_materials.is_none() && made_item(&recipe.name, &all) == name)
-                        .map(|(_, v)| (*v, 1.0)).collect();
-                    extra.push((kept, -1.0));
-                    model.constrain(extra, ComparisonOp::Ge, protected as f64);
-                    for &(recipe, units) in &units_of {
-                        if recipe.raw_materials.is_some() || made_item(&recipe.name, &all) != name { continue; }
-                        let Some((_, rate)) = rate_of.iter().find(|(r, _)| r.name == recipe.name) else { continue };
-                        // An additional assigned unit must actually make its share of the daily
-                        // stock. Otherwise a zero-rate variant can pretend to be a spare unit,
-                        // then disappear when the checked plan removes idle assignments.
-                        let stock_time = per_second * recipe.production_time / recipe.yield_amount as f64;
-                        let old_units = core.gatherer_units.get(&recipe.name).copied().unwrap_or(0) as f64;
-                        let old_rate = core.gatherer_rates.get(&recipe.name).copied().unwrap_or(0.0);
-                        model.constrain(vec![(*rate, recipe.production_time), (units, -stock_time)],
-                            ComparisonOp::Ge, old_rate * recipe.production_time * (1.0 - 1e-4) - old_units * stock_time);
-                    }
-                }
-            }
-        }
-        if let Some(minimum) = minimum {
-            model.constrain(stock_vars.clone(), ComparisonOp::Ge, minimum as f64);
-        }
-        if let Some(core) = core {
-            for (name, count) in &core.gatherer_units {
-                let terms = units_of.iter().filter(|(r, _)| r.name == *name && r.raw_materials.is_none())
-                    .map(|(_, v)| (*v, 1.0)).collect();
-                model.constrain(terms, ComparisonOp::Ge, *count as f64);
-            }
-            for (name, rate) in &core.gatherer_rates {
-                // Preserve the checked supply, not an assigned-but-idle unit that disappears
-                // when rates are rebuilt. Scale by cycle time for numerical stability.
-                let terms = rate_of.iter().filter(|(r, _)| r.name == *name && r.raw_materials.is_none())
-                    .map(|(r, v)| (*v, r.production_time)).collect();
-                let seconds = all.get(name.as_str()).map_or(1.0, |r| r.production_time);
-                model.constrain(terms, ComparisonOp::Ge, rate * seconds * (1.0 - 1e-4));
-            }
-            for name in &core.processed_stock {
-                let terms = stock_vars.iter().filter(|(v, _)| matches!(&model.kinds[*v],
-                    VarKind::OrderStock(n, _) if *n == name.as_str())).copied().collect();
-                model.constrain(terms, ComparisonOp::Ge, 1.0);
-            }
-            if let Some(minimum) = core.minimum_raw {
-                model.constrain(raw_stock_vars.clone(), ComparisonOp::Ge, minimum as f64);
-            }
-        }
-    }
     // A floor naming a currency ("aniimo_exp", "aniipods") keeps a plan making that much of it
     // while it earns `currency`; those items need sell variables too, worth nothing here.
     let floor_currencies: Vec<&str> = match goal {
@@ -751,7 +634,6 @@ fn build_model<'a>(
         // terms are small enough that a tighter floor sits inside the solver's tolerances.
         Goal::EarnWhileLevelingUp(level_up, pace) | Goal::StockUp(level_up, pace, _) => Some((level_up, pace * (1.0 - 1e-4))),
         Goal::FreeAniimo { level_up: Some((level_up, pace)), .. } => Some((level_up, pace * (1.0 - 1e-4))),
-        Goal::OrderVariety { level_up: Some((level_up, pace)), .. } => Some((level_up, pace * (1.0 - 1e-4))),
         _ => None,
     };
     if let Some((level_up, min_pace)) = level_up {
@@ -803,25 +685,6 @@ fn build_model<'a>(
     for terms in balance.into_values() {
         model.constrain(terms, ComparisonOp::Ge, 0.0);
     }
-    if matches!(goal, Goal::OrderVariety { minimum: None, core: None, .. }) {
-        model.objective.fill(0.0);
-        for &(v, _) in &stock_vars { model.objective[v] = 1.0; }
-        // Prefer a smaller gathering footprint among equally broad crafted plans, so later
-        // raw stock has real spare units. Its total penalty is below 0.1 of one stock item.
-        let capacity: f64 = units_of.iter().filter(|(r, _)| r.raw_materials.is_none())
-            .map(|(_, v)| model.bounds[*v].1).sum();
-        let weight = 0.1 / (capacity + 1.0);
-        for &(recipe, v) in &units_of {
-            if recipe.raw_materials.is_none() {
-                model.objective[v] -= weight;
-                model.tiebreak.push((v, weight));
-            }
-        }
-    } else if matches!(goal, Goal::OrderVariety { core: Some(core), .. } if core.minimum_raw.is_none()) {
-        model.objective.fill(0.0);
-        for &(v, _) in &raw_stock_vars { model.objective[v] = 1.0; }
-    }
-
     // Owned units per facility and level. Normal recipes share the remaining physical machines
     // with whole machines switched into E-Mode. Electric recipe shares are attached to exact tiers;
     // Bench/Kiln turn-taking recipes may share one powered machine.
@@ -1054,7 +917,7 @@ fn build_model<'a>(
                 model.objective[v] += amount;
             }
         }
-        Goal::LevelUp(_) | Goal::EarnWhileLevelingUp(..) | Goal::StockUp(..) | Goal::OrderVariety { .. } => {}
+        Goal::LevelUp(_) | Goal::EarnWhileLevelingUp(..) | Goal::StockUp(..) => {}
     }
     // With the player's own Aniimo (see `Crew`), each member's day covers everything it works:
     // a recipe's time per batch at its rate, or at a facility it lives in, the whole day per unit.
@@ -1576,7 +1439,6 @@ fn plan_from(model: &Model, value: f64, upper_bound: f64, proven_optimal: bool, 
     let mut electric_machines: BTreeMap<String, Vec<(u32, u32)>> = BTreeMap::new();
     let mut sold = BTreeMap::new();
     let mut harvest_reserve_units = BTreeMap::new();
-    let mut order_stock = BTreeMap::new();
     let mut power_used = 0u32;
     let mut generators_used = 0u32;
     let mut power_supply = 0u32;
@@ -1590,7 +1452,6 @@ fn plan_from(model: &Model, value: f64, upper_bound: f64, proven_optimal: bool, 
     let mut grower_staffing = Vec::new();
     for (kind, &v) in model.kinds.iter().zip(values) {
         match kind {
-            VarKind::OrderStock(name, rate) if v > 0.5 => { order_stock.insert((*name).to_string(), *rate); }
             VarKind::HarvestReserve(recipe) if v > 0.5 => {
                 harvest_reserve_units.insert(recipe.name.clone(), v.round() as u32);
             }
@@ -1779,8 +1640,6 @@ fn plan_from(model: &Model, value: f64, upper_bound: f64, proven_optimal: bool, 
         generators,
         sold,
         harvest_reserve_units,
-        order_stock,
-        order_core: model.order_core.clone(),
         environment,
         pairs,
         pace,
@@ -1899,57 +1758,6 @@ pub fn check_plan(
         // way, but earns nothing towards `currency`.
         earned += sold * item.earns(currency);
     }
-    for (name, &kept) in &plan.order_stock {
-        if !kept.is_finite() || kept <= 0.0
-            || !items.iter().any(|recipe| made_item(&recipe.name, &all) == name
-                && recipe.sell_currency == "coins" && recipe.sell_value > 0.0)
-            || facility_counts.harvest_order_items().iter().any(|raw| raw == name) {
-            return Err(format!("invalid order stock {name}"));
-        }
-        *made.entry(name.as_str()).or_default() -= kept;
-    }
-    if let Some(core) = &plan.order_core {
-        for (name, &count) in &core.gatherer_units {
-            if !all.get(name.as_str()).is_some_and(|r| r.raw_materials.is_none())
-                || plan.units.get(name).copied().unwrap_or(0) < count {
-                return Err(format!("raw variety displaced a protected gathering unit: {name}"));
-            }
-        }
-        for (name, &rate) in &core.gatherer_rates {
-            if !rate.is_finite() || rate <= 0.0 || !core.gatherer_units.contains_key(name)
-                || plan.recipe_rates.get(name).copied().unwrap_or(0.0) + 1e-9 < rate * (1.0 - 1e-4) {
-                return Err(format!("raw variety displaced protected gathering output: {name}"));
-            }
-        }
-        for name in &core.processed_stock {
-            if !all.get(name.as_str()).is_some_and(|r| r.raw_materials.is_some()) || !plan.order_stock.contains_key(name) {
-                return Err(format!("raw variety displaced crafted order stock: {name}"));
-            }
-        }
-        for (name, &units) in &plan.units {
-            let Some(recipe) = all.get(name.as_str()).filter(|r| r.raw_materials.is_none()) else { continue };
-            let Some(&kept) = plan.order_stock.get(made_item(name, &all)) else { continue };
-            let protected = core.gatherer_units.get(name).copied().unwrap_or(0);
-            if units > protected {
-                let minimum = core.gatherer_rates.get(name).copied().unwrap_or(0.0) * (1.0 - 1e-4)
-                    + (units - protected) as f64 * kept / recipe.yield_amount as f64;
-                let actual = plan.recipe_rates.get(name).copied().unwrap_or(0.0);
-                if actual * recipe.production_time + TOLERANCE < minimum * recipe.production_time {
-                    return Err(format!("raw order stock needs working spare units: {name}"));
-                }
-            }
-        }
-        let mut raw_count = 0;
-        for name in plan.order_stock.keys().filter(|name| all.get(name.as_str()).is_some_and(|r| r.raw_materials.is_none())) {
-            raw_count += 1;
-            let assigned: u32 = plan.units.iter().filter(|(r, _)| made_item(r, &all) == name.as_str()).map(|(_, n)| *n).sum();
-            let protected: u32 = core.gatherer_units.iter().filter(|(r, _)| made_item(r, &all) == name.as_str()).map(|(_, n)| *n).sum();
-            if assigned <= protected { return Err(format!("raw order stock needs a spare unit: {name}")); }
-        }
-        if core.minimum_raw.is_some_and(|minimum| raw_count < minimum) {
-            return Err("raw variety lost its spare-unit stock".to_string());
-        }
-    }
     let minimum_points = facility_counts.season_points_per_day();
     if minimum_points > 0.0 && target_rate(plan, items, crate::models::SEASON_POINTS) * PACE_UNIT + TOLERANCE < minimum_points {
         return Err("plan does not meet the minimum Harvest Moon points per day".to_string());
@@ -2014,17 +1822,6 @@ pub fn check_plan(
         return Err(format!("E-Mode power says {} but powered machines draw {checked_power}", plan.power_used));
     }
     let available_power = crate::models::grid_power_capacity(facility_counts, module_levels);
-    if facility_counts.force_e_mode() {
-        let powered_work: f64 = plan.recipe_rates.iter().filter_map(|(name, rate)| {
-            all.get(name.as_str()).filter(|recipe| crate::models::is_electric_item(&recipe.name))
-                .map(|recipe| rate * recipe.production_time)
-        }).sum();
-        // Canonicalizing a low-draw 100% allocation to 120% shortens its timer. The positive
-        // busy floor is only for numerical stability; the user's requirement is real work.
-        if plan.power_used == 0 || powered_work <= TOLERANCE {
-            return Err("Force E-Mode requires a station actually producing with power".to_string());
-        }
-    }
     if plan.power_capacity != available_power {
         return Err(format!("grid capacity says {} but setup provides {available_power}", plan.power_capacity));
     }
@@ -2457,7 +2254,6 @@ pub fn net_rates(exact: &ExactPlan, items: &[ProductionItem]) -> BTreeMap<String
     for (name, &sold) in &exact.sold {
         *net.entry(name.clone()).or_default() -= sold;
     }
-    for (name, &kept) in &exact.order_stock { *net.entry(name.clone()).or_default() -= kept; }
     net
 }
 
@@ -2546,12 +2342,6 @@ pub fn to_production_plan(
                 (false, true) => format!("; extra output used for {}; the rest sells directly", uses.join(", ")),
             };
             return format!("Keep 1 unit's output raw for Harvest Moon orders; craft when an order arrives{extra}");
-        }
-        if let Some(kept) = exact.order_stock.get(made) {
-            if recipe.raw_materials.is_none() && exact.order_core.is_some() {
-                return format!("Keep {:.0}/day for orders from spare units; extra output follows the plan", kept * PACE_UNIT);
-            }
-            return format!("Keep {:.0}/day for orders; extra output follows the plan", kept * PACE_UNIT);
         }
         // Made, not sold, not all used up and not sellable: kept for the level-up.
         let sellable = all.get(made).is_some_and(|item| item.sell_currency != "none" && item.sell_value > 0.0);

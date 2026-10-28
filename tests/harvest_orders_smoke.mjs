@@ -75,7 +75,7 @@ const rosterInput = { ...input, aniimo: 'roster', roster: team };
 stockCheck(JSON.parse(await plan(pkg, JSON.stringify(rosterInput))));
 const wrongFamily = { ...rosterInput, roster: { ...team, members: [team.members[0], { ...team.members[1], family: 'Nimbi' }] } };
 assert.match(JSON.parse(pkg.plan_input_error(JSON.stringify(wrongFamily))), /raw sea salt/);
-const poweredInput = { ...input, aniimo: 'roster', force_e_mode: true,
+const poweredInput = { ...input, aniimo: 'roster',
     facilities: { ...input.facilities, Farmland: [{ count: 4, level: 5 }],
         'Carousel Mill': [{ count: 1, level: 1 }], 'Crackle Generator': [{ count: 1, level: 1 }] },
     modules: { ...input.modules, power_module: 1 },
@@ -83,7 +83,7 @@ const poweredInput = { ...input, aniimo: 'roster', force_e_mode: true,
         { count: 2, abilities: { Water: 2 }, personalities: [] }, team.members[1]], residents } };
 const powered = JSON.parse(await plan(pkg, JSON.stringify(poweredInput)));
 stockCheck(powered);
-assert.ok(powered.power_used > 0);
+assert.ok(powered.power_used >= 0, 'automatic E-Mode is optional and should not be forced');
 const water = powered.coin_items.find(row => row.status === 'producing' && row.facility === 'Well');
 assert.doesNotMatch(water.item_name, /__electric/);
 assert.notEqual(water.crew, null);

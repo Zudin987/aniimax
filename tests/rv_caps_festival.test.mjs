@@ -81,16 +81,16 @@ test('RV1–20 facility caps follow reported milestones without altering RV13 fo
 });
 
 test('new options round trip while old setup codes inherit conservative defaults', async () => {
-    const defaults = { 'home-level': '14', 'rv-order-variety': false, 'simple-toolkit-upgrades': true,
+    const defaults = { 'home-level': '14', 'simple-toolkit-upgrades': true,
         'season-points-min': '0', 'festival-batch-amount': '1',
         ...Object.fromEntries(SIMPLE_MODULE_FIELDS.map(({ id }) => [id, 'auto'])) };
-    const data = { ...defaults, 'rv-order-variety': true, 'simple-toolkit-upgrades': false,
+    const data = { ...defaults, 'simple-toolkit-upgrades': false,
         'season-points-min': '24', 'festival-batch-amount': '3',
         ...Object.fromEntries(SIMPLE_MODULE_FIELDS.map(({ id }) => [id, '0'])) };
     const imported = await readSetupImport(encodeSetupCode(data));
     assert.deepEqual(normalizeSetupSettings(imported.settings, defaults).settings, data);
     assert.deepEqual(normalizeSetupSettings({ 'home-level': '14' }, defaults).settings, defaults);
-    for (const bad of [{ 'rv-order-variety': 'yes' }, { 'simple-toolkit-upgrades': 0 },
+    for (const bad of [{ 'simple-toolkit-upgrades': 0 },
         { 'season-points-min': -1 }, { 'festival-batch-amount': 1.5 }]) {
         assert.throws(() => normalizeSetupSettings({ ...defaults, ...bad }, defaults));
     }
@@ -119,22 +119,3 @@ test('real festival checklist keeps every finished target plus ingredients for l
     assert.throws(() => festivalCraftChecklist(recipes.filter(r => r.name !== 'rock_candy'), 1), /Missing recipe/);
 });
 
-test('variety report distinguishes crafted goods and spare-unit raw extras and clears old results', () => {
-    const app = fs.readFileSync(new URL('../web/app.js', import.meta.url), 'utf8');
-    const elements = new Map(['order-variety-card', 'order-variety-note', 'order-variety-stock']
-        .map(id => [id, { hidden: true, innerHTML: '', textContent: '' }]));
-    const source = app.slice(app.indexOf('function renderOrderVariety('), app.indexOf('function renderHarvestOrderStock('));
-    const render = new Function('document', 'prettyItem', 'formatNumber', source + '\nreturn renderOrderVariety;')(
-        { getElementById: id => elements.get(id) }, name => name.replaceAll('_', ' '), String);
-    render({ order_variety: { count: 3, processed_count: 2, raw_count: 1, fastest_seconds: 100, proven: true },
-        level_up: { seconds: 104 }, order_stock: [['wheatmeal', 1 / 86400], ['bread', 1 / 86400], ['wheat', 5 / 86400]] });
-    assert.equal(elements.get('order-variety-card').hidden, false);
-    assert.match(elements.get('order-variety-note').textContent, /2 crafted items, 1 raw extra stocked daily.*spare units.*4.0%/);
-    assert.match(elements.get('order-variety-stock').innerHTML, /wheatmeal/);
-    assert.match(elements.get('order-variety-stock').innerHTML, /Held \/ day/);
-    render({ order_variety: { count: 3, fastest_seconds: 100, proven: false }, order_stock: [] });
-    assert.match(elements.get('order-variety-note').textContent, /^3 items.*best found/);
-    render({ success: true });
-    assert.equal(elements.get('order-variety-card').hidden, true);
-    assert.equal(elements.get('order-variety-stock').innerHTML, '');
-});

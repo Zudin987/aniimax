@@ -372,7 +372,7 @@ let preferredGoalTarget = '';
 function getPersistedFieldIds() {
     return [
         'target-amount', 'current-amount',
-        'strategy-level-up', 'strategy-priorities', 'level-up-target', 'force-e-mode', 'rv-order-variety', 'simple-toolkit-upgrades',
+        'strategy-level-up', 'strategy-priorities', 'level-up-target', 'simple-toolkit-upgrades',
         'mode-simple', 'mode-advanced', 'home-level',
         ...SIMPLE_MODULE_FIELDS.map(field => field.id),
         'ecological-module-level', 'kitchen-module-level',
@@ -1972,7 +1972,7 @@ function startProgress(input, runId) {
     // of it against every limit: the worker's steps map onto these (see `setStep`).
     const steps = [
         ...priorities.map(target => ({ key: `priority:${target}`, label: `Most ${priorityLabel(target, planContext.aniipod)}` })),
-        { key: 'plan', label: levelUp ? (input.order_variety ? 'RV + Order Variety' : 'Fastest Level-Up') : priorities.length ? "Home Coins with What's Left" : 'Most Home Coins' },
+        { key: 'plan', label: levelUp ? 'Fastest Level-Up' : priorities.length ? "Home Coins with What's Left" : 'Most Home Coins' },
         { key: 'layout', label: 'Homeland Layout' },
         { key: 'improve', label: 'Opportunities' },
         { key: 'minimum', label: 'Minimum Team Plan' },
@@ -1982,7 +1982,7 @@ function startProgress(input, runId) {
 }
 
 // The worker's solves that make up the card's 'plan' step; it's done once the plan is checked.
-const PLAN_SOLVES = ['variety', 'raw_variety', 'level_up', 'final', 'free_aniimo', 'stock_up', 'check'];
+const PLAN_SOLVES = ['level_up', 'final', 'free_aniimo', 'stock_up', 'check'];
 
 // Moves step `key` on: 'start', 'done', 'skip' or 'fail', with an optional note such as
 // "3 of 12", and for a solve, whether HiGHS proved its answer. The backup planner only appears
@@ -2738,14 +2738,8 @@ function populateLevelUpTargets() {
 
 function renderStrategy() {
     renderSeason();
-    const forced = document.getElementById('force-e-mode').checked;
-    const variety = document.getElementById('rv-order-variety').checked;
-    document.getElementById('level-up-strategy-hint').textContent = variety
-        ? 'Keeps 95% of the best RV pace. Crafted goods first; raw extras use spare units.'
-        : forced
-        ? 'Fastest level-up with E-Mode, then the smallest team. Spare Aniimo come before extra Home Coins.'
-        : 'Gets your RV upgrade resources as quickly as possible, then earns extra Home Coins.';
     const levelUp = isLevelUpStrategy();
+    document.getElementById('level-up-strategy-hint').textContent = 'Gets your RV upgrade resources as quickly as possible, then earns extra Home Coins.';
     document.getElementById('level-up-config').style.display = levelUp ? 'block' : 'none';
     document.getElementById('priorities-config').style.display = levelUp ? 'none' : 'block';
     if (!levelUp) {
@@ -2778,8 +2772,6 @@ function renderStrategy() {
 }
 
 function attachStrategyHandlers() {
-    document.getElementById('rv-order-variety').addEventListener('change', renderStrategy);
-    document.getElementById('force-e-mode').addEventListener('change', renderStrategy);
     document.getElementById('strategy-level-up').addEventListener('change', renderStrategy);
     document.getElementById('strategy-priorities').addEventListener('change', renderStrategy);
     document.getElementById('level-up-target').addEventListener('change', () => {
@@ -2999,8 +2991,6 @@ function getPlanInputValues() {
             currency: 'coins',
             priorities: activePriorities(),
             prioritize_byproducts: false,
-            force_e_mode: document.getElementById('force-e-mode').checked,
-            order_variety: isLevelUpStrategy() && document.getElementById('rv-order-variety').checked,
             season_points_per_day: seasonActive() ? Math.max(0, floatOrDefault(document.getElementById('season-points-min').value, 0)) : 0,
             level_up: levelUpInput(),
             exclude: excludedRecipes(),
@@ -3032,8 +3022,6 @@ function getPlanInputValues() {
         currency: 'coins',
         priorities: activePriorities(),
         prioritize_byproducts: false,
-        force_e_mode: document.getElementById('force-e-mode').checked,
-        order_variety: isLevelUpStrategy() && document.getElementById('rv-order-variety').checked,
         season_points_per_day: seasonActive() ? Math.max(0, floatOrDefault(document.getElementById('season-points-min').value, 0)) : 0,
         level_up: levelUpInput(),
         exclude: excludedRecipes(),
@@ -3937,22 +3925,6 @@ function renderEnvironmentDiagram(layout, mode, building, rows = [], unit = null
 // needs more than one building unit, that group splits into one table per unit (see
 // `splitByEnvironmentUnit`) so it's clear which crops go in which physical building. Everything
 // else falls back to the original per-facility-category grouping (FACILITY_CATEGORIES).
-function renderOrderVariety(plan) {
-    const report = plan.order_variety;
-    document.getElementById('order-variety-card').hidden = !report;
-    const target = document.getElementById('order-variety-stock');
-    if (!report) { target.innerHTML = ''; return; }
-    const extra = plan.level_up?.seconds > 0 ? Math.max(0, (plan.level_up.seconds / report.fastest_seconds - 1) * 100) : 0;
-    const crafted = report.processed_count;
-    const raw = report.raw_count ?? 0;
-    const mix = crafted === undefined ? `${report.count} items`
-        : `${crafted} crafted item${crafted === 1 ? '' : 's'}, ${raw} raw extra${raw === 1 ? '' : 's'}`;
-    document.getElementById('order-variety-note').textContent =
-        `${mix} stocked daily. Raw extras use spare units. RV resources take ${extra.toFixed(1)}% longer. ${report.proven ? '' : 'Variety is the best found within the search time.'}`;
-    target.innerHTML = `<table class="level-up-lines"><thead><tr><th>Keep for orders</th><th>Held / day</th></tr></thead>
-        <tbody>${(plan.order_stock || []).map(([name, rate]) => `<tr><td>${prettyItem(name)}</td><td>${formatNumber(rate * 86400)}</td></tr>`).join('')}</tbody></table>`;
-}
-
 function renderHarvestOrderStock(plan) {
     const rows = plan.harvest_order_stock || [];
     document.getElementById('harvest-order-card').hidden = rows.length === 0;
@@ -3968,7 +3940,6 @@ function renderHarvestOrderStock(plan) {
 }
 
 function renderFacilityPlan(plan) {
-    renderOrderVariety(plan);
     renderHarvestOrderStock(plan);
     const container = document.getElementById('facility-plan-container');
     const steps = plan.coin_items || [];
@@ -4187,7 +4158,7 @@ function renderPowerSummary(plan) {
         return;
     }
     card.style.display = 'block';
-    document.getElementById('emode-plan-kind').textContent = plan.e_mode_forced ? 'Forced' : 'Automatic';
+    document.getElementById('emode-plan-kind').textContent = 'Automatic';
     const used = plan.power_used || 0;
     const activeSupply = plan.power_supply || 0;
     const configuredSpare = Math.max(0, capacity - used);
@@ -4217,14 +4188,9 @@ function renderPowerSummary(plan) {
         </div>`;
     const note = document.getElementById('power-spare-note');
     if (note) {
-        const staffing = plan.staffing_first
-            ? 'Force E-Mode is on. RV level-up pace comes first, then the Aniimo team. Extra coin production is reduced where it can free slots for star stations. '
-            : plan.workforce_optimized
-            ? `The planner also checked E-Mode to reduce the Aniimo team while keeping your production targets.${plan.aniimo_slots_saved > 0 ? ` Freed ${plan.aniimo_slots_saved} additional Aniimo slot${plan.aniimo_slots_saved === 1 ? '' : 's'} for other stations.` : ''} `
-            : '';
         note.textContent = used <= 0
-            ? `${staffing}This plan uses Normal Mode. Each active generator also needs one Lightning Aniimo, so E-Mode must save enough production workers to help.`
-            : `${staffing}The selected ${efficiency}% grid band uses ${formatNumber(used)} / ${formatNumber(bandLimit)} power. ${generators} Lightning Aniimo ${generators === 1 ? 'is' : 'are'} included in the team for the active generators. Active rated spare: ${formatNumber(activeSpare)}; total configured spare: ${formatNumber(configuredSpare)}.`;
+            ? `This plan uses Normal Mode. Each active generator also needs one Lightning Aniimo, so E-Mode must save enough production workers to help.`
+            : `The selected ${efficiency}% grid band uses ${formatNumber(used)} / ${formatNumber(bandLimit)} power. ${generators} Lightning Aniimo ${generators === 1 ? 'is' : 'are'} included in the team for the active generators. Active rated spare: ${formatNumber(activeSpare)}; total configured spare: ${formatNumber(configuredSpare)}.`;
     }
 }
 
@@ -4264,11 +4230,7 @@ function displayPlan(plan) {
     // planner made it.
     const explored = document.getElementById('plan-explored-hint');
     explored.style.display = plan.proven_optimal === true ? 'none' : '';
-    if (plan.staffing_first) {
-        explored.textContent = plan.staffing_proven
-            ? 'RV pace was optimized with E-Mode required, then the modeled Aniimo team was minimized. Extra Home Coins are not the target of this plan.'
-            : 'Best E-Mode team found in the time allowed, while keeping the RV pace found. A smaller team or faster level-up may still be possible.';
-    } else if (plan.proven_optimal === true) {
+    if (plan.proven_optimal === true) {
         explored.textContent = '';
     } else if (plan.proven_optimal === false && plan.upper_bound > 0) {
         const gap = Math.max(0, (plan.upper_bound - plan.rate_per_second) / plan.upper_bound * 100);

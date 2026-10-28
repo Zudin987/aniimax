@@ -22,7 +22,7 @@ const input = {
     skippedRecipes: ['quick_potato'], unlockedSpecial: ['rose_shortbread'],
     priorities: [{ target: 'season_points', on: true }, { target: 'coins', on: true }],
     levelUpStock: { wood_block: 123 }, aniimoLevels: { Earth: 4, Water: 3 },
-    'force-e-mode': true, 'season-on': true, 'season-wheat-budget': '768',
+    'season-on': true, 'season-wheat-budget': '768',
     'season-mutation-plots': '2', 'layout-storage-count': '24', 'layout-power-gap': '0.5', 'rate-unit': 'day', goalTarget: 'coins',
 };
 

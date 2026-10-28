@@ -1326,8 +1326,6 @@ pub struct FacilityCounts {
     /// When planning a generic Best/per-facility setup, the Lightning level available for the
     /// Crackle Generator. None means the Minimum setup may assume the generator-tier minimum.
     generator_lightning_level: Option<u32>,
-    /// Require actual powered production in every exact solve, including the RV pace solve.
-    force_e_mode: bool,
 }
 
 impl Default for FacilityCounts {
@@ -1342,7 +1340,6 @@ impl Default for FacilityCounts {
             harvest_order_items: Vec::new(),
             grower_steps: None,
             generator_lightning_level: None,
-            force_e_mode: false,
         }
     }
 }
@@ -1368,15 +1365,6 @@ impl FacilityCounts {
 
     pub fn generator_lightning_level(&self) -> Option<u32> {
         self.generator_lightning_level
-    }
-
-    pub fn set_force_e_mode(&mut self, required: bool) -> &mut Self {
-        self.force_e_mode = required;
-        self
-    }
-
-    pub fn force_e_mode(&self) -> bool {
-        self.force_e_mode
     }
 
     /// Supplies Farmland/Woodland job data for roster-aware capacity planning.
@@ -1464,7 +1452,6 @@ impl FacilityCounts {
             harvest_order_items: Vec::new(),
             grower_steps: None,
             generator_lightning_level: None,
-            force_e_mode: false,
         };
         for (name, count, level) in pairs {
             fc.set(name, *count, *level);
@@ -1485,7 +1472,6 @@ impl FacilityCounts {
             harvest_order_items: Vec::new(),
             grower_steps: None,
             generator_lightning_level: None,
-            force_e_mode: false,
         }
     }
 
