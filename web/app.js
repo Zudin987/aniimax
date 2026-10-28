@@ -4189,7 +4189,7 @@ function renderPowerSummary(plan) {
     const note = document.getElementById('power-spare-note');
     if (note) {
         note.textContent = used <= 0
-            ? `This plan uses Normal Mode. Each active generator also needs one Lightning Aniimo, so E-Mode must save enough production workers to help.`
+            ? `This plan uses Normal Mode. Each active generator needs a Lightning Aniimo; the optimizer selects E-Mode only when it helps production or staffing.`
             : `The selected ${efficiency}% grid band uses ${formatNumber(used)} / ${formatNumber(bandLimit)} power. ${generators} Lightning Aniimo ${generators === 1 ? 'is' : 'are'} included in the team for the active generators. Active rated spare: ${formatNumber(activeSpare)}; total configured spare: ${formatNumber(configuredSpare)}.`;
     }
 }
