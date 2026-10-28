@@ -56,12 +56,23 @@ assert.equal(plan.power_used, 0, 'A refinement that increases the real team is r
 assert.equal(plan.workforce_optimized, undefined);
 assert.equal(plan.rate_per_second, 10, 'The verified production plan survives a rejected staffing refinement');
 
+// A staffing improvement that would reduce the optimized Home Coins rate is never accepted.
+pkg.exact_plan = (_, stage) => JSON.stringify(JSON.parse(stage).free_aniimo
+    ? { ...candidate, rate_per_second: base.rate_per_second - 0.001 } : base);
+plan = JSON.parse(await exactPlanJson(pkg, JSON.stringify({ aniimo: 'best', priorities: [] })));
+assert.equal(plan.rate_per_second, base.rate_per_second, 'Do not sacrifice coins to free a worker');
+assert.equal(plan.workforce_optimized, undefined, 'Lower-income refinement must be rejected');
+
 const setupInput = { aniimo: 'minimum', priorities: [], modules: { power_module: 1 },
     facilities: { 'Crackle Generator': [{ count: 1, level: 1 }] },
     level_up: { cost: [['coins', 1000]], stock: [] } };
 const budgetError = 'Harvest Moon: 2 mutation plots per crop need at least 768 Moonray Wheat/day.';
 pkg.plan_input_error = () => JSON.stringify(budgetError);
 await assert.rejects(exactPlanJson(pkg, JSON.stringify(setupInput)), error => error.noFallback && error.message === budgetError);
+// The worker runs in a browser, so provide its message surface when evaluating it in Node.
+let backupCalls = 0;
+const replies = [];
+const self = { postMessage: message => replies.push(message) };
 new Function('self', 'ready', 'exactPlanJson', source.slice(source.indexOf('self.onmessage =')))(
     self, Promise.resolve({ find_plan: () => { backupCalls++; return JSON.stringify(base); } }),
     async () => { throw Object.assign(new Error(budgetError), { noFallback: true }); });
