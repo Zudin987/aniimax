@@ -182,7 +182,16 @@ async function exactPlanJson(pkg, payload, step = () => {}, first = () => {}) {
             freed = await solveModel(freeProblem, { ...SOLVE_OPTIONS, time_limit: STAFFING_TIME_LIMIT });
             const candidate = freed && JSON.parse(exact_plan(payload, freeJson,
                 JSON.stringify({ values: freed.values, proven: proven && freed.proven, bound })));
-            if (candidate?.success && aniimoTeamCount(candidate, input) <= aniimoTeamCount(plan, input)) {
+            // The staffing model has numerical slack around the coin floor. Do not replace
+            // a higher-income plan just to free Aniimo slots, or silently give up a priority
+            // target due to LP feasibility tolerances. E-Mode is automatic, never forced.
+            const rateSlack = value => Math.max(1e-8, Math.abs(value) * 1e-8);
+            const preservesIncome = candidate?.success
+                && candidate.rate_per_second >= plan.rate_per_second - rateSlack(plan.rate_per_second);
+            const preservesPriorities = preservesIncome && (plan.priorities || []).every((target, i) =>
+                candidate.priorities?.[i]?.target === target.target
+                && candidate.priorities[i].per_second >= target.per_second - rateSlack(target.per_second));
+            if (preservesPriorities && aniimoTeamCount(candidate, input) <= aniimoTeamCount(plan, input)) {
                 candidate.aniimo_slots_saved = aniimoTeamCount(plan, input) - aniimoTeamCount(candidate, input);
                 candidate.workforce_optimized = true;
                 plan = candidate;
