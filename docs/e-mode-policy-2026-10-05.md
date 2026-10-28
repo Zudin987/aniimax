@@ -1,21 +1,31 @@
-# E-Mode planning policy
+# Automatic E-Mode recipe eligibility (updated 28 October 2026)
 
-Requested by the fork owner on 2026-10-05 to keep Aniimo speed bonuses on
-primary production. These are planner exclusions, not claims that the game
-cannot power a station.
+Aniimax now uses the same **verified E-Mode recipes** that are already listed in
+`data/e_mode.csv`, including Mines, Wells, Rough Lumber and Coarse-Sifted Ore.
+Those recipes have electric timers in public game data; the previous blanket
+exclusion was a *planner preference*, not a game restriction. Remove the
+exclusion so the solver can make the optimal choice rather than forcing Aniimo.
 
-Always use Aniimo at Mine, Well, Dewy House, Nimbus Bed, Tidewhisper Sandcastle,
-Floral Windmill, Farmland, Starfall Hammock and Woodland. At Woodworking Bench,
-keep Rough Lumber on Aniimo; at Chimney Kiln, keep Coarse-Sifted Ore on Aniimo.
-Later recipes at those two stations remain eligible for E-Mode, as do other
-processing stations with known E-Mode timers.
+Every eligible station still retains its **normal Aniimo-worked recipe**.
+The exact solver weighs income, RV materials, the actual powered facility level,
+generator output, global E-Mode efficiency, its Lightning worker and the other
+staffing needs. Powered recipes do **not** mean the user must power the station.
+No "Force E-Mode" toggle is offered.
 
-The rule applies to all setup modes, goals and automatic staffing refinements.
-Variant loading, model construction and independent plan checking enforce it.
-The planner chooses E-Mode only when it is useful for a valid production plan.
+**Farmland and Woodland stay unpowered:** crops and trees require growing plots
+and applicable worker/watering rules; they do not have fixed electric recipe
+timers in the current game table. Every other facility can use E-Mode only when
+a matching positive, unique fixed timer exists in `data/e_mode.csv`.
 
-Known timers in `data/e_mode.csv`, including the screenshot-verified 30-minute
-Quick Fresh Water timer, remain intact as in-game evidence. Saved/imported
-setups use the new policy without a new setting or share-code version. Custom
-rosters still need workers for protected jobs; a powered Well cannot replace a
-missing Water worker for Harvest Moon order stock.
+The E-Mode data records (including 27-second first-tier Bench/Kiln recipes,
+15-minute Rock and 30-minute Well/Mine jobs) are corroborated by public
+recipe/production listings: [Wikily Rough Lumber](https://wikily.gg/aniimo/homeland-crafting/recipes/rough-lumber-4010169),
+[Wikily Coarse-Sifted Ore](https://wikily.gg/aniimo/homeland-crafting/recipes/coarse-sifted-ore-40101741),
+[Wikily Rock](https://wikily.gg/aniimo/homeland-crafting/recipes/rock-40010531),
+and [AniimoTools](https://aniimotools.dev/systems/homeland/stations/mine/).
+
+**Model limitations:** E-Mode grid coverage and Power Pole layout still require
+in-game confirmation; the planner separately optimizes production and sketches
+physical placement. Supply above 100% can reach the modeled 120% band, but the
+power-starved lower-efficiency curve is not modeled. This is not a guarantee
+of maximum observed coins/hour in every real Home.
