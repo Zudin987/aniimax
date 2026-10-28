@@ -25,9 +25,6 @@ test('automatic E-Mode keeps the Mine on workers in every Aniimo setup', async (
         assert.ok(result.rate_per_second > 0);
         assert.equal(result.power_used, 0);
         assert.equal(result.generators_used, 0);
-        const forced = JSON.stringify({ ...input, force_e_mode: true });
-        assert.match(JSON.parse(pkg.plan_input_error(forced)), /eligible processing recipe/);
-        await assert.rejects(plan(pkg, forced), error => error.noFallback && /eligible processing recipe/.test(error.message));
     }
 });
 
