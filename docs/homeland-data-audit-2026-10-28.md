@@ -27,6 +27,8 @@ This is a **spot audit**, not a claim that all game data or all optimizer output
 
 **Not fully re-verified:** The game may change RV-level placement limits, exact power-band thresholds, storage/hauling delays and some recipe records. `data/unverified.csv` still lists `scales` and `quick_scales` at Floral Windmill. The absence of additional discrepancies in this spot sample is **not proof** the whole dataset is current.
 
+**Additional validator fix:** Harvest Moon raw-material availability now checks whether an E-Mode Well has actual grid capacity and a Lightning-capable generator worker. A Well with no Water Aniimo may legitimately supply raw fresh water on E-Mode, but neither an unpowered grid nor a Lightning-less roster can. This is verified in the WASM regression cases. The timer table's 172 entries were also checked for duplicate names and invalid/non-positive values.
+
 ## What projected income does not guarantee
 
 Steady-state production rates assume the selected tasks are executed continuously at modeled efficiency. Actual income may be lower with walking/hauling, full output bins, missing workers, food changes, manual interactions, player absence, random mutation or newly locked recipes. An optimal MIP result only proves optimality **within the encoded model and data**; it is not a proof of best possible live gameplay income. Watering and ingredient opportunity costs must be considered when comparing recipe profit.
