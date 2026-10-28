@@ -23,7 +23,7 @@ This is a **spot audit**, not a claim that all game data or all optimizer output
 
 ## Differences requiring in-game confirmation
 
-**Electric recipe eligibility is a policy choice, not a missing timer.** AniimoTools lists powered recipes for Rough Lumber, Coarse-Sifted Ore and the Well. The local [E-Mode policy](e-mode-policy-2026-10-05.md) intentionally **keeps** first-tier RV materials and primary gathering on Aniimo to preserve speed/production requirements; see the policy's explicit statement that this is not a claim the game cannot power these stations. Do not copy the site's electric list into the planner automatically.
+**Resolved 28 October 2026:** The former normal-only policy prevented the solver from considering already verified powered recipes for Mines, Wells, Rough Lumber and Coarse-Sifted Ore. The new [automatic E-Mode policy](e-mode-policy-2026-10-05.md) permits those timed alternatives and retains manual production. Farmland and Woodland are still excluded, since these are growing plots, not E-Mode workshops. The output difference varies by Aniimo level and actual power/staffing limits.
 
 **Not fully re-verified:** The game may change RV-level placement limits, exact power-band thresholds, storage/hauling delays and some recipe records. `data/unverified.csv` still lists `scales` and `quick_scales` at Floral Windmill. The absence of additional discrepancies in this spot sample is **not proof** the whole dataset is current.
 
