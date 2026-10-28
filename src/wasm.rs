@@ -1853,7 +1853,7 @@ impl PreparedInput {
                 .min_by_key(|item| item.facility_level);
             let Some(recipe) = available else {
                 return Err(serde_json::to_string(&empty_production_plan(false, Some(format!(
-                    "Harvest Moon needs one unit producing raw {} for orders. Check facility counts/levels, skipped raw recipes and your Aniimo team (Sea Salt needs a Susuta-family Leisure worker).", raw.replace('_', " "),
+                    "Harvest Moon needs one unit producing raw {} for orders. Check facilities/levels, skipped raw recipes, available workers, and E-Mode power/Lightning staffing (Sea Salt needs a Susuta-family Leisure worker).", raw.replace('_', " "),
                 )))).unwrap_or_default());
             };
             let units = if matches!(raw.as_str(), "moondew_radish" | "waxing_moon_pepper") {
