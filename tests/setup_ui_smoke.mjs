@@ -44,8 +44,8 @@ const setup = {
     priorities: [{ target: 'season_points', on: true }, { target: 'coins', on: true }],
     skippedRecipes: ['quick_potato'], unlockedSpecial: ['rose_shortbread'],
     'season-on': true, 'season-wheat-budget': '600', 'season-mutation-plots': '1',
-    'rv-order-variety': true, 'simple-toolkit-upgrades': false, 'season-points-min': '0', 'festival-batch-amount': '2',
-    'force-e-mode': true, 'power-module-level': '1', 'layout-storage-count': '3', 'layout-whole': false,
+    'simple-toolkit-upgrades': false, 'season-points-min': '0', 'festival-batch-amount': '2',
+    'power-module-level': '1', 'layout-storage-count': '3', 'layout-whole': false,
     'rate-unit': 'day', goalTarget: 'season_points', 'target-amount': '123', 'current-amount': '5',
 };
 async function load(raw) {
@@ -156,8 +156,6 @@ try {
     assert.equal((await config()).roster[0].family, 'Nimbi');
     assert.equal((await config()).roster[0].abilities.Ice, 2);
     assert.equal((await config()).facilityTiers.Mine[0].count, 2);
-    assert.equal((await config())['force-e-mode'], true);
-    assert.equal((await config())['rv-order-variety'], true);
     assert.equal((await config())['simple-toolkit-upgrades'], false);
     assert.equal((await config())['festival-batch-amount'], '2');
     assert.equal((await config()).goalTarget, 'season_points');
@@ -165,11 +163,6 @@ try {
     assert.equal((await config())['target-amount'], '123');
     assert.deepEqual((await config()).skippedRecipes, ['quick_potato']);
     assert.equal(await page.locator('#results-section').isVisible(), false, 'Import must not calculate');
-    await page.locator('#force-emode-info').click();
-    assert.match(await page.locator('#context-help').innerText(), /Mine, Well/);
-    assert.match(await page.locator('#context-help').innerText(), /Rough Lumber.*Coarse-Sifted Ore/);
-    assert.equal((await config())['force-e-mode'], true, 'reading the rules must preserve imported settings');
-    await page.keyboard.press('Escape');
     const mineHelp = page.getByRole('button', { name: 'About Mine', exact: true });
     await mineHelp.click();
     assert.match(await helpCard.innerText(), /Lv\.1: Rock\nLv\.2: Clay/,
@@ -178,14 +171,6 @@ try {
     const strategyHelp = page.getByRole('button', { name: 'About Strategy', exact: true });
     await page.locator('label:has(#strategy-level-up)').click();
     await strategyHelp.click();
-    assert.match(await helpCard.innerText(), /95%/);
-    await page.keyboard.press('Escape');
-    await page.locator('#rv-order-variety').uncheck();
-    await strategyHelp.click();
-    assert.match(await helpCard.innerText(), /Fastest level-up with E-Mode/,
-        'dynamic help must use the current settings, rather than cached text');
-    await page.keyboard.press('Escape');
-    await page.locator('#rv-order-variety').check();
     await page.locator('label:has(#strategy-priorities)').click();
     await page.locator('#facilitiesToggle').click();
     const recipeTimeHelp = page.locator('#facilitiesModal').getByRole('button', { name: 'About Time', exact: true }).first();
@@ -305,7 +290,7 @@ try {
 
     // Opening a link preserves browser defaults until the shared setup is edited.
     const linked = { ...setup, 'mode-simple': true, 'mode-advanced': false, 'home-level': '10',
-        'aniimo-best': true, 'aniimo-custom': false, 'force-e-mode': false };
+        'aniimo-best': true, 'aniimo-custom': false, };
     const savedBeforeLink = await config();
     await page.goto(base + '#config=v99.invalid');
     await page.waitForFunction(() => document.getElementById('setup-share-hint').textContent.includes('could not be loaded'));
@@ -348,7 +333,7 @@ try {
     assert.equal(await page.locator('#error-message').isVisible(), false);
     // Import another setup after a solve, then switch modes: no old plan may reappear.
     await load(encodeSetupCode({ facilityTiers: {}, 'home-level': '1', 'mode-simple': true, 'mode-advanced': false,
-        'season-on': false, 'force-e-mode': false, 'aniimo-best': false, 'aniimo-minimum': true,
+        'season-on': false, 'aniimo-best': false, 'aniimo-minimum': true,
         'aniimo-custom': false, goalTarget: 'coins' }));
     assert.equal(await page.locator('#results-section').isVisible(), false);
     await page.locator('label:has(#aniimo-best)').click();
@@ -360,7 +345,7 @@ try {
 
     // Both new controls work before solving; RV14 Fill persists the correct cap data.
     await load(encodeSetupCode({ 'home-level': '14', 'mode-simple': true, 'mode-advanced': false,
-        'simple-toolkit-upgrades': false, 'season-on': true, 'force-e-mode': false,
+        'simple-toolkit-upgrades': false, 'season-on': true, 
         'strategy-level-up': true, 'strategy-priorities': false }));
     assert.equal(await page.locator('#simple-toolkit-upgrades').isChecked(), false);
     for (const { id } of SIMPLE_MODULE_FIELDS) assert.equal(await page.locator('#' + id).inputValue(), '0',
@@ -390,7 +375,7 @@ try {
         'simple-power-module-level': 'auto' };
     await load(encodeSetupCode({ 'home-level': '9', 'mode-simple': true, 'mode-advanced': false,
         'simple-toolkit-upgrades': true, ...partialModules, 'ecological-module-level': '2',
-        'season-on': false, 'force-e-mode': false, 'strategy-level-up': false,
+        'season-on': false, 'strategy-level-up': false,
         'strategy-priorities': true, 'aniimo-best': true, 'aniimo-minimum': false, 'aniimo-custom': false }));
     assert.equal(await page.locator('#results-section').isVisible(), false);
     for (const { id } of SIMPLE_MODULE_FIELDS) {
@@ -463,49 +448,10 @@ try {
         }
     }
 
-    // A real UI solve displays retained variety and a bounded RV tradeoff.
-    await load(encodeSetupCode({ 'home-level': '3', 'mode-simple': false, 'mode-advanced': true,
-        'strategy-level-up': true, 'strategy-priorities': false, 'level-up-target': '4',
-        'rv-order-variety': true, 'season-on': false, 'force-e-mode': false,
-        'aniimo-best': true, 'aniimo-minimum': false, 'aniimo-custom': false,
-        facilityTiers: { Farmland: [{ count: 4, level: 2 }], Woodland: [{ count: 1, level: 1 }],
-            Mine: [{ count: 1, level: 1 }], 'Carousel Mill': [{ count: 2, level: 1 }],
-            'Claw Game Cooker': [{ count: 1, level: 1 }] } }));
-    assert.equal(await page.locator('#festival-batch-result').innerText(), '', 'import must clear the previous checklist');
-    await page.locator('#optimize-btn').click();
-    await page.waitForFunction(() => !document.getElementById('optimize-btn').disabled, null, { timeout: 120_000 });
-    assert.equal(await page.locator('#error-message').isVisible(), false);
-    assert.equal(await page.locator('#order-variety-card').isVisible(), true);
-    assert.ok(await page.locator('#order-variety-stock tbody tr').count() >= 3);
-    assert.match(await page.locator('#order-variety-note').innerText(), /crafted items.*raw extra.*spare units/);
-    await page.locator('#order-variety-card').screenshot({ path: 'test-results/order-variety-desktop.png' });
-    await page.setViewportSize({ width: 390, height: 844 });
-    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), false);
-    await page.locator('#order-variety-card').screenshot({ path: 'test-results/order-variety-mobile.png' });
-    await page.setViewportSize({ width: 1000, height: 900 });
-
-    // RV14 matches the reported setup: required festival raw stock remains, but ordinary
-    // raw order extras must explicitly come from spare gathering units.
-    await load(encodeSetupCode({ 'home-level': '14', 'mode-simple': true, 'mode-advanced': false,
-        'strategy-level-up': true, 'strategy-priorities': false, 'level-up-target': '15',
-        'rv-order-variety': true, 'season-on': true, 'season-wheat-budget': '600', 'season-mutation-plots': '1',
-        'simple-toolkit-upgrades': false, 'force-e-mode': false,
-        'aniimo-best': false, 'aniimo-minimum': true, 'aniimo-custom': false }));
-    await page.locator('#optimize-btn').click();
-    await page.waitForFunction(() => !document.getElementById('optimize-btn').disabled, null, { timeout: 180_000 });
-    assert.equal(await page.locator('#error-message').isVisible(), false);
-    assert.equal(await page.locator('#order-variety-card').isVisible(), true);
-    assert.equal(await page.locator('#harvest-order-stock tbody tr').count(), 6);
-    assert.match(await page.locator('#order-variety-note').innerText(), /crafted items.*raw extra.*spare units/);
-    const spareRows = page.locator('#facility-plan-container tr').filter({ hasText: 'for orders from spare units' });
-    assert.ok(await spareRows.count() > 0, 'RV14 has spare gathering capacity for optional raw stock');
-    await page.locator('#order-variety-card').screenshot({ path: 'test-results/order-variety-rv14.png' });
-    await page.locator('#facility-plan-container').screenshot({ path: 'test-results/order-variety-rv14-facilities.png' });
-
     // A cheap real solve verifies that resource readiness does not claim the RV upgrade is instant.
     await load(encodeSetupCode({ facilityTiers: { 'Nimbus Bed': [{ count: 1, level: 2 }] },
         'home-level': '13', 'mode-simple': false, 'mode-advanced': true,
-        'resource-detector-level': '5', 'season-on': false, 'force-e-mode': false,
+        'resource-detector-level': '5', 'season-on': false, 
         'aniimo-best': false, 'aniimo-minimum': true, 'aniimo-custom': false,
         'strategy-level-up': true, 'strategy-priorities': false, 'level-up-target': '14',
         'layout-storage-count': '6',
@@ -526,84 +472,13 @@ try {
     assert.equal((await config())['layout-storage-count'], '6', 'a constrained layout preserves the imported preference');
     await page.locator('#level-up-card').screenshot({ path: 'test-results/rv14-resource-timer.png' });
 
-    // Use real RV15 production and layout workers to check the connection space, including
-    // the two- and six-storage layouts reported by the user. Observe results without mocking.
-    await load(encodeSetupCode({ 'home-level': '15', 'mode-simple': true, 'mode-advanced': false,
-        'strategy-level-up': true, 'strategy-priorities': false, 'force-e-mode': true,
-        'rv-order-variety': false, 'season-on': false, 'layout-sim-on': false,
-        'aniimo-best': false, 'aniimo-minimum': true, 'aniimo-custom': false,
-        'layout-storage-count': '2', 'layout-power-gap': '1.5' }));
-    await page.evaluate(() => {
-        const original = Worker.prototype.postMessage;
-        window.powerLayoutResults = [];
-        Worker.prototype.postMessage = function(message, ...args) {
-            if (Array.isArray(message.pieces) && Array.isArray(message.cells)) {
-                this.addEventListener('message', event => {
-                    window.powerLayoutResults.push({ request: message, layout: event.data });
-                }, { once: true });
-            }
-            return original.call(this, message, ...args);
-        };
-        window.restorePowerLayoutObserver = () => { Worker.prototype.postMessage = original; };
-    });
-    await page.locator('#optimize-btn').click();
-    await page.waitForFunction(() => !document.getElementById('optimize-btn').disabled, null, { timeout: 120_000 });
-    assert.equal(await page.locator('#error-message').isVisible(), false);
-    const checkPower = async (n, gap, stores) => {
-        await page.waitForFunction(n => window.powerLayoutResults.length === n, n, { timeout: 120_000 });
-        const { request, layout } = await page.evaluate(() => window.powerLayoutResults.at(-1));
-        assert.ok(request.generatorCount > 0, 'Force E-Mode must create a real active generator');
-        assertPowerLayout(layout, request.cells, gap, stores, request.generatorCount);
-        assert.equal(await page.locator('#layout-diagram .layout-connection-space').count(), layout.powerSpaces.length);
-        return { request, layout };
-    };
-    const twoStoragePower = await checkPower(1, 1.5, 2);
-    await page.locator('#layout-card').screenshot({ path: 'test-results/power-rv15-two-storage.png' });
-    await page.locator('#layout-whole').check();
-    await page.locator('#layout-card').screenshot({ path: 'test-results/power-rv15-two-storage-whole.png' });
-    await page.locator('#layout-whole').uncheck();
-    await page.locator('#layout-storage-count').fill('6');
-    await page.locator('#layout-storage-count').blur();
-    const sixStoragePower = await checkPower(2, 1.5, 6);
-    await page.locator('#layout-card').screenshot({ path: 'test-results/power-rv15-six-storage.png' });
-    await page.locator('#layout-whole').check();
-    await page.locator('#layout-card').screenshot({ path: 'test-results/power-rv15-six-storage-whole.png' });
-    await page.locator('#layout-whole').uncheck();
-    await page.setViewportSize({ width: 390, height: 844 });
-    const mobileLayout = await page.evaluate(() => ({
-        viewport: window.innerWidth, pageWidth: document.documentElement.scrollWidth,
-        cardRight: document.getElementById('layout-card').getBoundingClientRect().right,
-        controlsRight: document.querySelector('.layout-controls').getBoundingClientRect().right,
-        controlEdges: [...document.querySelectorAll('.layout-controls label, .layout-controls button')]
-            .map(el => el.getBoundingClientRect().right),
-    }));
-    // Allow one pixel for subpixel rounding, and check the actual new controls, rather than
-    // attributing any overflow in a long production report to the Power gap dropdown.
-    assert.ok(mobileLayout.pageWidth <= mobileLayout.viewport + 1, 'mobile report must fit the viewport');
-    assert.ok(mobileLayout.cardRight <= mobileLayout.viewport, 'layout card must fit mobile');
-    assert.ok(mobileLayout.controlEdges.every(right => right <= mobileLayout.controlsRight + 1),
-        'layout controls must wrap within the card');
-    await page.locator('#layout-card').screenshot({ path: 'test-results/power-rv15-mobile.png' });
-    await page.setViewportSize({ width: 1000, height: 900 });
-    const productionBeforeGap = await page.locator('#facility-plan-container').innerText();
-    await page.locator('#layout-power-gap').selectOption('0');
-    await checkPower(3, 0, 6);
-    assert.equal((await config())['layout-power-gap'], '0');
-    assert.equal(await page.locator('#facility-plan-container').innerText(), productionBeforeGap,
-        'changing connection space must keep the production plan');
-    await page.locator('#layout-power-gap').selectOption('1.5');
-    await checkPower(4, 1.5, 6);
-    assert.equal((await config())['layout-power-gap'], '1.5');
-    await writeFile('test-results/power-rv15-layouts.json', JSON.stringify({ twoStoragePower, sixStoragePower, mobileLayout }));
-    await page.evaluate(() => window.restorePowerLayoutObserver());
-
     // Storage denial still permits a reviewed import for this visit.
     await page.evaluate(() => { Storage.prototype.setItem = () => { throw new Error('storage unavailable'); }; });
     await load(encodeSetupCode({ ...linked, 'home-level': '11' }));
     assert.equal(await page.locator('#home-level').inputValue(), '11');
     assert.match(await page.locator('#setup-share-hint').innerText(), /saving is unavailable/);
     assert.deepEqual(errors, [], 'browser/WASM should not raise uncaught errors');
-    console.log('Setup UI/WASM smoke passed: import/export, Simple module levels and solver payload, family restore and staffing, old codes, shared links, raw order stock, budget feedback, RV upgrade timers, desktop/mobile and storage denial.');
+    console.log('Setup UI/WASM smoke passed: import/export, Simple module levels and solver payload, family restore and staffing, old codes, shared links, festival stock, budget feedback, RV upgrade timers, desktop/mobile and storage denial.');
 } catch (error) {
     await mkdir(new URL('../test-results/', import.meta.url), { recursive: true });
     await page.screenshot({ path: 'test-results/setup-failure.png', fullPage: true });
