@@ -2282,7 +2282,8 @@ mod tests {
             valid["harvest_mutation_plots"] = plots.into();
             assert_eq!(super::plan_input_error(&valid.to_string()), "null");
         }
-        // The Well must now keep its Water worker; power cannot bypass missing raw workers.
+        // An E-Mode Well can supply order water without a Water Aniimo, but only when a
+        // Lightning worker staffs a powered generator. The normal-only rule was removed.
         let mut unwatered = input;
         unwatered["aniimo"] = "roster".into();
         unwatered["modules"] = serde_json::json!({ "power_module": 1 });
@@ -2290,7 +2291,16 @@ mod tests {
         unwatered["roster"] = serde_json::json!({ "members": [{ "count": 3,
             "abilities": { "Earth": 1, "Grass": 1, "Dark": 1, "Lightning": 1 }, "personalities": [] },
             { "count": 1, "family": "Susuta", "abilities": { "Leisure": 2 }, "personalities": [] }] });
-        let error: String = serde_json::from_str(&super::plan_input_error(&unwatered.to_string())).unwrap();
+        assert_eq!(super::plan_input_error(&unwatered.to_string()), "null");
+        // Without the unlocked grid, a Well with no Water Aniimo is genuinely unavailable.
+        let mut no_power = unwatered.clone();
+        no_power["modules"]["power_module"] = 0.into();
+        let error: String = serde_json::from_str(&super::plan_input_error(&no_power.to_string())).unwrap();
+        assert!(error.contains("raw fresh water"), "{error}");
+        // And electricity cannot bypass an unstaffed generator.
+        let mut no_lightning = unwatered;
+        no_lightning["roster"]["members"][0]["abilities"]["Lightning"] = 0.into();
+        let error: String = serde_json::from_str(&super::plan_input_error(&no_lightning.to_string())).unwrap();
         assert!(error.contains("raw fresh water"), "{error}");
     }
 
