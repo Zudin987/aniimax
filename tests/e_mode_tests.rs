@@ -1,5 +1,5 @@
 use aniimax::data::add_e_mode_variants;
-use aniimax::exact::{check_plan, solve_exact, to_production_plan, AniimoWork, Goal, LevelUp};
+use aniimax::exact::{check_plan, solve_exact, to_production_plan, AniimoWork, Goal};
 use aniimax::models::{Crew, FacilityCounts, GrowerStep, GrowerSteps, ModuleLevels, ProductionItem, RosterAniimo, SeasonTerms};
 use std::time::Duration;
 
@@ -122,6 +122,26 @@ fn e_mode_frees_whole_worker_slots_even_when_normal_mode_is_faster() {
         assert!(plan.recipe_rates.contains_key(&format!("{name}__electric_boost")));
     }
     assert_eq!(plan.power_used, 45);
+}
+
+#[test]
+fn free_aniimo_does_not_trade_real_coin_income_for_a_tiny_busy_time_reduction() {
+    let mut items = vec![item("rock", "Mine", 300.0, 7.0)];
+    items[0].yield_amount = 6;
+    add_e_mode_variants(&mut items, "name,production_time\nrock,900\n").unwrap();
+    let counts = FacilityCounts::only(&[("Mine", 1, 1), ("Crackle Generator", 1, 1)]);
+    let modules = ModuleLevels { power_module: 1, ..Default::default() };
+    let best = solve(&items, &counts, &modules);
+    let work = [AniimoWork { recipe: "rock".into(), group: "Earth".into(),
+        per_unit: false, seconds: 300.0 }];
+    let refined = solve_exact(&items, "coins", &counts, &modules,
+        Goal::FreeAniimo { floors: &[], level_up: None,
+            coins: best.rate_per_second, work: &work },
+        Some(Duration::from_secs(10)), None).expect("staffing refinement");
+    check_plan(&refined, &items, "coins", &counts, &modules, None).unwrap();
+    assert!(refined.rate_per_second >= best.rate_per_second - 1e-8,
+        "staffing refinement changed coins/s from {} to {}",
+        best.rate_per_second, refined.rate_per_second);
 }
 
 #[test]
