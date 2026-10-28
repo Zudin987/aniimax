@@ -1068,7 +1068,10 @@ fn build_model<'a>(
         model.constrain(
             model.earnings.iter().enumerate().filter(|(_, c)| **c != 0.0).map(|(v, c)| (v, *c)).collect(),
             ComparisonOp::Ge,
-            coins - 1e-4 * coins.abs(),
+            // Staffing is a secondary objective, not permission to sacrifice a meaningful
+            // amount of the already-optimized production rate. Keep only floating-point
+            // rounding slack here; the browser also verifies that the final plan meets it.
+            coins - 1e-8 * coins.abs().max(1.0),
         );
         model.objective.fill(0.0);
         if facility_counts.crew().is_none() {
