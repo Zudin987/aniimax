@@ -85,13 +85,33 @@ const powered = JSON.parse(await plan(pkg, JSON.stringify(poweredInput)));
 stockCheck(powered);
 assert.ok(powered.power_used <= powered.power_capacity, 'automatic E-Mode draw must fit the configured grid');
 const water = powered.coin_items.find(row => row.status === 'producing' && row.facility === 'Well');
-assert.doesNotMatch(water.item_name, /__electric/);
-assert.notEqual(water.crew, null);
-assert.equal(water.aniimo.ability, 'Water');
+assert.ok(water, 'the Well must supply fresh water for event orders');
+if (!/__electric/.test(water.item_name)) {
+    assert.notEqual(water.crew, null);
+    assert.equal(water.aniimo.ability, 'Water');
+}
 assert.equal(wheatPerDay(powered), 384);
-assert.match(JSON.parse(pkg.plan_input_error(JSON.stringify({ ...poweredInput,
-    roster: { ...poweredInput.roster, members: [poweredInput.roster.members[0], team.members[1]] } }))), /raw fresh water/,
-    'a powered Well cannot replace the Water worker');
+// A working E-Mode Well can replace a Water production worker when a Lightning
+// Aniimo operates the generator. The old normal-only policy incorrectly forbade it.
+const withoutWater = { ...poweredInput, roster: { ...poweredInput.roster,
+    members: [poweredInput.roster.members[0], team.members[1]] } };
+assert.equal(JSON.parse(pkg.plan_input_error(JSON.stringify(withoutWater))), null);
+const electricStock = JSON.parse(await plan(pkg, JSON.stringify(withoutWater)));
+stockCheck(electricStock);
+const electricWell = electricStock.coin_items.find(row => row.status === 'producing' && row.facility === 'Well');
+assert.match(electricWell.item_name, /__electric/);
+assert.ok(electricStock.power_used > 0 && electricStock.generators_used > 0);
+// The same roster without electricity cannot supply the mandatory fresh water.
+assert.match(JSON.parse(pkg.plan_input_error(JSON.stringify({
+    ...withoutWater, modules: { ...withoutWater.modules, power_module: 0 },
+}))), /raw fresh water/);
+// Nor can an unstaffed generator power the Well.
+assert.match(JSON.parse(pkg.plan_input_error(JSON.stringify({
+    ...withoutWater, roster: { ...withoutWater.roster, members: [
+        { ...withoutWater.roster.members[0], abilities: { Earth: 1, Grass: 1, Dark: 1 } },
+        team.members[1],
+    ] },
+}))), /raw fresh water/);
 
 // Check the real RV10 Simple setup, where this event first becomes available.
 const rv10 = simpleSetup(10);

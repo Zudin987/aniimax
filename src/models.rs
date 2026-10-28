@@ -277,14 +277,12 @@ pub fn base_item_name(mut name: &str) -> &str {
     }
 }
 
-/// Planner policy: retain Aniimo speed bonuses for primary production and the first RV
-/// material-processing stage. Later Bench/Kiln stages may still use E-Mode.
+/// Crops and trees are grown on plots, not operated as powered processors. All other
+/// machines may use E-Mode if (and only if) a known fixed electric timer is loaded from
+/// data/e_mode.csv. Do not force normal mode on Mines, Wells, or early RV materials: the
+/// optimizer must compare staffed and powered recipes using the actual grid constraints.
 pub fn e_mode_allowed(item: &ProductionItem) -> bool {
-    !matches!(item.facility.as_str(),
-        "Mine" | "Well" | "Dewy House" | "Nimbus Bed" | "Tidewhisper Sandcastle"
-        | "Floral Windmill" | "Farmland" | "Starfall Hammock" | "Woodland")
-        && !matches!((item.facility.as_str(), base_item_name(&item.name)),
-            ("Chimney Kiln", "coarse_sifted_ore") | ("Woodworking Bench", "rough_lumber"))
+    !matches!(item.facility.as_str(), "Farmland" | "Woodland")
 }
 
 /// Full-power E-Mode draw for one facility at its ACTUAL facility level. Most powered processors

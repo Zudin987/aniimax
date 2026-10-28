@@ -41,57 +41,51 @@ fn solve(items: &[ProductionItem], counts: &FacilityCounts, modules: &ModuleLeve
 }
 
 #[test]
-fn primary_jobs_never_get_e_mode_variants_even_with_fast_timers() {
-    let protected = ["Mine", "Well", "Dewy House", "Nimbus Bed", "Tidewhisper Sandcastle",
-        "Floral Windmill", "Farmland", "Starfall Hammock", "Woodland"];
-    let mut items: Vec<_> = protected.iter().enumerate()
-        .map(|(n, facility)| item(&format!("raw_{n}"), facility, 100.0, 1.0)).collect();
-    items.extend([item("rough_lumber", "Woodworking Bench", 100.0, 1.0),
-        item("coarse_sifted_ore", "Chimney Kiln", 100.0, 1.0)]);
-    let csv = format!("name,production_time\n{}", items.iter()
-        .map(|i| format!("{},0.01\n", i.name)).collect::<String>());
-    let original = items.len();
-    assert_eq!(add_e_mode_variants(&mut items, &csv).unwrap(), 0);
-    assert_eq!(items.len(), original);
-    for mut recipe in items {
-        recipe.name = format!("{}__uncovered__by7__electric_boost", recipe.name);
-        assert!(!aniimax::models::e_mode_allowed(&recipe), "{}", recipe.name);
-    }
-}
-
-#[test]
-fn real_recipe_catalog_keeps_later_rv_stages_and_other_processors_eligible() {
+fn game_listed_primary_and_rv_recipes_have_e_mode_alternatives() {
     let mut items = aniimax::data::load_all_data(std::path::Path::new("data")).unwrap();
     add_e_mode_variants(&mut items, include_str!("../data/e_mode.csv")).unwrap();
-    for name in ["rock", "copper_ore", "quick_fresh_water", "quick_well_water",
-        "rough_lumber", "coarse_sifted_ore"] {
-        assert!(items.iter().any(|i| i.name == name), "normal {name} must stay available");
-        assert!(!items.iter().any(|i| i.name == format!("{name}__electric")
-            || i.name == format!("{name}__electric_boost")), "{name}");
-    }
-    for name in ["standard_planks", "laminated_beams", "densified_timber_component",
-        "sintered_ore_brick", "refined_ore", "microcrystalline_ore_plate", "wheatmeal", "bread", "wood_sculpture"] {
+
+    // These are actual E-Mode recipes, not a switch that should be forced on.
+    for name in ["rock", "clay", "copper_ore", "fresh_water", "quick_fresh_water",
+        "rough_lumber", "coarse_sifted_ore", "standard_planks", "sintered_ore_brick"] {
+        assert!(items.iter().any(|i| i.name == name), "normal {name} must remain available");
         for suffix in ["__electric", "__electric_boost"] {
-            assert!(items.iter().any(|i| i.name == format!("{name}{suffix}")), "{name}{suffix}");
+            assert!(items.iter().any(|i| i.name == format!("{name}{suffix}")),
+                "missing allowed E-Mode recipe {name}{suffix}");
         }
+    }
+    // Growing crops and trees are never converted into electric workshop tasks.
+    for name in ["wheat", "potato", "rice"] {
+        assert!(!items.iter().any(|i| i.name == format!("{name}__electric")));
     }
 }
 
 #[test]
-fn exact_model_and_independent_check_block_injected_primary_e_mode() {
-    let raw = item("rock", "Mine", 100.0, 1_000.0);
-    let forbidden = ProductionItem { name: "rock__electric_boost".into(), production_time: 0.01, ..raw.clone() };
-    let items = vec![raw, forbidden];
-    let mut counts = FacilityCounts::only(&[("Mine", 1, 1), ("Crackle Generator", 1, 1)]);
-    let modules = ModuleLevels { power_module: 1, ..Default::default() };
-    let normal = solve(&items, &counts, &modules);
-    assert_eq!(normal.power_used, 0);
-    assert!(normal.recipe_rates.contains_key("rock"));
-    assert!(!normal.recipe_rates.contains_key("rock__electric_boost"));
-    let mut forged = normal.clone();
-    forged.recipe_rates.insert("rock__electric_boost".into(), 1.0);
-    assert!(check_plan(&forged, &items, "coins", &counts, &modules, None)
-        .unwrap_err().contains("must use Aniimo production"));
+fn automatic_e_mode_uses_power_for_faster_mining_and_normal_without_power() {
+    let mut items = vec![item("rock", "Mine", 900.0, 1_000.0)];
+    add_e_mode_variants(&mut items, "name,production_time\nrock,10\n").unwrap();
+    let counts = FacilityCounts::only(&[("Mine", 1, 1), ("Crackle Generator", 1, 1)]);
+    let no_power = solve(&items, &counts, &ModuleLevels::default());
+    assert_eq!(no_power.power_used, 0);
+    assert!(no_power.recipe_rates.contains_key("rock"));
+    let with_power = solve(&items, &counts,
+        &ModuleLevels { power_module: 1, ..Default::default() });
+    assert_eq!(with_power.generators_used, 1);
+    assert_eq!(with_power.power_used, 30);
+    assert!(with_power.recipe_rates.keys().any(|n| n.starts_with("rock__electric")));
+    assert!(with_power.rate_per_second > no_power.rate_per_second);
+}
+
+#[test]
+fn electric_recipe_table_rejects_bad_timers_and_duplicate_names() {
+    let original = vec![item("rock", "Mine", 900.0, 1.0)];
+    for csv in ["name,production_time\nrock,0\n",
+        "name,production_time\nrock,-3\n",
+        "name,production_time\nrock,NaN\n",
+        "name,production_time\nrock,900\nrock,901\n"] {
+        let mut items = original.clone();
+        assert!(add_e_mode_variants(&mut items, csv).is_err(), "{csv}");
+    }
 }
 
 #[test]

@@ -14,7 +14,7 @@ Updated for the full release, with a joint LP-based facility-allocation engine f
 
 **Web app**
 - **Simple or Advanced Setup**: Simple mode assumes all facilities at your RV level and lets you set each owned module level (0 = not upgraded, RV max = automatic). Advanced sets individual facility counts and levels too.
-- **Automatic E-Mode**: Uses powered production when it improves the plan, respecting generator staffing, power, and normal production targets. The forced-power override has been removed.
+- **Automatic E-Mode**: Compares documented powered and Aniimo-worked recipes, including Mine/Well and first-tier RV materials, and chooses the best modeled output/staffing balance under real generator limits. Farming plots remain unpowered. The forced-power override has been removed.
 - **Live Production Plan**: Set your facilities to get the best achievable rate and what every facility should produce; no target amount needed
 - **Goal Timing**: Add a target amount afterward to see how long it'll take; updates instantly as you type, no re-solving
 - **Production Optimality**: The web app solves recipes, whole plots and machines, and environment building allocations with the [HiGHS](https://highs.dev) solver. The progress card reports whether it proved a production result optimal under the modeled constraints. Homeland placement uses a separate heuristic.
