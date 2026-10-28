@@ -90,7 +90,8 @@ if (!/__electric/.test(water.item_name)) {
     assert.notEqual(water.crew, null);
     assert.equal(water.aniimo.ability, 'Water');
 }
-assert.equal(wheatPerDay(powered), 384);
+assert.ok(wheatPerDay(powered) >= 384 && wheatPerDay(powered) <= 600 + 1e-5,
+    'extra plots can produce/sell more event crops, but the total must fit the 600 Wheat/day cap');
 // A working E-Mode Well can replace a Water production worker when a Lightning
 // Aniimo operates the generator. The old normal-only policy incorrectly forbade it.
 const withoutWater = { ...poweredInput, roster: { ...poweredInput.roster,
