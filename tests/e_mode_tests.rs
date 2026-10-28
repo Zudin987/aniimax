@@ -63,7 +63,7 @@ fn game_listed_primary_and_rv_recipes_have_e_mode_alternatives() {
 #[test]
 fn automatic_e_mode_uses_power_for_faster_mining_and_normal_without_power() {
     let mut items = vec![item("rock", "Mine", 900.0, 1_000.0)];
-    add_e_mode_variants(&mut items, "name,production_time\\nrock,10\\n").unwrap();
+    add_e_mode_variants(&mut items, "name,production_time\nrock,10\n").unwrap();
     let counts = FacilityCounts::only(&[("Mine", 1, 1), ("Crackle Generator", 1, 1)]);
     let no_power = solve(&items, &counts, &ModuleLevels::default());
     assert_eq!(no_power.power_used, 0);
@@ -79,10 +79,10 @@ fn automatic_e_mode_uses_power_for_faster_mining_and_normal_without_power() {
 #[test]
 fn electric_recipe_table_rejects_bad_timers_and_duplicate_names() {
     let original = vec![item("rock", "Mine", 900.0, 1.0)];
-    for csv in ["name,production_time\\nrock,0\\n",
-        "name,production_time\\nrock,-3\\n",
-        "name,production_time\\nrock,NaN\\n",
-        "name,production_time\\nrock,900\\nrock,901\\n"] {
+    for csv in ["name,production_time\nrock,0\n",
+        "name,production_time\nrock,-3\n",
+        "name,production_time\nrock,NaN\n",
+        "name,production_time\nrock,900\nrock,901\n"] {
         let mut items = original.clone();
         assert!(add_e_mode_variants(&mut items, csv).is_err(), "{csv}");
     }
