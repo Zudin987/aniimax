@@ -171,6 +171,8 @@ try {
     const strategyHelp = page.getByRole('button', { name: 'About Strategy', exact: true });
     await page.locator('label:has(#strategy-level-up)').click();
     await strategyHelp.click();
+    assert.match(await helpCard.innerText(), /RV upgrade resources|Home Coins/);
+    await page.keyboard.press('Escape');
     await page.locator('label:has(#strategy-priorities)').click();
     await page.locator('#facilitiesToggle').click();
     const recipeTimeHelp = page.locator('#facilitiesModal').getByRole('button', { name: 'About Time', exact: true }).first();
