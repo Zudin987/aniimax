@@ -1,6 +1,6 @@
 # Magical Wonder Night — pre-release evidence, 2026-10-29
 
-**Status: staging only.** The current, deployed Aniimax calculator must continue using Harvest Moon data. This file and `data/magical_wonder_night.csv` prepare a separate season; nothing automatically switches seasons. The announcement provided by the player says that **Magical Wonder Night** begins **after the version update** (start date not stated), and runs **until December 10, 2026 at 03:59** in the listed server's regional UTC offset. It is open from RV 10 after the festival tutorial quest. The screenshots show the new season's shop content already visible; **December 10 is the end time, not the launch date.**
+**Status: staging only.** The current, deployed Aniimax calculator must continue using Harvest Moon data. This file and `data/magical_wonder_night.csv` prepare a separate season; nothing automatically switches seasons. The official [Season 1 Part 2 update notice](https://www.aniimo.com/es/newslist/detail/100244) says Magical Wonder Night begins **after the October 29, 2026 update** and runs **until December 10, 2026 at 03:59** in the listed server's regional UTC offset. The [October 29–December 9 calendar](https://dailyaniimo.com/events/magical-night) independently matches that window. It is available from RV 10 after the festival tutorial quest. The screenshots show the new season's shop content already visible; **December 10 is the end time, not the launch date.**
 
 ## Evidence
 
