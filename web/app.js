@@ -3138,7 +3138,7 @@ function renderProductBreakdown(goalResult) {
     const { multiplier, suffix } = RATE_UNIT_SECONDS[unit] || RATE_UNIT_SECONDS.second;
     document.getElementById('product-breakdown-rate-header').innerHTML = `Profit <span class="th-unit">Home Coins${suffix}</span>`;
     // During the season, what each item counts toward the season's points.
-    const season = lastPlan?.season_points != null;
+    const season = SEASON.pointsVerified && lastPlan?.season_points != null;
     const pointsEach = new Map((lastPlan?.income_streams || []).map(s => [s.item_name, s.points || 0]));
     document.getElementById('product-breakdown-points-header').hidden = !season;
     const pointsCell = amount => season ? `<td>${amount > 0 ? formatNumber(amount) : '&mdash;'}</td>` : '';
