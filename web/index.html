@@ -18,7 +18,7 @@
         </div>
     </header>
     <p class="subtitle">aniimo homeland production optimizer</p>
-    <p class="disclaimer"><span class="disclaimer-icon" aria-hidden="true">⚠</span>Some game data is unverified. <button type="button" class="info-button" data-help="A few recipes, facility levels and counts have not been confirmed in game yet. They are marked where they are used." aria-label="About Unverified data" aria-controls="context-help" aria-expanded="false"><span aria-hidden="true">i</span></button></p>
+    <p class="disclaimer"><span class="disclaimer-icon" aria-hidden="true">⚠</span>Some game data is unverified or missing. <button type="button" class="info-button" data-help="Some recipe data and facility limits are unverified. Some higher-level materials and recipes are missing, so plans can only compare the options in Aniimax's data." aria-label="About Unverified data" aria-controls="context-help" aria-expanded="false"><span aria-hidden="true">i</span></button></p>
 
     <div class="container">
 
@@ -534,7 +534,7 @@ Hauling travel time, carry capacity and obstacle pathfinding are not simulated. 
     <div id="facilitiesModal" class="modal" onclick="closeFacilitiesOnBackdrop(event)">
         <div class="modal-content wide">
             <div class="modal-header">
-                <h2>Facility Recipes <button type="button" class="info-button" data-help="Every recipe in the game data, grouped by facility. This reference is independent of your owned facility counts and levels." aria-label="About Facility Recipes" aria-controls="context-help" aria-expanded="false"><span aria-hidden="true">i</span></button></h2>
+                <h2>Facility Recipes <button type="button" class="info-button" data-help="Recipes in Aniimax's data, grouped by facility. Some higher-level recipes are missing. This list is independent of your owned facility counts and levels." aria-label="About Facility Recipes" aria-controls="context-help" aria-expanded="false"><span aria-hidden="true">i</span></button></h2>
                 <button class="close-button" onclick="closeFacilities()">&times;</button>
             </div>
             <div class="modal-body">
@@ -553,7 +553,7 @@ Hauling travel time, carry capacity and obstacle pathfinding are not simulated. 
             </div>
             <div class="modal-body">
                 <h3>The Model</h3>
-                <p>Every plan is one mixed-integer program covering every recipe and facility at once, solved with <a href="https://highs.dev" target="_blank" rel="noopener">HiGHS</a>. Each recipe your facility levels and modules unlock, \(r\), gets a rate \(b_r\) (batches per second) and a whole number of units \(u_r\) set to it: plots for a crop, machines for a processed item.</p>
+                <p>Every plan is one mixed-integer program covering the modeled recipes and facilities at once, solved with <a href="https://highs.dev" target="_blank" rel="noopener">HiGHS</a>. Each recipe your facility levels and modules unlock, \(r\), gets a rate \(b_r\) (batches per second) and a whole number of units \(u_r\) set to it: plots for a crop, machines for a processed item.</p>
                 <div class="math-block">\[ \max \ \sum_i p_i \, s_i \;-\; \sum_r c_r \, b_r \]</div>
                 <p>where \(s_i\) is how much of item \(i\) is sold per second at price \(p_i\), and \(c_r\) is a crop's seed cost. During Magical Wonder Night, season crops' seeds cost Weird Jelly Beans; the player can optionally cap daily spending (0 means unlimited). Subject to:</p>
                 <ul>
@@ -562,7 +562,7 @@ Hauling travel time, carry capacity and obstacle pathfinding are not simulated. 
                     <li><strong>What you own.</strong> For every facility and level \(L\), the units on recipes needing level \(L\) or higher add up to at most what you own at that level. A higher-level plot can run a lower-level recipe.</li>
                     <li><strong>Growing environments.</strong> A crop wanting Cool, Warm, Freeze or Scorching grows at full speed on a plot covered by a Heat Furnace or Cooling Unit set to that mode, and more slowly on an uncovered one (see below). An Adequate crop needs a Sunlamp and grows nowhere else.</li>
                 </ul>
-                <p>HiGHS proves the plan is the best possible. On the rare setup where that takes longer than 30 seconds, it stops with the best plan so far and the results say how far from the best it could be. Every plan is then re-checked on its own before it's shown.</p>
+                <p>HiGHS proves the plan is the best possible within the modeled data and constraints. Missing recipes and unverified values can affect the result. On the rare setup where that takes longer than 30 seconds, it stops with the best plan so far and the results say how far from the best it could be. Every plan is then re-checked on its own before it's shown.</p>
 
                 <h3>Time per Batch</h3>
                 <p>Crops and trees take their grow time, less the Aniimo's watering: a plot asks for water twice as it grows, at two thirds and at one third of its time left, and each watering takes an eighth of the crop's own time off. A 40-minute crop comes in at 30 and a 4-minute one at 3. A crop short of its environment grows slower but still loses the same minutes, so a Warm crop with no building takes 50 minutes and is watered down to 40; that part isn't checked in game yet.</p>
