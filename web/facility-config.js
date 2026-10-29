@@ -26,8 +26,8 @@
 export const FACILITIES = [
     {
         name: 'Farmland', slug: 'farmland', defaultCount: 1, category: 'Materials',
-        unlocks: { 1: 1, 2: 2, 3: 5, 4: 7, 5: 9, 6: 12, 7: 16 },
-        counts: [4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 40],
+        unlocks: { 1: 1, 2: 2, 3: 5, 4: 7, 5: 9, 6: 12, 7: 16, 8: 21 },
+        counts: [4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 40, 40, 40],
         tooltip: "Lv.1: Wheat&#10;Lv.2: Potato, Quick Wheat&#10;Lv.3: Rice, Soybean&#10;Lv.4: Rose, Cotton, Quick Potato&#10;Lv.5: Strawberry, Lavender, Sugarcane&#10;Lv.6: Ginseng, Grape, Premium Wheat, Quick Rice&#10;Lv.7: Cranberry, Agave, Quick Strawberry"
     },
     {
@@ -234,7 +234,8 @@ export const SEASON = {
 // Upgrade countdowns visibly shown for targets RV 14–20 in the 2026-10-03 recording.
 // Earlier targets were already upgraded, so their timers are unknown rather than extrapolated.
 export const LEVEL_UP_TIMERS = { 14: 6 * 3600, 15: 7 * 3600, 16: 8 * 3600,
-    17: 9 * 3600, 18: 10 * 3600, 19: 11 * 3600, 20: 12 * 3600 };
+    17: 9 * 3600, 18: 10 * 3600, 19: 11 * 3600, 20: 12 * 3600,
+    21: 13 * 3600, 22: 14 * 3600 };
 
 // What reaching each RV level costs: coins, plus raw Wood Blocks and Mineral Sand up to RV 6 and
 // one Woodworking Bench item and one Chimney Kiln item from RV 7.
@@ -258,6 +259,8 @@ export const LEVEL_UP_COSTS = {
     18: { coins: 11600000, items: [['laminated_beams', 800], ['refined_ore', 520]] },
     19: { coins: 17100000, items: [['densified_timber_component', 400], ['microcrystalline_ore_plate', 220]] },
     20: { coins: 20800000, items: [['densified_timber_component', 490], ['microcrystalline_ore_plate', 270]] },
+    21: { coins: 34300000, items: [['densified_timber_component', 830], ['microcrystalline_ore_plate', 3720]] },
+    22: { coins: 52600000, items: [['densified_timber_component', 1190], ['microcrystalline_ore_plate', 10500]] },
 };
 
 // The Woodworking Bench and Chimney Kiln chains, lowest tier first: what a player might have in
@@ -374,16 +377,17 @@ export const FACILITY_CATEGORIES = ['Materials', 'Environment', 'Power', 'Aniimo
 // facilities).
 export const FACILITY_CATEGORY_BY_NAME = new Map(FACILITIES.map(f => [f.name, f.category]));
 
-// Highest RV (Homeland) level in the game.
-export const MAX_HOME_LEVEL = 20;
+// New RV21–22 costs/timers and specified module unlocks are screenshot verified.
+// Unreported post-RV20 placement counts stay at last confirmed values (conservative).
+export const MAX_HOME_LEVEL = 22;
 
 // Highest level of each upgrade module at each RV level (index = RV level - 1).
 export const MODULE_MAX_LEVELS = {
-    ecological_module: [0, 0, 1, 1, 1, 1, 2, 3, 3, 3, 4, 5, 5, 6, 6, 6, 7, 8, 8, 8],
-    kitchen_module: [0, 1, 1, 2, 2, 2, 2, 3, 3, 4, 4, 4, 5, 5, 5, 6, 6, 6, 7, 7],
-    resource_detector: [0, 0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 4, 5, 5, 6, 6, 7, 7, 8, 8],
-    crafting_module: [0, 0, 0, 0, 1, 1, 2, 2, 2, 3, 3, 4, 4, 4, 4, 4, 5, 6, 7, 7],
-    power_module: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5],
+    ecological_module: [0, 0, 1, 1, 1, 1, 2, 3, 3, 3, 4, 5, 5, 6, 6, 6, 7, 8, 8, 8, 9, 9],
+    kitchen_module: [0, 1, 1, 2, 2, 2, 2, 3, 3, 4, 4, 4, 5, 5, 5, 6, 6, 6, 7, 7, 7, 7],
+    resource_detector: [0, 0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 4, 5, 5, 6, 6, 7, 7, 8, 8, 8, 10],
+    crafting_module: [0, 0, 0, 0, 1, 1, 2, 2, 2, 3, 3, 4, 4, 4, 5, 6, 7, 7, 7, 8],
+    power_module: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 5],
 };
 
 // The value for RV level `homeLevel` in a per-RV list, keeping the last value past its end.
@@ -393,7 +397,7 @@ function atHomeLevel(list, homeLevel) {
 
 // How many Aniimo can live on the homeland at each RV level (index = RV level - 1; `null` where
 // unknown).
-export const ANIIMO_MAX = [null, 8, 11, 14, 17, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 42, 43, 44, 45];
+export const ANIIMO_MAX = [null, 8, 11, 14, 17, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 42, 43, 44, 45, 46, 47];
 
 export const SIMPLE_MODULE_FIELDS = [
     { id: 'simple-ecological-module-level', module: 'ecological_module' },
