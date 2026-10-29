@@ -555,10 +555,10 @@ Hauling travel time, carry capacity and obstacle pathfinding are not simulated. 
                 <h3>The Model</h3>
                 <p>Every plan is one mixed-integer program covering every recipe and facility at once, solved with <a href="https://highs.dev" target="_blank" rel="noopener">HiGHS</a>. Each recipe your facility levels and modules unlock, \(r\), gets a rate \(b_r\) (batches per second) and a whole number of units \(u_r\) set to it: plots for a crop, machines for a processed item.</p>
                 <div class="math-block">\[ \max \ \sum_i p_i \, s_i \;-\; \sum_r c_r \, b_r \]</div>
-                <p>where \(s_i\) is how much of item \(i\) is sold per second at price \(p_i\), and \(c_r\) is a crop's seed cost. During the Magical Wonder Night, season crops' seeds cost Weird Jelly Beans instead; when a daily Wheat budget is set, their combined planting rate is constrained to stay within it (0 means unlimited). Subject to:</p>
+                <p>where \(s_i\) is how much of item \(i\) is sold per second at price \(p_i\), and \(c_r\) is a crop's seed cost. During Magical Wonder Night, season crops' seeds cost Weird Jelly Beans; the player can optionally cap daily spending (0 means unlimited). Subject to:</p>
                 <ul>
                     <li><strong>Whole units.</strong> \(b_r \, t_r \le u_r\), with \(u_r\) a whole number and \(t_r\) the time per batch. A unit runs one recipe and is left running.</li>
-                    <li><strong>Item balance.</strong> Everything made covers what other recipes use plus what's sold. Harvest Moon also keeps one raw unit's output of every order ingredient in Storage; held stock earns no income or points. A quick variant makes the same item as the regular one.</li>
+                    <li><strong>Item balance.</strong> Everything made covers what other recipes use plus what's sold. Pumpkin God orders change, so no raw stock is automatically reserved. Quick recipes can make the same base item as normal recipes.</li>
                     <li><strong>What you own.</strong> For every facility and level \(L\), the units on recipes needing level \(L\) or higher add up to at most what you own at that level. A higher-level plot can run a lower-level recipe.</li>
                     <li><strong>Growing environments.</strong> A crop wanting Cool, Warm, Freeze or Scorching grows at full speed on a plot covered by a Heat Furnace or Cooling Unit set to that mode, and more slowly on an uncovered one (see below). An Adequate crop needs a Sunlamp and grows nowhere else.</li>
                 </ul>
@@ -583,7 +583,7 @@ Hauling travel time, carry capacity and obstacle pathfinding are not simulated. 
                 <p>Each tier takes 8 of the tier below (4 for the last), so the Bench and Kiln switch between tiers rather than running one recipe like other processors.</p>
 
                 <h3>Priorities</h3>
-                <p>The plan solves once per ticked priority, in your order. Each solve makes as much of its priority as it can while keeping at least what the earlier ones reached; a last solve then earns as many Home Coins as all of those leave room for. Aniimo EXP, Aniipods and, during the Magical Wonder Night, Whimsy Points count as their own currencies, so the same model handles them like Home Coins.</p>
+                <p>The plan solves once per ticked priority, in your order. Each solve makes as much of its priority as it can while keeping at least what the earlier ones reached; a last solve then earns as many Home Coins as all of those leave room for. Aniimo EXP and Aniipods count as separate priorities. Whimsy Points are not currently modeled, because the actions granting them have not yet been verified.</p>
 
                 <h3>Time to Reach a Goal</h3>
                 <p>Each product starts adding up once its first batch clears its ingredient chain (its lead time), then keeps its steady rate:</p>
