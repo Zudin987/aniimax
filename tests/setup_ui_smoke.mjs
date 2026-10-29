@@ -264,7 +264,7 @@ try {
     await page.setViewportSize({ width: 1000, height: 900 });
     await page.locator('#season-wheat-budget').fill('600');
     await page.locator('#season-mutation-plots').fill('2');
-    assert.match(await page.locator('#season-budget-note').innerText(), /Budget conflict.*1024/);
+    assert.match(await page.locator('#season-budget-note').innerText(), /Budget conflict.*1,024/);
     await page.locator('#season-wheat-budget').fill('1024');
     assert.doesNotMatch(await page.locator('#season-budget-note').innerText(), /Budget conflict/);
     await page.locator('#season-wheat-budget').fill('0');
