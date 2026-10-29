@@ -38,15 +38,15 @@ export const FACILITIES = [
     },
     {
         name: 'Mine', slug: 'mine', defaultCount: 1, category: 'Materials', hasWorker: true, ability: 'Earth', personality: 'Playful',
-        unlocks: { 1: 3, 2: 6, 3: 9, 4: 12, 5: 15, 6: 18 },
+        unlocks: { 1: 3, 2: 6, 3: 9, 4: 12, 5: 15, 6: 18, 7: 21 },
         counts: [0, 0, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10],
-        tooltip: "Lv.1: Rock&#10;Lv.2: Clay&#10;Lv.3: Shell&#10;Lv.4: Copper Ore&#10;Lv.5: Quartz Ore&#10;Lv.6: Gem&#10;Also yields Mineral Sand."
+        tooltip: "Lv.1: Rock&#10;Lv.2: Clay&#10;Lv.3: Shell&#10;Lv.4: Copper Ore&#10;Lv.5: Quartz Ore&#10;Lv.6: Gem&#10;Lv.7: Silver Ore&#10;Also yields Mineral Sand."
     },
     {
         name: 'Well', slug: 'well', defaultCount: 0, category: 'Materials', hasWorker: true, ability: 'Water', personality: 'Faithful',
-        unlocks: { 1: 4, 2: 8, 3: 11, 4: 13, 5: 17 },
+        unlocks: { 1: 4, 2: 8, 3: 11, 4: 13, 5: 17, 6: 21 },
         counts: [0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 4, 4],
-        tooltip: "Lv.1: Well Water, Quick Well Water&#10;Lv.2: Fresh Water&#10;Lv.3: Quick Fresh Water&#10;Lv.4: Deep Rock Spring Water, Quick Deep Rock Spring Water&#10;Lv.5: Natural Mineral Spring Water, Quick Natural Mineral Spring Water"
+        tooltip: "Lv.1: Well Water, Quick Well Water&#10;Lv.2: Fresh Water&#10;Lv.3: Quick Fresh Water&#10;Lv.4: Deep Rock Spring Water, Quick Deep Rock Spring Water&#10;Lv.5: Natural Mineral Spring Water, Quick Natural Mineral Spring Water&#10;Lv.6: Snowmelt Cold Spring, Quick Snowmelt Cold Spring"
     },
     {
         name: 'Tidewhisper Sandcastle', slug: 'tidewhisper-sandcastle', defaultCount: 0, category: 'Aniimo Materials', hasWorker: true, ability: 'Leisure', personality: 'Judicious', family: 'Susuta',
@@ -105,15 +105,15 @@ export const FACILITIES = [
     },
     {
         name: 'Carousel Mill', slug: 'carousel-mill', defaultCount: 1, category: 'Materials Processing', hasWorker: true, ability: 'Wind', personality: 'Tenacious',
-        unlocks: { 1: 2, 2: 5, 3: 9, 4: 13, 5: 16, 6: 18 },
+        unlocks: { 1: 2, 2: 5, 3: 9, 4: 13, 5: 16, 6: 18, 7: 21 },
         counts: [0, 1, 1, 1, 1, 1, 1, 1, 2],
-        tooltip: "Lv.1: Wheatmeal&#10;Lv.2: Tofu, Milled Rice&#10;Lv.3: Lavender Powder&#10;Lv.4: Rice Drink, Ginseng Powder&#10;Lv.5: Refined Flour, Coconut Oil&#10;Lv.6: Cocoa Powder, Coconut Milk"
+        tooltip: "Lv.1: Wheatmeal&#10;Lv.2: Tofu, Milled Rice&#10;Lv.3: Lavender Powder&#10;Lv.4: Rice Drink, Ginseng Powder&#10;Lv.5: Refined Flour, Coconut Oil&#10;Lv.6: Cocoa Powder, Coconut Milk&#10;Lv.7: Bright Silver Powder"
     },
     {
         name: 'Crafting Table', slug: 'crafting-table', defaultCount: 1, category: 'Materials Processing', hasWorker: true, ability: 'Artisanship', personality: 'Judicious',
-        unlocks: { 1: 3, 2: 5, 3: 7, 4: 9, 5: 12, 6: 15, 7: 18, 8: 20 },
+        unlocks: { 1: 3, 2: 5, 3: 7, 4: 9, 5: 12, 6: 15, 7: 18, 8: 20, 9: 22 },
         counts: [0, 0, 1, 1, 1, 1, 1, 1, 1, 2],
-        tooltip: "Lv.1: Wood Sculpture&#10;Lv.2: Bamboo Ware, River-Washed Stones, Premium River-Washed Stones&#10;Lv.3: Rose Freshener, Pottery, Premium Rose Freshener&#10;Lv.4: Bouquet, Shell Ornament, Lavender Sachet&#10;Lv.5: Wind Chime, Star Wish Lantern, Dream Catcher, Premium Wind Chime&#10;Lv.6: Rubber Duck, Pearl Necklace, Woven Toy, Porcelain&#10;Lv.7: Dye, Gemstone Dust, Flowers in a Bottle, Premium Gemstone Dust&#10;Lv.8: Doll"
+        tooltip: "Lv.1: Wood Sculpture&#10;Lv.2: Bamboo Ware, River-Washed Stones, Premium River-Washed Stones&#10;Lv.3: Rose Freshener, Pottery, Premium Rose Freshener&#10;Lv.4: Bouquet, Shell Ornament, Lavender Sachet&#10;Lv.5: Wind Chime, Star Wish Lantern, Dream Catcher, Premium Wind Chime&#10;Lv.6: Rubber Duck, Pearl Necklace, Woven Toy, Porcelain&#10;Lv.7: Dye, Gemstone Dust, Flowers in a Bottle, Premium Gemstone Dust&#10;Lv.8: Doll, Star Diamond&#10;Lv.9: Quicksilver Springstone, Glitter Powder"
     },
     {
         name: 'Claw Game Cooker', slug: 'claw-game-cooker', defaultCount: 1, category: 'Materials Processing', hasWorker: true, ability: 'Fire', personality: 'Practical',
@@ -129,9 +129,9 @@ export const FACILITIES = [
     },
     {
         name: 'Simmering Pot', slug: 'simmering-pot', defaultCount: 0, category: 'Materials Processing', hasWorker: true, ability: 'Fire', personality: 'Tenacious',
-        unlocks: { 1: 5, 2: 7, 3: 9, 4: 12, 5: 15, 6: 18 },
+        unlocks: { 1: 5, 2: 7, 3: 9, 4: 12, 5: 15, 6: 18, 7: 21 },
         counts: [0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 2],
-        tooltip: "Lv.1: Plain Rice Porridge&#10;Lv.2: Rose Concentrate&#10;Lv.3: Rock Candy, Strawberry Jam, Maple Candy Apple Jam&#10;Lv.4: Chestnut Puree, Grape Jam, Ginseng Porridge&#10;Lv.5: Maple Sugar Chunk, Malt Sugar&#10;Lv.6: Cocoa Spread, Cranberry Jam, Agave Syrup"
+        tooltip: "Lv.1: Plain Rice Porridge&#10;Lv.2: Rose Concentrate&#10;Lv.3: Rock Candy, Strawberry Jam, Maple Candy Apple Jam&#10;Lv.4: Chestnut Puree, Grape Jam, Ginseng Porridge&#10;Lv.5: Maple Sugar Chunk, Malt Sugar&#10;Lv.6: Cocoa Spread, Cranberry Jam, Agave Syrup&#10;Lv.7: Potato Starch"
     },
     {
         name: 'Phonolfactory Table', slug: 'phonolfactory-table', defaultCount: 0, category: 'Materials Processing', hasWorker: true, ability: 'Perfumery', personality: 'Instinctive',
@@ -147,9 +147,9 @@ export const FACILITIES = [
     },
     {
         name: 'Blazing Stove', slug: 'blazing-stove', defaultCount: 0, category: 'Materials Processing', hasWorker: true, ability: 'Fire', personality: 'Nimble',
-        unlocks: { 1: 8, 2: 10, 3: 13, 4: 16, 5: 18 },
+        unlocks: { 1: 8, 2: 10, 3: 13, 4: 16, 5: 18, 6: 22 },
         counts: [0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2],
-        tooltip: "Lv.1: Soy Sauce Fried Rice, Creamy Potato Soup, Cherry Blossom Rice Ball, Premium Potato Soup&#10;Lv.2: Tanghulu, Soy Sauce Tofu, Sugar-Roasted Chestnuts&#10;Lv.3: Steamed Vermicelli Roll, Ginseng Chestnut Cake, Walnut Cake&#10;Lv.4: Jello, Strawberry Candy, Rich Grape Compote, Premium Jello&#10;Lv.5: Strawberry Cream Puff, Cranberry Chocolate"
+        tooltip: "Lv.1: Soy Sauce Fried Rice, Creamy Potato Soup, Cherry Blossom Rice Ball, Premium Potato Soup&#10;Lv.2: Tanghulu, Soy Sauce Tofu, Sugar-Roasted Chestnuts&#10;Lv.3: Steamed Vermicelli Roll, Ginseng Chestnut Cake, Walnut Cake&#10;Lv.4: Jello, Strawberry Candy, Rich Grape Compote, Premium Jello&#10;Lv.5: Strawberry Cream Puff, Cranberry Chocolate&#10;Lv.6: Shredded Coconut Cake"
     },
     {
         name: 'Pickling Jar', slug: 'pickling-jar', defaultCount: 0, category: 'Materials Processing', hasWorker: true, ability: 'Dark', personality: 'Playful',
@@ -312,26 +312,26 @@ export const FACILITY_FOOTPRINTS = {
 export const FACILITY_OUTPUT_LIMITS = {
     'Aniipod Maker': [20, 20, 20],
     'Dance Pad Polisher': [20, 20, 20],
-    'Blazing Stove': [20, 20, 20, 20, 20],
+    'Blazing Stove': [20, 20, 20, 20, 20, 20],
     'Bouncy Brew Keg': [20, 20, 20, 20, 20],
-    'Carousel Mill': [20, 20, 20, 20, 20, 20],
+    'Carousel Mill': [20, 20, 20, 20, 20, 20, 20],
     'Chimney Kiln': [20, 20, 20, 20],
     'Claw Game Cooker': [20, 20, 20, 20, 20, 20, 20],
-    'Crafting Table': [20, 20, 20, 20, 20, 20, 20, 20],
+    'Crafting Table': [20, 20, 20, 20, 20, 20, 20, 20, 20],
     'Joy Wheel Loom': [20, 20, 20, 20],
     'Jukebox Dryer': [20, 20, 20, 20, 20, 20, 20],
     'Phonolfactory Table': [20, 20, 20, 20, 20, 20],
     'Pickling Jar': [20, 20, 20, 20, 20],
-    'Simmering Pot': [20, 20, 20, 20, 20, 20],
+    'Simmering Pot': [20, 20, 20, 20, 20, 20, 20],
     'Woodworking Bench': [20, 20, 20, 20],
     'Dewy House': [80, 240],
-    'Farmland': [5, 10, 15, 20, 25, 30, 35],
+    'Farmland': [5, 10, 15, 20, 25, 30, 35, 40],
     'Floral Windmill': [240],
-    'Mine': [120, 200, 200, 200, 200, 200],
+    'Mine': [120, 200, 200, 200, 200, 200, 200],
     'Nimbus Bed': [80, 120, 120],
     'Starfall Hammock': [40],
     'Tidewhisper Sandcastle': [200, 460, 460],
-    'Well': [300, 300, 340, 340, 340],
+    'Well': [300, 300, 340, 340, 340, 340],
     'Woodland': [8, 12, 16, 20, 24, 28],
 };
 
@@ -385,7 +385,7 @@ export const MAX_HOME_LEVEL = 22;
 export const MODULE_MAX_LEVELS = {
     ecological_module: [0, 0, 1, 1, 1, 1, 2, 3, 3, 3, 4, 5, 5, 6, 6, 6, 7, 8, 8, 8, 9, 9],
     kitchen_module: [0, 1, 1, 2, 2, 2, 2, 3, 3, 4, 4, 4, 5, 5, 5, 6, 6, 6, 7, 7, 7, 7],
-    resource_detector: [0, 0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 4, 5, 5, 6, 6, 7, 7, 8, 8, 8, 10],
+    resource_detector: [0, 0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 4, 5, 5, 6, 6, 7, 7, 8, 9, 9, 10],
     crafting_module: [0, 0, 0, 0, 1, 1, 2, 2, 2, 3, 3, 4, 4, 4, 4, 4, 5, 6, 7, 7, 7, 8],
     power_module: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 5],
 };

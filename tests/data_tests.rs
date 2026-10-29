@@ -105,7 +105,7 @@ fn test_currency_types() {
 /// Ingredients referenced by a recipe that no facility in the data produces yet. When the facility
 /// that makes one of these is added, remove it from this list; when a new recipe references
 /// something not yet in the data, add it here deliberately.
-const KNOWN_MISSING_INGREDIENTS: &[&str] = &[];
+const KNOWN_MISSING_INGREDIENTS: &[&str] = &["gold_dust", "premium_potato"];
 
 /// Every item, with the season's (see `harvest_moon_festival.csv`), which the checks cover too.
 fn load_items() -> Option<Vec<aniimax::models::ProductionItem>> {

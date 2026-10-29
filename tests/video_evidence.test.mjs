@@ -4,11 +4,12 @@ import fs from 'node:fs';
 import { FACILITIES, MODULE_MAX_LEVELS, LEVEL_UP_COSTS, LEVEL_UP_TIMERS, STORAGE_PLACEMENT_LIMITS, simpleSetup } from '../web/facility-config.js';
 
 test('component upgrade gates match the video, rather than conflicting RV summary text', () => {
-    // Each position is module level 1 onward. Component UI at 01:23–02:19.
+    // Each position is module level 1 onward. Component UI at 01:23–02:19;
+    // Resource Detector levels 9–10 were added later, corroborated by the Oct 29 RV module page.
     const gates = {
         ecological_module: [3, 7, 8, 11, 12, 14, 17, 18],
         kitchen_module: [2, 4, 8, 10, 13, 16, 19],
-        resource_detector: [5, 8, 11, 12, 13, 15, 17, 19],
+        resource_detector: [5, 8, 11, 12, 13, 15, 17, 19, 20, 22],
         crafting_module: [5, 7, 10, 12, 17, 18, 19],
         power_module: [12, 14, 16, 18, 20],
     };
