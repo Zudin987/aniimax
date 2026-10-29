@@ -50,8 +50,11 @@ test('a Lightning-only roster can power a Mine without an Earth production worke
 test('roster planning respects the family required by each hammock product', async () => {
     for (const [family, expected, other] of [['Celestis', 'star', 'gold_speck_cap'], ['Coinwisp', 'gold_speck_cap', 'star']]) {
         const input = { currency: 'coins', aniimo: 'roster', prioritize_byproducts: false,
-            facilities: { ...none, 'Starfall Hammock': [{ count: 1, level: 2 }] },
-            roster: { members: [{ count: 2, family, abilities: { Leisure: 3 }, personalities: [] }], residents: [] } };
+            facilities: { ...none, 'Starfall Hammock': [{ count: 1, level: 2 }],
+                'Heat Furnace': [{ count: 1, level: 1 }], 'Cooling Unit': [{ count: 1, level: 1 }] },
+            roster: { members: [{ count: 2, family, abilities: { Leisure: 3 }, personalities: [] },
+                { count: 2, abilities: { Fire: 1, Ice: 1 }, personalities: [] }],
+                environment: { 'Heat Furnace': 'Fire', 'Cooling Unit': 'Ice' }, residents: [] } };
         const result = JSON.parse(await plan(pkg, JSON.stringify(input)));
         checkPlan(result);
         const made = result.coin_items.filter(row => row.status === 'producing').map(row => row.item_name);
