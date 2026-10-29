@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { normalizeSetupSettings } from '../web/setup-config.js';
@@ -129,4 +130,29 @@ test('malformed legacy layouts cannot inject SVG attributes or crash the rendere
         { pieces: [], storage: { x: '0" onload="alert(1)', y: 0, w: 2, h: 2 } }]) {
         assert.throws(() => decodeLayoutCode(code({ v: 1, homeLevel: 13, layout })));
     }
+});
+
+test('old Harvest Moon saves reset only the obsolete season settings', () => {
+    const app = fs.readFileSync(new URL('../web/app.js', import.meta.url), 'utf8');
+    const code = app.slice(app.indexOf('function migrateSavedConfig('),
+        app.indexOf('// Populates the module-level', app.indexOf('function migrateSavedConfig(')));
+    const migrate = new Function(code + '\nreturn migrateSavedConfig;')();
+    const old = {
+        'season-on': true, 'season-wheat-budget': '600',
+        'season-mutation-plots': '2', 'season-points-min': '24',
+        'home-level': '18', roster: [{ count: 2 }],
+        unlockedSpecial: ['harvest_platter', 'rose_shortbread'],
+    };
+    const next = migrate(old);
+    assert.equal(next.seasonId, 'magical_wonder_night');
+    assert.equal(next['season-on'], false);
+    assert.equal(next['season-wheat-budget'], '0');
+    assert.equal(next['season-mutation-plots'], '0');
+    assert.equal(next['season-points-min'], '0');
+    assert.deepEqual(next.unlockedSpecial, ['rose_shortbread']);
+    assert.equal(next['home-level'], '18');
+    assert.deepEqual(next.roster, [{ count: 2 }]);
+    next['season-wheat-budget'] = '800';
+    assert.equal(migrate(next)['season-wheat-budget'], '800',
+        'current-season saves keep the player-entered cap');
 });
