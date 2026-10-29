@@ -1,6 +1,6 @@
 # Magical Wonder Night — pre-release evidence, 2026-10-29
 
-**Status: staging only.** The current, deployed Aniimax calculator must continue using Harvest Moon data. This file and `data/magical_wonder_night.csv` prepare a separate season; nothing automatically switches seasons. The official [Season 1 Part 2 update notice](https://www.aniimo.com/es/newslist/detail/100244) says Magical Wonder Night begins **after the October 29, 2026 update** and runs **until December 10, 2026 at 03:59** in the listed server's regional UTC offset. The [October 29–December 9 calendar](https://dailyaniimo.com/events/magical-night) independently matches that window. It is available from RV 10 after the festival tutorial quest. The screenshots show the new season's shop content already visible; **December 10 is the end time, not the launch date.**
+**Status: integration branch awaiting CI and merge.** This branch replaces Harvest Moon with the current Magical Wonder Night season. The old event is archived for historical tests only. The official [Season 1 Part 2 update notice](https://www.aniimo.com/es/newslist/detail/100244) says Magical Wonder Night begins **after the October 29, 2026 update** and runs **until December 10, 2026 at 03:59** in the listed server's regional UTC offset. The [October 29–December 9 calendar](https://dailyaniimo.com/events/magical-night) independently matches that window. It is available from RV 10 after the festival tutorial quest. The screenshots show the new season's shop content already visible; **December 10 is the end time, not the launch date.**
 
 ## Evidence
 
@@ -35,4 +35,12 @@ Source card names map to the existing data keys `wheatmeal`, `sea_salt`, `rock_c
 
 ## Integration plan
 
-Keep `data/harvest_moon_festival.csv` and its existing UI unchanged until the release is confirmed. Once the new season mechanics are verified, add a season selector/activation policy and distinct per-season currency/budget/points handling in WASM and the UI, migrate old saved settings carefully, update the recipe checklist and optimizer tests, then run full CI/browser tests. **Do not merge this staging PR as a claim that Magical Wonder Night is playable in Aniimax yet.**
+The UI now exposes Magical Wonder Night as the only event. The old CSV remains for historical regression tests but cannot be selected at runtime. Whimsy Point earning is intentionally not calculated. The optimizer uses the two new crop timers, the player-entered optional Jelly Bean cap and zero default event plots, with seven Formula Notes modeled as unlocks. Review full CI and manually verify new RV and live gameplay assumptions before shipping.
+
+## New verified gameplay screenshots (2026-10-29 second batch)
+
+- Wonder Dailies show four tasks, each paying 200 Weird Jelly Beans. Pumpkin God season orders in Daily Orders also pay 300 Jelly Beans each; observed requests are Magic Pumpkin x6 and Candied Lanternfruit x2. Orders rotate, so these requests are not a universal fixed recipe reserve.
+- Season Exchange Formula Notes: Glowfruit Lantern Set costs 120 Jelly Beans; Honey-Glazed Pumpkin Cup, Magic Pumpkin Lantern, Memory Lantern, Magic Pumpkin Cake, Gleam Fruit Nectar, and Golden Lantern Pumpkin Soup cost 80 each. Sea Salt Roasted Pumpkin and Candied Lanternfruit appear without Formula Notes in the exchange.
+- New season mutated crop collection: 8 shown per crop (16 slots displayed), seasonal collection track 0/32; mutation odds unknown.
+- RV21 cost screenshot: 34,300,000 Home Coins, 830 Densified Timber Components and 3,720 Microcrystalline Ore Plates, 13-hour upgrade timer; 46 Aniimo cap, Ecological Module level 9, a title/habitability/quest gate.
+- RV22: 52,600,000 coins, 1,190 Densified Timber Components and 10,500 Microcrystalline Ore Plates, 14-hour timer; 47 Aniimo cap, Crafting Module level 8 and Resource Detector level 10; requires 24,000 Habitability, 40 level-8 Farmland and four Wells. Placement caps beyond the previously verified RV20 profile remain conservative because screenshots do not list all new maxima.
