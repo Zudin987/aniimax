@@ -9,37 +9,40 @@ test('the actual stock renderer separates held output from sales and clears old 
     const source = app.slice(app.indexOf('function renderHarvestOrderStock('), app.indexOf('function renderFacilityPlan('));
     const render = new Function('document', 'prettyItem', 'formatNumber', 'formatDuration', source + '\nreturn renderHarvestOrderStock;')(
         { getElementById: id => elements.get(id) }, name => name.replaceAll('_', ' '), String, n => `${n}s`);
-    render({ harvest_order_stock: [{ item_name: 'moondew_radish', facility: 'Farmland', units: 1,
-        units_per_second: 8 / 1800, first_batch_seconds: 1800 }] });
+    render({ harvest_order_stock: [{ item_name: 'magic_pumpkin', facility: 'Farmland', units: 1,
+        units_per_second: 8 / 1350, first_batch_seconds: 1350 }] });
     assert.equal(elements.get('harvest-order-card').hidden, false);
     assert.match(elements.get('harvest-order-stock').innerHTML, /Held \/ day/);
-    assert.match(elements.get('harvest-order-stock').innerHTML, /moondew radish/);
-    assert.match(elements.get('harvest-order-stock').innerHTML, /384/);
-    assert.match(elements.get('harvest-order-stock').innerHTML, /1800s/);
+    assert.match(elements.get('harvest-order-stock').innerHTML, /magic pumpkin/);
+    assert.match(elements.get('harvest-order-stock').innerHTML, /512/);
+    assert.match(elements.get('harvest-order-stock').innerHTML, /1350s/);
     render({ success: true }); // Older imported/cached plans have no reserve report.
     assert.equal(elements.get('harvest-order-card').hidden, true);
     assert.equal(elements.get('harvest-order-stock').innerHTML, '');
 });
 
-test('the actual budget note preserves order stock at zero and explains a too-small cap', () => {
+test('the actual event budget note has optional plots and a player-set Jelly Bean cap', () => {
     const classes = new Set();
-    const note = { innerHTML: '', classList: { add: value => classes.add(value), remove: value => classes.delete(value) } };
-    let plots = 0, cap = 383;
+    const note = { textContent: '', classList: { add: value => classes.add(value), remove: value => classes.delete(value) } };
+    let plots = 0, cap = 511;
     const source = app.slice(app.indexOf('function renderSeasonBudgetNote('), app.indexOf('function renderSeason()'));
     const render = new Function('document', 'seasonMutationPlots', 'seasonWheatBudget', 'selectedSetupTab',
         'roster', 'harvestBudgetStatus', 'formatNumber', source + '\nreturn renderSeasonBudgetNote;')(
         { getElementById: () => note }, () => plots, () => cap, () => 'best', [], harvestBudgetStatus, String);
     render();
+    assert.equal(classes.has('warning'), false);
+    assert.match(note.textContent, /No magical crop plots are required/);
+    plots = 1;
+    render();
     assert.equal(classes.has('warning'), true);
-    assert.match(note.innerHTML, /Order stock keeps 1 plot per crop/);
-    assert.match(note.innerHTML, /384 Wheat\/day/);
-    assert.doesNotMatch(note.innerHTML, /reduce extra plots/, 'mandatory raw stock cannot be reduced');
+    assert.match(note.textContent, /512 Weird Jelly Beans\/day/);
+    assert.match(note.textContent, /Raise the cap or lower the plot minimum/);
     cap = 600;
     render();
     assert.equal(classes.has('warning'), false);
-    assert.match(note.innerHTML, /216\/day left/);
+    assert.match(note.textContent, /88 per day available/);
     plots = 2;
     render();
-    assert.match(note.innerHTML, /768 Wheat\/day/);
-    assert.match(note.innerHTML, /reduce extra plots/);
+    assert.equal(classes.has('warning'), true);
+    assert.match(note.textContent, /1024 Weird Jelly Beans\/day/);
 });
