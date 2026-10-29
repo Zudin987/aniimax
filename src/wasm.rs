@@ -1790,6 +1790,33 @@ impl PreparedInput {
                 .map_err(|e| serde_json::to_string(&empty_production_plan(false, Some(format!("Invalid E-Mode data: {e}")))).unwrap_or_default())?;
         }
         items.retain(|item| !input.exclude.iter().any(|name| name == crate::models::base_item_name(&item.name)));
+        if input.season && (input.season_points_per_day > 0.0
+            || input.priorities.iter().any(|priority| priority == crate::models::SEASON_POINTS))
+        {
+            return Err(serde_json::to_string(&empty_production_plan(false,
+                Some("Whimsy Point earning rules have not been verified; remove points targets before calculating.".into())))
+                .unwrap_or_default());
+        }
+        if input.season && input.harvest_mutation_plots > 0 {
+            for name in ["magic_pumpkin", "memory_lanternfruit"] {
+                if !items.iter().any(|item| item.name == name) {
+                    return Err(serde_json::to_string(&empty_production_plan(false,
+                        Some(format!("Required event crop {} is unavailable. Unskip its recipe or set minimum event plots to 0.", name.replace('_', " ")))))
+                        .unwrap_or_default());
+                }
+            }
+            let needed = input.harvest_mutation_plots.saturating_mul(2);
+            if facility_counts.capacity_at_level("Farmland", 5) < needed {
+                return Err(serde_json::to_string(&empty_production_plan(false,
+                    Some(format!("Magical Wonder Night needs {needed} Farmland Lv.5+ plots for your selected minimum."))))
+                    .unwrap_or_default());
+            }
+            if facility_counts.get_count("Sunlamp") == 0 {
+                return Err(serde_json::to_string(&empty_production_plan(false,
+                    Some("Magic Pumpkin and Memory Lanternfruit require Adequate sunlight; add a Sunlamp or set the minimum plots to 0.".into())))
+                    .unwrap_or_default());
+            }
+        }
         let setup = input
             .aniimo
             .as_deref()
@@ -2280,7 +2307,7 @@ mod tests {
 
     fn wonder_input() -> serde_json::Value {
         serde_json::json!({ "season": true, "aniimo": "minimum", "season_currency_per_day": 600,
-            "facilities": { "Farmland": [{ "count": 3, "level": 5 }] } })
+            "facilities": { "Farmland": [{ "count": 5, "level": 5 }], "Sunlamp": [{ "count": 1, "level": 1 }] } })
     }
 
     #[test]
@@ -2316,6 +2343,23 @@ mod tests {
         input["season"] = false.into();
         let inactive = super::PreparedInput::from_json(&input.to_string()).unwrap();
         assert!(!inactive.items.iter().any(|i| i.name == "magic_pumpkin"));
+    }
+
+    #[test]
+    fn wonder_night_rejects_unavailable_required_plots_and_unverified_points() {
+        let mut input = wonder_input();
+        input["harvest_mutation_plots"] = 1.into();
+        input["exclude"] = serde_json::json!(["magic_pumpkin"]);
+        assert!(super::plan_input_error(&input.to_string()).contains("magic pumpkin"));
+        input["exclude"] = serde_json::json!([]);
+        input["facilities"]["Farmland"][0]["count"] = 1.into();
+        assert!(super::plan_input_error(&input.to_string()).contains("2 Farmland"));
+        input["facilities"]["Farmland"][0]["count"] = 2.into();
+        input["facilities"]["Sunlamp"][0]["count"] = 0.into();
+        assert!(super::plan_input_error(&input.to_string()).contains("Sunlamp"));
+        input["harvest_mutation_plots"] = 0.into();
+        input["priorities"] = serde_json::json!(["season_points"]);
+        assert!(super::plan_input_error(&input.to_string()).contains("Whimsy Point"));
     }
 
     // Every crop and tree the web build knows has its Aniimo jobs listed.
