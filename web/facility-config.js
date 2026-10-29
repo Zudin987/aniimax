@@ -211,22 +211,23 @@ export const SPECIAL_RECIPES = [
     { name: 'lotion', facility: 'Phonolfactory Table' },
 ];
 
-// The Harvest Moon Festival, from RV 10: season crops' seeds cost Moonray Wheat, which season
-// orders pay out, and every season item sold counts points on top of its coins. The planner can
-// cap Wheat spend per day; the recipes and seed costs are in
-// data/harvest_moon_festival.csv.
+// Current Homeland season (not a selector of historical festivals).
+// Weird Jelly Beans buy the seeds; Whimsy Points are shown on cards, but earning
+// mechanics are unverified and cannot be optimized as sale income.
 export const SEASON = {
-    name: 'Harvest Moon Festival',
-    currency: 'Moonray Wheat',
-    points: 'Harvest Moon Points',
+    name: 'Magical Wonder Night',
+    currency: 'Weird Jelly Beans',
+    points: 'Whimsy Points',
+    pointsVerified: false,
     minHomeLevel: 10,
-    // Recipes unlocked with Recipe Notes; plans only use the ones the player ticks. The season's
-    // other recipes come unlocked.
     recipeNotes: [
-        { name: 'harvest_platter' },
-        { name: 'umbral_pickle' },
-        { name: 'umbral_hot_pot' },
-        { name: 'umbral_sweet_and_spicy_sauce' },
+        { name: 'glowfruit_lantern_set' },
+        { name: 'honey_glazed_pumpkin_cup' },
+        { name: 'magic_pumpkin_lantern' },
+        { name: 'memory_lantern' },
+        { name: 'magic_pumpkin_cake' },
+        { name: 'gleam_fruit_nectar' },
+        { name: 'golden_lantern_pumpkin_soup' },
     ],
 };
 
