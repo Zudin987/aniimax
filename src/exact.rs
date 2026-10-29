@@ -522,10 +522,10 @@ fn build_model<'a>(
         }
     }
 
-    // Harvest Moon has two finite-resource concerns the normal economy does not: players may want
-    // a few plots continuously cycling for mutation rolls, while Moonray Wheat itself is daily
-    // limited. Both are user-controlled rather than hard-coded.
-    const HARVEST_MUTATION_CROPS: [&str; 2] = ["moondew_radish", "waxing_moon_pepper"];
+    // The active season has two optional constraints: users may want
+    // plots cycling for mutation rolls, while Weird Jelly Beans may be daily
+    // capped. Both are user-controlled rather than hard-coded.
+    const HARVEST_MUTATION_CROPS: [&str; 2] = ["magic_pumpkin", "memory_lanternfruit"];
     let harvest_enabled = HARVEST_MUTATION_CROPS
         .iter()
         .all(|name| recipes.iter().any(|recipe| recipe.name == *name));
@@ -2401,11 +2401,11 @@ pub fn to_production_plan(
             let mut reason = uses_of(recipe);
             let mutation_plots = facility_counts.harvest_mutation_plots();
             if mutation_plots > 0
-                && matches!(crate::models::base_item_name(&recipe.name), "moondew_radish" | "waxing_moon_pepper")
+                && matches!(crate::models::base_item_name(&recipe.name), "magic_pumpkin" | "memory_lanternfruit")
             {
                 let plot_word = if mutation_plots == 1 { "plot" } else { "plots" };
                 reason = format!(
-                    "{reason}; keep at least {mutation_plots} {plot_word} planted for Harvest Moon mutation rolls"
+                    "{reason}; keep at least {mutation_plots} {plot_word} planted for Magical Wonder Night mutation rolls"
                 );
             }
             if crate::models::is_electric_item(&recipe.name) {
