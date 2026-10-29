@@ -46,3 +46,16 @@ test('a Lightning-only roster can power a Mine without an Earth production worke
     assert.ok(result.power_used > 0);
     assert.ok(result.coin_items.some(row => row.item_name?.startsWith('rock__electric')));
 });
+
+test('roster planning respects the family required by each hammock product', async () => {
+    for (const [family, expected, other] of [['Celestis', 'star', 'gold_speck_cap'], ['Coinwisp', 'gold_speck_cap', 'star']]) {
+        const input = { currency: 'coins', aniimo: 'roster', prioritize_byproducts: false,
+            facilities: { ...none, 'Starfall Hammock': [{ count: 1, level: 2 }] },
+            roster: { members: [{ count: 2, family, abilities: { Leisure: 3 }, personalities: [] }], residents: [] } };
+        const result = JSON.parse(await plan(pkg, JSON.stringify(input)));
+        checkPlan(result);
+        const made = result.coin_items.filter(row => row.status === 'producing').map(row => row.item_name);
+        assert.ok(made.some(name => name === expected || name.startsWith(expected + '__')), `${family}: ${made}`);
+        assert.ok(!made.some(name => name === other || name.startsWith(other + '__')), `${family}: ${made}`);
+    }
+});
