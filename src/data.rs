@@ -190,6 +190,9 @@ struct SeasonRow {
     /// Food Energy, when verified in game; older season CSVs can omit this column.
     #[serde(default)]
     energy: Option<f64>,
+    /// Optional climate requirement for seasonal crops; the older Harvest Moon CSV has none.
+    #[serde(default)]
+    environment: Option<String>,
 }
 
 /// Parses a season's recipes (columns `name, facility, raw_materials, required_amount, seed_cost,
@@ -222,7 +225,7 @@ pub fn parse_season(csv_text: &str) -> Result<Vec<ProductionItem>, Box<dyn Error
             module_requirement: None,
             workload: row.workload,
             byproduct: None,
-            environment: None,
+            environment: row.environment,
             season: Some(crate::models::SeasonTerms {
                 points: row.points,
                 seed_cost: row.seed_cost.unwrap_or(0.0),
