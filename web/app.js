@@ -411,6 +411,20 @@ function migrateSavedConfig(data) {
     if (data['resource-detector-level'] === undefined && data['mineral-detector-level'] !== undefined) {
         data['resource-detector-level'] = data['mineral-detector-level'];
     }
+    // A saved Harvest Moon cap, plots or unlocked Notes are not valid settings for
+    // Magical Wonder Night. Keep the user's normal RV setup, roster and priorities.
+    if (data.seasonId !== 'magical_wonder_night') {
+        data['season-on'] = false;
+        data['season-wheat-budget'] = '0';
+        data['season-mutation-plots'] = '0';
+        data['season-points-min'] = '0';
+        const oldNotes = new Set(['harvest_platter', 'umbral_pickle', 'umbral_hot_pot',
+            'umbral_sweet_and_spicy_sauce']);
+        if (Array.isArray(data.unlockedSpecial)) {
+            data.unlockedSpecial = data.unlockedSpecial.filter(name => !oldNotes.has(name));
+        }
+        data.seasonId = 'magical_wonder_night';
+    }
     return data;
 }
 
@@ -436,6 +450,7 @@ function initFacilityTiers(data) {
 function currentConfigData() {
     const data = {
         facilityTiers,
+        seasonId: 'magical_wonder_night',
         levelUpStock,
         skippedRecipes: [...skippedRecipes],
         unlockedSpecial: [...unlockedSpecial],
@@ -613,6 +628,7 @@ function attachSetupShareHandlers() {
 
 function loadInputsFromStorage(data) {
     if (!data) return;
+    data = migrateSavedConfig(data);
     preferredGoalTarget = typeof data.goalTarget === 'string' ? data.goalTarget : '';
     if (data.levelUpStock && typeof data.levelUpStock === 'object') levelUpStock = { ...data.levelUpStock };
     if (Array.isArray(data.skippedRecipes)) skippedRecipes = new Set(data.skippedRecipes.filter(n => typeof n === 'string'));
