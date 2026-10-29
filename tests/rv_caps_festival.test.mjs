@@ -122,3 +122,20 @@ test('Wonder Night checklist includes all nine products and both seed crops', ()
     assert.throws(() => festivalCraftChecklist(recipes.filter(r => r.name !== 'rock_candy'), 1), /Missing recipe/);
 });
 
+// These levels are shown in the 29 October Mine, Well and Mill screenshots;
+// Pot Lv.7 and Crafting Table Lv.9 / Stove Lv.6 are cross-checked with
+// the 29 October AniimoTools facility pages.
+test('RV21–22 facility levels and Resource Detector unlocks are available at the right RV', () => {
+    const level = (rv, name) => simpleSetup(rv).facilities[name][0].level;
+    for (const [name, at20, at21] of [['Mine', 6, 7], ['Well', 5, 6], ['Carousel Mill', 6, 7], ['Simmering Pot', 6, 7]]) {
+        assert.equal(level(20, name), at20, name);
+        assert.equal(level(21, name), at21, name);
+    }
+    assert.equal(level(21, 'Crafting Table'), 8);
+    assert.equal(level(22, 'Crafting Table'), 9);
+    assert.equal(level(21, 'Blazing Stove'), 5);
+    assert.equal(level(22, 'Blazing Stove'), 6);
+    assert.equal(simpleSetup(20).modules.resource_detector, 9);
+    assert.equal(simpleSetup(21).modules.resource_detector, 9);
+    assert.equal(simpleSetup(22).modules.resource_detector, 10);
+});

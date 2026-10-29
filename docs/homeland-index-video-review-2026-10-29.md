@@ -1,6 +1,12 @@
 # Homeland index recording review (29 October 2026)
 
-This is a spot review of a user-provided five-minute gameplay recording, not a complete verification of game data. Times are approximate. The recording shows the in-game index; it does not demonstrate production speeds, selling prices, rewards or current placement limits.
+**Update, 29 October:** Subsequent in-game item cards supplied the prices, quantities and workloads for Silver Ore, Snowmelt Cold Spring (including the Resource Detector Lv. 10 quick formula), Bright Silver Powder, Potato Starch, Quicksilver Springstone and Glitter Powder. They also show the prices, ingredients and E-Mode timers of Star Diamond and Shredded Coconut Cake. The 29 October [Mine](https://aniimotools.dev/systems/homeland/stations/mine/), [Well](https://aniimotools.dev/systems/homeland/stations/well/), [Carousel Mill](https://aniimotools.dev/systems/homeland/stations/carousel-mill/), [Crafting Table](https://aniimotools.dev/systems/homeland/stations/crafting-table/), [Simmering Pot](https://aniimotools.dev/systems/homeland/stations/simmering-pot/) and [Blazing Stove](https://aniimotools.dev/systems/homeland/stations/blazing-stove/) pages corroborate the recommended ability levels and the two missing normal workloads. The card's Shredded Coconut Cake energy value is 52,060; the current nonseasonal Blazing Stove model does not track food energy.
+
+These products are now recorded in the data. Potato Starch and Shredded Coconut Cake require Premium Potato, and Glitter Powder requires Gold Dust: neither ingredient's complete production chain is modeled yet. The exact planner must not produce them without a source. Do not infer crop-job workloads or a missing crop's environment from the recipe icons. Quick Pearl, Premium Quicksilver Springstone and other higher-level recipes also remain outside this update.
+
+The screenshots establish that Mine Lv.7, Well Lv.6 and Carousel Mill Lv.7 require RV21; the independent facility pages report Simmering Pot Lv.7 at RV21, Crafting Table Lv.9 and Blazing Stove Lv.6 at RV22. Resource Detector Lv.9 unlocks at RV20 and Lv.10 at RV22 according to the [RV module page](https://aniimotools.dev/systems/homeland/rv-levels/). Facility placement counts remain conservative.
+
+The following is the earlier video-only review. This is a spot review of a user-provided five-minute gameplay recording, not a complete verification of game data. Times are approximate. The recording shows the in-game index; it does not demonstrate production speeds, selling prices, rewards or current placement limits.
 
 ## Confirmed examples already in the data
 
