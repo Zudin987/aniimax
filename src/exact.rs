@@ -1732,7 +1732,7 @@ pub fn check_plan(
     if let Some(per_day) = facility_counts.season_currency_per_day() {
         if season_currency_per_second * PACE_UNIT > per_day + TOLERANCE {
             return Err(format!(
-                "Harvest Moon seeds spend {:.3}/day, above the configured {:.3}/day limit",
+                "Season seeds spend {:.3}/day, above the configured {:.3}/day limit",
                 season_currency_per_second * PACE_UNIT,
                 per_day
             ));
@@ -1740,7 +1740,7 @@ pub fn check_plan(
     }
     let mutation_plots = facility_counts.harvest_mutation_plots();
     if mutation_plots > 0 {
-        for name in ["moondew_radish", "waxing_moon_pepper"] {
+        for name in ["magic_pumpkin", "memory_lanternfruit"] {
             if all.contains_key(name) {
                 let units = plan.units.get(name).copied().unwrap_or(0);
                 let rate = plan.recipe_rates.get(name).copied().unwrap_or(0.0);
@@ -1763,7 +1763,7 @@ pub fn check_plan(
     }
     let minimum_points = facility_counts.season_points_per_day();
     if minimum_points > 0.0 && target_rate(plan, items, crate::models::SEASON_POINTS) * PACE_UNIT + TOLERANCE < minimum_points {
-        return Err("plan does not meet the minimum Harvest Moon points per day".to_string());
+        return Err("plan does not meet the minimum seasonal points per day".to_string());
     }
     // Check retained raw production independently, before any RV inventory offsets. Existing
     // inventory cannot cover a continuously producing order unit, and retained items earn no
