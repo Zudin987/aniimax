@@ -1,4 +1,4 @@
-import { FACILITIES, personalityLetter, opposedPersonality } from './facility-config.js';
+import { FACILITIES, recipeFamily, personalityLetter, opposedPersonality } from './facility-config.js';
 
 // Count the team with the same whole-slot and compatible-personality rules as the Team card.
 // The worker uses this to reject a staffing refinement that would increase the displayed team.
@@ -19,7 +19,7 @@ export function aniimoTeamCount(plan, input = {}) {
     for (const row of plan.coin_items || []) {
         for (const task of row.aniimo_tasks || []) {
             const facility = FACILITIES.find(f => f.name === row.facility);
-            const family = task.jobs?.length ? null : facility?.family;
+            const family = task.jobs?.length ? null : recipeFamily(row.facility, row.item_name);
             const personality = task.personality_bonus ? facility?.personality : null;
             const label = `${task.ability} Lv.${task.level}${family ? ` · ${family} family` : ''}${personality ? ` · ${personality} (${personalityLetter(personality)})` : ''}`;
             if (!groups.has(label)) groups.set(label, { label, family, ability: task.ability, level: task.level, bonus: task.personality_bonus, personality, busy: 0 });

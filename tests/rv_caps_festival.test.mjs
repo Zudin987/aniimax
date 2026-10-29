@@ -139,3 +139,10 @@ test('RV21–22 facility levels and Resource Detector unlocks are available at t
     assert.equal(simpleSetup(21).modules.resource_detector, 9);
     assert.equal(simpleSetup(22).modules.resource_detector, 10);
 });
+
+test('new resource and processing tiers unlock at RV21', () => {
+    for (const [name, at20, at21] of [['Starfall Hammock', 1, 2], ['Jukebox Dryer', 7, 8], ['Joy Wheel Loom', 4, 5]]) {
+        assert.equal(simpleSetup(20).facilities[name][0].level, at20, name);
+        assert.equal(simpleSetup(21).facilities[name][0].level, at21, name);
+    }
+});

@@ -365,6 +365,15 @@ pub fn facility_family(facility: &str) -> Option<&'static str> {
     }
 }
 
+/// Some stations require different families for individual products.
+pub fn recipe_family(facility: &str, name: &str) -> Option<&'static str> {
+    if facility == "Starfall Hammock" && base_item_name(name) == "gold_speck_cap" {
+        Some("Coinwisp")
+    } else {
+        facility_family(facility)
+    }
+}
+
 /// One kind of Aniimo on the player's roster: how many they have that are alike, the homeland
 /// abilities each has with its level (an Aniimo can have several, e.g. Fire 3 and Hauling 3), and
 /// its four personalities, one from each opposed pair.
@@ -381,6 +390,11 @@ pub struct RosterAniimo {
 impl RosterAniimo {
     pub fn can_work_at(&self, facility: &str) -> bool {
         facility_family(facility).is_none_or(|family| self.family.as_deref() == Some(family))
+    }
+
+    pub fn can_work_on(&self, item: &ProductionItem) -> bool {
+        recipe_family(&item.facility, &item.name)
+            .is_none_or(|family| self.family.as_deref() == Some(family))
     }
 
     /// This Aniimo's level at `ability`, or 0 if it hasn't got it.
@@ -410,7 +424,7 @@ impl Crew {
     /// the facility's personality.
     pub fn worker(&self, member: usize, item: &ProductionItem, requirements: &AniimoRequirements) -> Option<Worker> {
         let aniimo = self.members.get(member)?;
-        if !aniimo.can_work_at(&item.facility) { return None; }
+        if !aniimo.can_work_on(item) { return None; }
         let (ability, _) = requirements.get(base_item_name(&item.name))?;
         let bonus = has_personality_bonus(&item.facility)
             && self.personalities.get(&item.facility).is_some_and(|p| aniimo.personalities.contains(p));
@@ -452,7 +466,7 @@ pub fn crew_variants(
             (Some(workload), Some((ability, required))) => {
                 let mut fastest = f64::INFINITY;
                 for (member, aniimo) in crew.members.iter().enumerate() {
-                    if aniimo.count == 0 || aniimo.level(ability) < required || !aniimo.can_work_at(&item.facility) {
+                    if aniimo.count == 0 || aniimo.level(ability) < required || !aniimo.can_work_on(&item) {
                         continue;
                     }
                     let mut variant = ProductionItem {

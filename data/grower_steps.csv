@@ -108,3 +108,9 @@ moondew_radish, Farmland, Reaping, Dark, 1, 3
 waxing_moon_pepper, Farmland, Reclaiming, Earth, 1, 5
 waxing_moon_pepper, Farmland, Sowing, Grass, 1, 3
 waxing_moon_pepper, Farmland, Reaping, Dark, 1, 3
+premium_potato, Farmland, Reclaiming, Earth, 1, 5
+premium_potato, Farmland, Sowing, Grass, 1, 3
+premium_potato, Farmland, Reaping, Dark, 1, 3
+quick_agave, Farmland, Reclaiming, Earth, 1, 5
+quick_agave, Farmland, Sowing, Grass, 1, 3
+quick_agave, Farmland, Collecting, Grass, 1, 3
