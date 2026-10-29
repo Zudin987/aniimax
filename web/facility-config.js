@@ -28,7 +28,7 @@ export const FACILITIES = [
         name: 'Farmland', slug: 'farmland', defaultCount: 1, category: 'Materials',
         unlocks: { 1: 1, 2: 2, 3: 5, 4: 7, 5: 9, 6: 12, 7: 16, 8: 21 },
         counts: [4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 40, 40, 40],
-        tooltip: "Lv.1: Wheat&#10;Lv.2: Potato, Quick Wheat&#10;Lv.3: Rice, Soybean&#10;Lv.4: Rose, Cotton, Quick Potato&#10;Lv.5: Strawberry, Lavender, Sugarcane&#10;Lv.6: Ginseng, Grape, Premium Wheat, Quick Rice&#10;Lv.7: Cranberry, Agave, Quick Strawberry"
+        tooltip: "Lv.1: Wheat&#10;Lv.2: Potato, Quick Wheat&#10;Lv.3: Rice, Soybean&#10;Lv.4: Rose, Cotton, Quick Potato&#10;Lv.5: Strawberry, Lavender, Sugarcane&#10;Lv.6: Ginseng, Grape, Premium Wheat, Quick Rice&#10;Lv.7: Cranberry, Agave, Quick Strawberry&#10;Lv.8: Premium Potato, Quick Agave"
     },
     {
         name: 'Woodland', slug: 'woodland', defaultCount: 1, category: 'Materials',
@@ -67,10 +67,10 @@ export const FACILITIES = [
         tooltip: "Requires a Nimbi-family Aniimo with Leisure.&#10;Lv.1: Wool&#10;Lv.2: Quick Wool&#10;Lv.3: Petals"
     },
     {
-        name: 'Starfall Hammock', slug: 'starfall-hammock', defaultCount: 0, category: 'Aniimo Materials', hasLevels: false, hasWorker: true, ability: 'Leisure', personality: 'Faithful', family: 'Celestis',
-        unlocks: { 1: 12 },
+        name: 'Starfall Hammock', slug: 'starfall-hammock', defaultCount: 0, category: 'Aniimo Materials', hasWorker: true, ability: 'Leisure', personality: 'Faithful', family: 'Celestis',
+        unlocks: { 1: 12, 2: 21 },
         counts: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 2, 2, 2],
-        tooltip: "Requires a Celestis-family Aniimo with Leisure.&#10;Star (needs Cool)"
+        tooltip: "Lv.1: Star — Celestis family, Cool&#10;Lv.2: Gold-Speck Cap — Coinwisp family, Warm"
     },
     {
         name: 'Floral Windmill', slug: 'floral-windmill', defaultCount: 0, category: 'Aniimo Materials', hasLevels: false, hasWorker: true, ability: 'Leisure', personality: 'Nimble',
@@ -107,13 +107,13 @@ export const FACILITIES = [
         name: 'Carousel Mill', slug: 'carousel-mill', defaultCount: 1, category: 'Materials Processing', hasWorker: true, ability: 'Wind', personality: 'Tenacious',
         unlocks: { 1: 2, 2: 5, 3: 9, 4: 13, 5: 16, 6: 18, 7: 21 },
         counts: [0, 1, 1, 1, 1, 1, 1, 1, 2],
-        tooltip: "Lv.1: Wheatmeal&#10;Lv.2: Tofu, Milled Rice&#10;Lv.3: Lavender Powder&#10;Lv.4: Rice Drink, Ginseng Powder&#10;Lv.5: Refined Flour, Coconut Oil&#10;Lv.6: Cocoa Powder, Coconut Milk&#10;Lv.7: Bright Silver Powder"
+        tooltip: "Lv.1: Wheatmeal&#10;Lv.2: Tofu, Milled Rice&#10;Lv.3: Lavender Powder&#10;Lv.4: Rice Drink, Ginseng Powder&#10;Lv.5: Refined Flour, Coconut Oil&#10;Lv.6: Cocoa Powder, Coconut Milk, Pearl Powder&#10;Lv.7: Bright Silver Powder, Gold Dust"
     },
     {
         name: 'Crafting Table', slug: 'crafting-table', defaultCount: 1, category: 'Materials Processing', hasWorker: true, ability: 'Artisanship', personality: 'Judicious',
         unlocks: { 1: 3, 2: 5, 3: 7, 4: 9, 5: 12, 6: 15, 7: 18, 8: 20, 9: 22 },
         counts: [0, 0, 1, 1, 1, 1, 1, 1, 1, 2],
-        tooltip: "Lv.1: Wood Sculpture&#10;Lv.2: Bamboo Ware, River-Washed Stones, Premium River-Washed Stones&#10;Lv.3: Rose Freshener, Pottery, Premium Rose Freshener&#10;Lv.4: Bouquet, Shell Ornament, Lavender Sachet&#10;Lv.5: Wind Chime, Star Wish Lantern, Dream Catcher, Premium Wind Chime&#10;Lv.6: Rubber Duck, Pearl Necklace, Woven Toy, Porcelain&#10;Lv.7: Dye, Gemstone Dust, Flowers in a Bottle, Premium Gemstone Dust&#10;Lv.8: Doll, Star Diamond&#10;Lv.9: Quicksilver Springstone, Glitter Powder"
+        tooltip: "Lv.1: Wood Sculpture&#10;Lv.2: Bamboo Ware, River-Washed Stones, Premium River-Washed Stones&#10;Lv.3: Rose Freshener, Pottery, Premium Rose Freshener&#10;Lv.4: Bouquet, Shell Ornament, Lavender Sachet&#10;Lv.5: Wind Chime, Star Wish Lantern, Dream Catcher, Premium Wind Chime&#10;Lv.6: Rubber Duck, Pearl Necklace, Woven Toy, Porcelain&#10;Lv.7: Dye, Gemstone Dust, Flowers in a Bottle, Premium Gemstone Dust&#10;Lv.8: Doll, Star Diamond, Pearl Face Cream&#10;Lv.9: Quicksilver Springstone, Glitter Powder, Orange Flower Scented Mat"
     },
     {
         name: 'Claw Game Cooker', slug: 'claw-game-cooker', defaultCount: 1, category: 'Materials Processing', hasWorker: true, ability: 'Fire', personality: 'Practical',
@@ -123,9 +123,9 @@ export const FACILITIES = [
     },
     {
         name: 'Jukebox Dryer', slug: 'jukebox-dryer', defaultCount: 1, category: 'Materials Processing', hasWorker: true, ability: 'Dark', personality: 'Nimble',
-        unlocks: { 1: 4, 2: 5, 3: 7, 4: 10, 5: 12, 6: 14, 7: 18 },
+        unlocks: { 1: 4, 2: 5, 3: 7, 4: 10, 5: 12, 6: 14, 7: 18, 8: 21 },
         counts: [0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 2],
-        tooltip: "Lv.1: Potato Chips&#10;Lv.2: Dried Lemon Slices&#10;Lv.3: Dried Cherry Blossom, Dried Bean Curd&#10;Lv.4: Dried Apple Slices, Dried Strawberries&#10;Lv.5: Nuts, Dried Ginseng&#10;Lv.6: Dried Grapes, Shredded Coconut&#10;Lv.7: Dried Cranberries, Dried Flowers"
+        tooltip: "Lv.1: Potato Chips&#10;Lv.2: Dried Lemon Slices&#10;Lv.3: Dried Cherry Blossom, Dried Bean Curd&#10;Lv.4: Dried Apple Slices, Dried Strawberries&#10;Lv.5: Nuts, Dried Ginseng&#10;Lv.6: Dried Grapes, Shredded Coconut&#10;Lv.7: Dried Cranberries, Dried Flowers&#10;Lv.8: Dried Orange Flower, Agave Fiber"
     },
     {
         name: 'Simmering Pot', slug: 'simmering-pot', defaultCount: 0, category: 'Materials Processing', hasWorker: true, ability: 'Fire', personality: 'Tenacious',
@@ -159,9 +159,9 @@ export const FACILITIES = [
     },
     {
         name: 'Joy Wheel Loom', slug: 'joy-wheel-loom', defaultCount: 0, category: 'Materials Processing', hasWorker: true, ability: 'Wind', personality: 'Faithful',
-        unlocks: { 1: 7, 2: 10, 3: 15, 4: 19 },
+        unlocks: { 1: 7, 2: 10, 3: 15, 4: 19, 5: 21 },
         counts: [0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2],
-        tooltip: "Lv.1: Cotton Thread&#10;Lv.2: Woolen Yarn, Cotton Fabric&#10;Lv.3: Palm Rope, Wool Fabric&#10;Lv.4: Dyed Cotton Fabric"
+        tooltip: "Lv.1: Cotton Thread&#10;Lv.2: Woolen Yarn, Cotton Fabric&#10;Lv.3: Palm Rope, Wool Fabric&#10;Lv.4: Dyed Cotton Fabric&#10;Lv.5: Sisal Plush Mat"
     },
     {
         name: 'Dance Pad Polisher', slug: 'dance-pad-polisher', defaultCount: 0, category: 'Materials Processing', hasWorker: true, ability: 'Lightning',
@@ -191,7 +191,13 @@ export const FACILITIES = [
 
 // Families confirmed by production tooltips; evolved Aniimo keep their family. Other/unset
 // covers ordinary jobs. Do not infer a family from a player's nickname or Leisure ability.
-export const ANIIMO_FAMILIES = FACILITIES.filter(f => f.family).map(f => f.family);
+export const ANIIMO_FAMILIES = [...FACILITIES.filter(f => f.family).map(f => f.family), 'Coinwisp'];
+
+// Preserve the facility default for legacy rows; the Lv.2 hammock product has a different family.
+export function recipeFamily(facility, itemName = '') {
+    if (facility === 'Starfall Hammock' && /^gold_speck_cap(?:$|__)/.test(itemName || '')) return 'Coinwisp';
+    return FACILITIES.find(f => f.name === facility)?.family || null;
+}
 
 // Max. Placement explicitly shown in the RV13 build menu. Other RV caps are not extrapolated.
 export const STORAGE_PLACEMENT_LIMITS = { 13: 5 };
@@ -318,8 +324,8 @@ export const FACILITY_OUTPUT_LIMITS = {
     'Chimney Kiln': [20, 20, 20, 20],
     'Claw Game Cooker': [20, 20, 20, 20, 20, 20, 20],
     'Crafting Table': [20, 20, 20, 20, 20, 20, 20, 20, 20],
-    'Joy Wheel Loom': [20, 20, 20, 20],
-    'Jukebox Dryer': [20, 20, 20, 20, 20, 20, 20],
+    'Joy Wheel Loom': [20, 20, 20, 20, 20],
+    'Jukebox Dryer': [20, 20, 20, 20, 20, 20, 20, 20],
     'Phonolfactory Table': [20, 20, 20, 20, 20, 20],
     'Pickling Jar': [20, 20, 20, 20, 20],
     'Simmering Pot': [20, 20, 20, 20, 20, 20, 20],
@@ -329,7 +335,7 @@ export const FACILITY_OUTPUT_LIMITS = {
     'Floral Windmill': [240],
     'Mine': [120, 200, 200, 200, 200, 200, 200],
     'Nimbus Bed': [80, 120, 120],
-    'Starfall Hammock': [40],
+    'Starfall Hammock': [40, 40],
     'Tidewhisper Sandcastle': [200, 460, 460],
     'Well': [300, 300, 340, 340, 340, 340],
     'Woodland': [8, 12, 16, 20, 24, 28],

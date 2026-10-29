@@ -1741,7 +1741,7 @@ impl PreparedInput {
                     // A Nimbi cannot cover a Celestis job, regardless of its Leisure level
                     // or personalities. Keep family pools separate in staffing refinement.
                     group: format!("{ability}{}:{}:{}",
-                        crate::models::facility_family(&recipe.facility).map(|f| format!("/{f}")).unwrap_or_default(),
+                        crate::models::recipe_family(&recipe.facility, &recipe.name).map(|f| format!("/{f}")).unwrap_or_default(),
                         worker.suitability,
                         if worker.personality_bonus {
                             crate::models::facility_personality(&recipe.facility).unwrap_or(&recipe.facility)
@@ -2248,7 +2248,7 @@ pub fn get_all_items() -> String {
             module_requirement: item.module_requirement.clone(),
             byproduct: item.byproduct.clone(),
             aniimo: requirements.get(&item.name).map(|(ability, level)| (ability.to_string(), level)),
-            family: crate::models::facility_family(&item.facility).map(str::to_string),
+            family: crate::models::recipe_family(&item.facility, &item.name).map(str::to_string),
             verified: !unverified.iter().any(|(name, facility)| *name == item.name && *facility == item.facility),
             jobs: grower_steps.get(&item.name).iter().map(|s| (s.step.clone(), s.ability.clone(), s.min_level)).collect(),
             environment: item.environment.clone(),

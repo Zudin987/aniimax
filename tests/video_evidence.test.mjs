@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import fs from 'node:fs';
-import { FACILITIES, MODULE_MAX_LEVELS, LEVEL_UP_COSTS, LEVEL_UP_TIMERS, STORAGE_PLACEMENT_LIMITS, simpleSetup } from '../web/facility-config.js';
+import { FACILITIES, MODULE_MAX_LEVELS, LEVEL_UP_COSTS, LEVEL_UP_TIMERS, STORAGE_PLACEMENT_LIMITS, simpleSetup, recipeFamily } from '../web/facility-config.js';
 
 test('component upgrade gates match the video, rather than conflicting RV summary text', () => {
     // Each position is module level 1 onward. Component UI at 01:23–02:19;
@@ -67,8 +67,9 @@ test('real rendering functions show current recipe names and required families',
     assert.equal(labels.advanced_gemstone_dust, 'Premium Gemstone Dust');
     assert.equal(labels.umbral_sweet_and_spicy_sauce, 'Umbral Sweet Spicy Sauce');
     const code = app.slice(app.indexOf('function taskLabel('), app.indexOf('function facilityPlanTable('));
-    const taskLabel = new Function('FACILITIES', 'personalityLetter', code + '\nreturn taskLabel;')(FACILITIES, () => 'J');
+    const taskLabel = new Function('FACILITIES', 'personalityLetter', 'recipeFamily', code + '\nreturn taskLabel;')(FACILITIES, () => 'J', recipeFamily);
     assert.match(taskLabel({ ability: 'Leisure', level: 3, personality_bonus: false }, 'Nimbus Bed'), /Nimbi family/);
     assert.match(taskLabel({ ability: 'Leisure', level: 3, personality_bonus: true }, 'Starfall Hammock'), /Celestis family/);
+    assert.match(taskLabel({ ability: 'Leisure', level: 3, personality_bonus: false }, 'Starfall Hammock', false, 'gold_speck_cap'), /Coinwisp family/);
     assert.doesNotMatch(taskLabel({ ability: 'Fire', level: 3, personality_bonus: false }, 'Blazing Stove'), /family/);
 });

@@ -2,7 +2,7 @@
 
 import {
     FACILITIES, FACILITY_CATEGORIES, FACILITY_CATEGORY_BY_NAME, FACILITY_FOOTPRINTS, FACILITY_OUTPUT_LIMITS, HOMELAND_PLOTS, HOMELAND_PLOT_SIZE,
-    MAX_HOME_LEVEL, ANIIMO_MAX, ANIIMO_FAMILIES, STORAGE_PLACEMENT_LIMITS, simpleSetup, homeLevelForSetup, SIMPLE_MODULE_FIELDS,
+    MAX_HOME_LEVEL, ANIIMO_MAX, ANIIMO_FAMILIES, recipeFamily, STORAGE_PLACEMENT_LIMITS, simpleSetup, homeLevelForSetup, SIMPLE_MODULE_FIELDS,
     LEVEL_UP_COSTS, LEVEL_UP_TIMERS, LEVEL_UP_CHAINS, SPECIAL_RECIPES, SEASON, ANIIPOD_TIERS, PERSONALITY_PAIRS, personalityLetter, opposedPersonality,
 } from './facility-config.js';
 import {
@@ -2138,7 +2138,7 @@ function renderRoster() {
                         <option value="">Other / unspecified</option>
                         ${ANIIMO_FAMILIES.map(family => `<option value="${family}"${aniimo.family === family ? ' selected' : ''}>${family}</option>`).join('')}
                     </select>
-                </label>${infoButton('Aniimo family', 'Family matters for Leisure stations: Susuta → Sandcastle, Dewy → Dewy House, Nimbi → Nimbus Bed, Celestis → Starfall Hammock. Choose the family for evolved Aniimo too. Other / unspecified can work ordinary jobs, but cannot staff these four stations.')}</div>
+                </label>${infoButton('Aniimo family', 'Family matters for Leisure stations: Susuta → Sandcastle, Dewy → Dewy House, Nimbi → Nimbus Bed, Celestis → Star; Coinwisp → Gold-Speck Cap in the Starfall Hammock. Choose the family for evolved Aniimo too. Other / unspecified can work ordinary jobs, but cannot staff these four stations.')}</div>
                 <div class="roster-abilities">${abilities}${add}</div>
                 <div class="roster-personalities">${personalities}</div>
             </div>`;
@@ -3286,16 +3286,16 @@ function aniimoLabel(step) {
         const personality = FACILITIES.find(f => f.name === step.facility)?.personality;
         note = `${personality ? `${personality} personality` : 'matching personality'} (+20% speed)`;
     }
-    const family = FACILITIES.find(f => f.name === step.facility)?.family;
+    const family = recipeFamily(step.facility, step.item_name);
     if (family) note = `${family} family${note ? ` · ${note}` : ''}`;
     return `<span class="ability-dots">${abilityDot(a.ability, a.level, note, a.personality_bonus)}</span>${family ? ` <span class="hint small">${family} family</span>` : ''}`;
 }
 
 // "Fire Lv.4 · Practical": one kind of Aniimo, with the facility's personality when the plan
 // counts on its bonus. `tagged` shows the ability as a colored tag.
-function taskLabel(task, facility, tagged = false) {
+function taskLabel(task, facility, tagged = false, itemName = '') {
     const ability = tagged ? abilityTag(task.ability) : task.ability;
-    const family = task.jobs?.length ? null : FACILITIES.find(f => f.name === facility)?.family;
+    const family = task.jobs?.length ? null : recipeFamily(facility, itemName);
     const label = `${ability} Lv.${task.level}${family ? ` · ${family} family` : ''}`;
     if (!task.personality_bonus) return label;
     const personality = FACILITIES.find(f => f.name === facility)?.personality;
@@ -3394,12 +3394,12 @@ function renderAniimoSummary(plan) {
     const groups = new Map();
     (plan.coin_items || []).forEach(step => {
         (step.aniimo_tasks || []).forEach(task => {
-            const key = taskLabel(task, step.facility);
+            const key = taskLabel(task, step.facility, false, step.item_name);
             if (!groups.has(key)) {
                 const personality = task.personality_bonus
                     ? FACILITIES.find(f => f.name === step.facility)?.personality ?? null
                     : null;
-                const family = task.jobs?.length ? null : FACILITIES.find(f => f.name === step.facility)?.family;
+                const family = task.jobs?.length ? null : recipeFamily(step.facility, step.item_name);
                 groups.set(key, { label: key, family, ability: task.ability, level: task.level, bonus: task.personality_bonus, personality, busy: 0, where: new Map(), jobs: new Map() });
             }
             const g = groups.get(key);

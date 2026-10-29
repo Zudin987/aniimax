@@ -13,6 +13,10 @@ assert.equal(aniimoTeamCount({ coin_items: [row('Claw Game Cooker', 'Fire', 0.4)
     'Opposite personalities require separate workers');
 assert.equal(aniimoTeamCount({ coin_items: [row('Nimbus Bed', 'Leisure', 0.4), row('Starfall Hammock', 'Leisure', 0.3)] }), 3,
     'Compatible personalities cannot merge Nimbi and Celestis families');
+const star = { ...row('Starfall Hammock', 'Leisure', 0.3), item_name: 'star' };
+const cap = { ...row('Starfall Hammock', 'Leisure', 0.3), item_name: 'gold_speck_cap__by1' };
+assert.equal(aniimoTeamCount({ coin_items: [star, cap] }), 3,
+    'Star and Gold-Speck Cap require different families, plus the hauler');
 assert.equal(aniimoTeamCount({ coin_items: [], generator_tiers: [[1, 1], [3, 2]] }), 4,
     'Every active generator needs its own resident, plus the hauler');
 assert.equal(aniimoTeamCount({ coin_items: [{ crew: 0, status: 'producing', busy_units: 0.1, facility_count: 1 }],
