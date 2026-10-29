@@ -177,8 +177,13 @@ fn format_time(seconds: f64) -> String {
 /// This embeds the CSV data directly into the WASM binary.
 /// The Harvest Moon Festival's recipes, watered like everything else.
 fn embedded_season_items() -> Vec<ProductionItem> {
-    let mut season = crate::data::parse_season(include_str!("../data/harvest_moon_festival.csv"))
-        .expect("embedded harvest_moon_festival.csv is valid");
+    let mut season = crate::data::parse_season(include_str!("../data/magical_wonder_night.csv"))
+        .expect("embedded magical_wonder_night.csv is valid");
+    // The recipe cards show Whimsy Points but not whether they are earned from
+    // sales or Pumpkin God offerings. Never fabricate points per sale.
+    for item in &mut season {
+        if let Some(ref mut terms) = item.season { terms.points = 0.0; }
+    }
     crate::models::apply_watering(&mut season);
     season
 }
@@ -696,7 +701,7 @@ fn default_true() -> bool {
 }
 
 fn default_harvest_mutation_plots() -> u32 {
-    1
+    0
 }
 
 /// JavaScript-friendly input for the plan solver; everything needed to know the best achievable
@@ -754,11 +759,10 @@ pub struct JsPlanInput {
     /// before it allow.
     #[serde(default)]
     pub priorities: Vec<String>,
-    /// Whether plans may use the Harvest Moon Festival's recipes. Its points are the priority
-    /// `"season_points"` (see [`crate::models::SEASON_POINTS`]).
+    /// Whether plans may use the current Magical Wonder Night recipes.
     #[serde(default)]
     pub season: bool,
-    /// Maximum Moonray Wheat the plan may spend on event seeds per day. None/0 means unlimited.
+    /// Maximum Weird Jelly Beans to spend on event seeds per day. None/0 means unlimited.
     #[serde(default)]
     pub season_currency_per_day: Option<f64>,
     #[serde(default)]
@@ -1778,10 +1782,9 @@ impl PreparedInput {
         if input.season {
             items.extend(embedded_season_items());
         }
-        let harvest_raw = if input.season {
-            crate::data::season_raw_ingredients(&items).map_err(|error|
-                serde_json::to_string(&empty_production_plan(false, Some(error))).unwrap_or_default())?
-        } else { Vec::new() };
+        // Pumpkin God orders rotate, so do not reserve every seasonal recipe's raw
+        // ingredients, including items which the player was never asked to deliver.
+        let harvest_raw = Vec::new();
         if module_levels.power_module > 0 && facility_counts.get_count("Crackle Generator") > 0 {
             crate::data::add_e_mode_variants(&mut items, include_str!("../data/e_mode.csv"))
                 .map_err(|e| serde_json::to_string(&empty_production_plan(false, Some(format!("Invalid E-Mode data: {e}")))).unwrap_or_default())?;
@@ -1873,16 +1876,16 @@ impl PreparedInput {
             }
         }
         if let Some(budget) = facility_counts.season_currency_per_day() {
-            let crops: Option<Vec<_>> = ["moondew_radish", "waxing_moon_pepper"].iter()
+            let crops: Option<Vec<_>> = ["magic_pumpkin", "memory_lanternfruit"].iter()
                 .map(|name| items.iter().find(|item| item.name == *name)).collect();
             if let Some(crops) = crops {
-                let plots = facility_counts.harvest_mutation_plots().max(1);
+                let plots = facility_counts.harvest_mutation_plots();
                 let minimum: f64 = crops.iter().map(|crop|
                     plots as f64 * crop.season.map_or(0.0, |season| season.seed_cost)
                         * 86_400.0 / crop.production_time).sum();
                 if budget + 1e-6 < minimum {
                     return Err(serde_json::to_string(&empty_production_plan(false, Some(format!(
-                        "Harvest Moon: {plots} reserved plots per crop need at least {:.0} Moonray Wheat/day with this setup, but your budget is {budget}. Increase the Wheat budget or reduce extra mutation plots (order stock always keeps one plot per crop).",
+                        "Magical Wonder Night: {plots} event plots per crop need at least {:.0} Weird Jelly Beans/day, but your budget is {budget}. Increase the Jelly Bean cap or reduce event plots.",
                         (minimum - 1e-6).ceil(),
                     )))).unwrap_or_default());
                 }
