@@ -2584,7 +2584,8 @@ function isPriorityStrategy() {
 // The priorities on the page: season points only while the season is on.
 function shownPriorities() {
     const season = seasonActive();
-    return priorityOrder.filter(p => season || !PRIORITY_TARGETS.find(t => t.id === p.target)?.season);
+    return priorityOrder.filter(p => PRIORITY_TARGETS.some(t => t.id === p.target)
+        && (season || !PRIORITY_TARGETS.find(t => t.id === p.target)?.season));
 }
 
 // The ticked priorities, best first; none for the level-up strategy.
