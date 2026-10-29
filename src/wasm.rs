@@ -177,8 +177,13 @@ fn format_time(seconds: f64) -> String {
 /// This embeds the CSV data directly into the WASM binary.
 /// The Harvest Moon Festival's recipes, watered like everything else.
 fn embedded_season_items() -> Vec<ProductionItem> {
-    let mut season = crate::data::parse_season(include_str!("../data/harvest_moon_festival.csv"))
-        .expect("embedded harvest_moon_festival.csv is valid");
+    let mut season = crate::data::parse_season(include_str!("../data/magical_wonder_night.csv"))
+        .expect("embedded magical_wonder_night.csv is valid");
+    // The recipe cards show Whimsy Points but not whether they are earned from
+    // sales or Pumpkin God offerings. Never fabricate points per sale.
+    for item in &mut season {
+        if let Some(ref mut terms) = item.season { terms.points = 0.0; }
+    }
     crate::models::apply_watering(&mut season);
     season
 }
@@ -696,7 +701,7 @@ fn default_true() -> bool {
 }
 
 fn default_harvest_mutation_plots() -> u32 {
-    1
+    0
 }
 
 /// JavaScript-friendly input for the plan solver; everything needed to know the best achievable
@@ -754,11 +759,10 @@ pub struct JsPlanInput {
     /// before it allow.
     #[serde(default)]
     pub priorities: Vec<String>,
-    /// Whether plans may use the Harvest Moon Festival's recipes. Its points are the priority
-    /// `"season_points"` (see [`crate::models::SEASON_POINTS`]).
+    /// Whether plans may use the current Magical Wonder Night recipes.
     #[serde(default)]
     pub season: bool,
-    /// Maximum Moonray Wheat the plan may spend on event seeds per day. None/0 means unlimited.
+    /// Maximum Weird Jelly Beans to spend on event seeds per day. None/0 means unlimited.
     #[serde(default)]
     pub season_currency_per_day: Option<f64>,
     #[serde(default)]
@@ -1378,7 +1382,7 @@ pub fn find_plan(input_json: &str, on_progress: Option<js_sys::Function>) -> Str
     };
     if prepared.input.season {
         return serde_json::to_string(&empty_production_plan(false, Some(
-            "Harvest Moon order stock and its Wheat budget need the exact planner. Please reload and calculate again.".to_string(),
+            "Seasonal seed-currency limits require the exact planner. Reload and calculate again.".to_string(),
         ))).unwrap_or_default();
     }
     // The backup heuristic does not model grid power. If the exact planner falls back here, strip
@@ -1778,15 +1782,41 @@ impl PreparedInput {
         if input.season {
             items.extend(embedded_season_items());
         }
-        let harvest_raw = if input.season {
-            crate::data::season_raw_ingredients(&items).map_err(|error|
-                serde_json::to_string(&empty_production_plan(false, Some(error))).unwrap_or_default())?
-        } else { Vec::new() };
+        // Pumpkin God orders rotate, so do not reserve every seasonal recipe's raw
+        // ingredients, including items which the player was never asked to deliver.
+        let harvest_raw = Vec::new();
         if module_levels.power_module > 0 && facility_counts.get_count("Crackle Generator") > 0 {
             crate::data::add_e_mode_variants(&mut items, include_str!("../data/e_mode.csv"))
                 .map_err(|e| serde_json::to_string(&empty_production_plan(false, Some(format!("Invalid E-Mode data: {e}")))).unwrap_or_default())?;
         }
         items.retain(|item| !input.exclude.iter().any(|name| name == crate::models::base_item_name(&item.name)));
+        if input.season && (input.season_points_per_day > 0.0
+            || input.priorities.iter().any(|priority| priority == crate::models::SEASON_POINTS))
+        {
+            return Err(serde_json::to_string(&empty_production_plan(false,
+                Some("Whimsy Point earning rules have not been verified; remove points targets before calculating.".into())))
+                .unwrap_or_default());
+        }
+        if input.season && input.harvest_mutation_plots > 0 {
+            for name in ["magic_pumpkin", "memory_lanternfruit"] {
+                if !items.iter().any(|item| item.name == name) {
+                    return Err(serde_json::to_string(&empty_production_plan(false,
+                        Some(format!("Required event crop {} is unavailable. Unskip its recipe or set minimum event plots to 0.", name.replace('_', " ")))))
+                        .unwrap_or_default());
+                }
+            }
+            let needed = input.harvest_mutation_plots.saturating_mul(2);
+            if facility_counts.capacity_at_level("Farmland", 5) < needed {
+                return Err(serde_json::to_string(&empty_production_plan(false,
+                    Some(format!("Magical Wonder Night needs {needed} Farmland Lv.5+ plots for your selected minimum."))))
+                    .unwrap_or_default());
+            }
+            if facility_counts.get_count("Sunlamp") == 0 {
+                return Err(serde_json::to_string(&empty_production_plan(false,
+                    Some("Magic Pumpkin and Memory Lanternfruit require Adequate sunlight; add a Sunlamp or set the minimum plots to 0.".into())))
+                    .unwrap_or_default());
+            }
+        }
         let setup = input
             .aniimo
             .as_deref()
@@ -1873,16 +1903,16 @@ impl PreparedInput {
             }
         }
         if let Some(budget) = facility_counts.season_currency_per_day() {
-            let crops: Option<Vec<_>> = ["moondew_radish", "waxing_moon_pepper"].iter()
+            let crops: Option<Vec<_>> = ["magic_pumpkin", "memory_lanternfruit"].iter()
                 .map(|name| items.iter().find(|item| item.name == *name)).collect();
             if let Some(crops) = crops {
-                let plots = facility_counts.harvest_mutation_plots().max(1);
+                let plots = facility_counts.harvest_mutation_plots();
                 let minimum: f64 = crops.iter().map(|crop|
                     plots as f64 * crop.season.map_or(0.0, |season| season.seed_cost)
                         * 86_400.0 / crop.production_time).sum();
                 if budget + 1e-6 < minimum {
                     return Err(serde_json::to_string(&empty_production_plan(false, Some(format!(
-                        "Harvest Moon: {plots} reserved plots per crop need at least {:.0} Moonray Wheat/day with this setup, but your budget is {budget}. Increase the Wheat budget or reduce extra mutation plots (order stock always keeps one plot per crop).",
+                        "Magical Wonder Night: {plots} event plots per crop need at least {:.0} Weird Jelly Beans/day, but your budget is {budget}. Increase the Jelly Bean cap or reduce event plots.",
                         (minimum - 1e-6).ceil(),
                     )))).unwrap_or_default());
                 }
@@ -2261,93 +2291,75 @@ mod tests {
     }
 
     #[test]
-    fn harvest_defaults_fit_a_600_wheat_daily_cap() {
-        let input = harvest_input();
+    fn wonder_night_defaults_have_no_old_order_reserves() {
+        let input = wonder_input();
         let parsed: super::JsPlanInput = serde_json::from_value(input.clone()).unwrap();
-        assert_eq!(parsed.harvest_mutation_plots, 1);
+        assert_eq!(parsed.harvest_mutation_plots, 0);
         assert_eq!(super::plan_input_error(&input.to_string()), "null");
-        assert_eq!(crate::models::FacilityCounts::default().harvest_mutation_plots(), 1);
-        assert_eq!(crate::models::FacilityCounts::only(&[]).harvest_mutation_plots(), 1);
+        let prepared = super::PreparedInput::from_json(&input.to_string()).unwrap();
+        assert!(prepared.facility_counts.harvest_order_items().is_empty());
+        assert!(prepared.items.iter().any(|i| i.name == "magic_pumpkin"));
+        assert!(prepared.items.iter().any(|i| i.name == "memory_lanternfruit"));
+        assert!(!prepared.items.iter().any(|i| i.name == "moondew_radish"));
+        assert_eq!(prepared.items.iter().find(|i| i.name == "magic_pumpkin").unwrap().season.unwrap().points, 0.0,
+            "sale-based Whimsy awards have not been verified");
+    }
+
+    fn wonder_input() -> serde_json::Value {
+        serde_json::json!({ "season": true, "aniimo": "minimum", "season_currency_per_day": 600,
+            "facilities": { "Farmland": [{ "count": 5, "level": 5 }], "Sunlamp": [{ "count": 1, "level": 1 }] } })
     }
 
     #[test]
-    fn harvest_budget_validation_uses_the_prepared_crop_timers() {
-        let mut input = harvest_input();
+    fn wonder_night_seed_caps_use_real_crop_times() {
+        let mut input = wonder_input();
         input["harvest_mutation_plots"] = 2.into();
         let error: String = serde_json::from_str(&super::plan_input_error(&input.to_string())).unwrap();
-        assert!(error.contains("768 Moonray Wheat/day"), "{error}");
-        for (budget, plots) in [(768, 2), (600, 1), (0, 2)] {
+        assert!(error.contains("1024 Weird Jelly Beans/day"), "{error}");
+        for (budget, plots) in [(1024, 2), (600, 1), (0, 2), (0, 0)] {
             let mut valid = input.clone();
             valid["season_currency_per_day"] = budget.into();
             valid["harvest_mutation_plots"] = plots.into();
             assert_eq!(super::plan_input_error(&valid.to_string()), "null");
         }
-        // An E-Mode Well can supply order water without a Water Aniimo, but only when a
-        // Lightning worker staffs a powered generator. The normal-only rule was removed.
-        let mut unwatered = input;
-        unwatered["aniimo"] = "roster".into();
-        unwatered["modules"] = serde_json::json!({ "power_module": 1 });
-        unwatered["facilities"]["Crackle Generator"] = serde_json::json!([{ "count": 1, "level": 1 }]);
-        unwatered["roster"] = serde_json::json!({ "members": [{ "count": 3,
-            "abilities": { "Earth": 1, "Grass": 1, "Dark": 1, "Lightning": 1 }, "personalities": [] },
-            { "count": 1, "family": "Susuta", "abilities": { "Leisure": 2 }, "personalities": [] }] });
-        assert_eq!(super::plan_input_error(&unwatered.to_string()), "null");
-        // Without the unlocked grid, a Well with no Water Aniimo is genuinely unavailable.
-        let mut no_power = unwatered.clone();
-        no_power["modules"]["power_module"] = 0.into();
-        let error: String = serde_json::from_str(&super::plan_input_error(&no_power.to_string())).unwrap();
-        assert!(error.contains("raw fresh water"), "{error}");
-        // And electricity cannot bypass an unstaffed generator.
-        let mut no_lightning = unwatered;
-        no_lightning["roster"]["members"][0]["abilities"]["Lightning"] = 0.into();
-        let error: String = serde_json::from_str(&super::plan_input_error(&no_lightning.to_string())).unwrap();
-        assert!(error.contains("raw fresh water"), "{error}");
-    }
-
-    fn harvest_input() -> serde_json::Value {
-        serde_json::json!({ "season": true, "aniimo": "minimum", "season_currency_per_day": 600,
-            "facilities": {
-                "Farmland": [{ "count": 5, "level": 5 }],
-                "Woodland": [{ "count": 1, "level": 3 }],
-                "Well": [{ "count": 1, "level": 2 }],
-                "Tidewhisper Sandcastle": [{ "count": 1, "level": 2 }]
-            } })
+        input["season_currency_per_day"] = 511.into();
+        input["harvest_mutation_plots"] = 1.into();
+        assert!(super::plan_input_error(&input.to_string()).contains("512 Weird Jelly Beans/day"));
     }
 
     #[test]
-    fn harvest_raw_orders_cover_unticked_notes_and_zero_mutation_setting() {
-        let mut input = harvest_input();
+    fn wonder_night_manual_orders_are_not_auto_reserved() {
+        let mut input = wonder_input();
         input["harvest_mutation_plots"] = 0.into();
-        input["exclude"] = serde_json::json!(["harvest_platter", "umbral_pickle", "umbral_hot_pot", "umbral_sweet_and_spicy_sauce"]);
-        let prepared = super::PreparedInput::from_json(&input.to_string()).unwrap();
-        assert_eq!(prepared.facility_counts.harvest_order_items(),
-            ["apple", "fresh_water", "moondew_radish", "sea_salt", "sugarcane", "waxing_moon_pepper"]);
-        input["season_currency_per_day"] = 383.into();
-        assert!(super::plan_input_error(&input.to_string()).contains("384 Moonray Wheat/day"));
-        input["season_currency_per_day"] = 384.into();
+        input["exclude"] = serde_json::json!(["glowfruit_lantern_set", "honey_glazed_pumpkin_cup",
+            "magic_pumpkin_lantern", "memory_lantern", "magic_pumpkin_cake",
+            "gleam_fruit_nectar", "golden_lantern_pumpkin_soup"]);
         assert_eq!(super::plan_input_error(&input.to_string()), "null");
-        // The heuristic fallback must not return an unreserved plan or overspend Wheat.
-        let fallback: serde_json::Value = serde_json::from_str(&super::find_plan(&input.to_string(), None)).unwrap();
-        assert_eq!(fallback["success"], false);
-        assert!(fallback["error"].as_str().unwrap().contains("exact planner"));
+        let prepared = super::PreparedInput::from_json(&input.to_string()).unwrap();
+        assert!(prepared.facility_counts.harvest_order_items().is_empty());
+        input["facilities"]["Farmland"][0]["count"] = 0.into();
+        assert_eq!(super::plan_input_error(&input.to_string()), "null",
+            "seasonal participation alone should not require unrequested crop plots");
+        input["season"] = false.into();
+        let inactive = super::PreparedInput::from_json(&input.to_string()).unwrap();
+        assert!(!inactive.items.iter().any(|i| i.name == "magic_pumpkin"));
     }
 
     #[test]
-    fn harvest_order_setup_reports_missing_or_skipped_raw_ingredients() {
-        for (facility, level, raw) in [("Farmland", 4, "sugarcane"), ("Woodland", 2, "apple"), ("Well", 1, "fresh water")] {
-            let mut input = harvest_input();
-            input["facilities"][facility][0]["level"] = level.into();
-            assert!(super::plan_input_error(&input.to_string()).contains(raw));
-        }
-        let mut input = harvest_input();
+    fn wonder_night_rejects_unavailable_required_plots_and_unverified_points() {
+        let mut input = wonder_input();
+        input["harvest_mutation_plots"] = 1.into();
+        input["exclude"] = serde_json::json!(["magic_pumpkin"]);
+        assert!(super::plan_input_error(&input.to_string()).contains("magic pumpkin"));
+        input["exclude"] = serde_json::json!([]);
+        input["facilities"]["Farmland"][0]["count"] = 1.into();
+        assert!(super::plan_input_error(&input.to_string()).contains("2 Farmland"));
         input["facilities"]["Farmland"][0]["count"] = 2.into();
-        assert!(super::plan_input_error(&input.to_string()).contains("3 Farmland units"));
-        input = harvest_input();
-        input["exclude"] = serde_json::json!(["apple"]);
-        assert!(super::plan_input_error(&input.to_string()).contains("raw apple"));
-        input["season"] = false.into();
-        assert_eq!(super::plan_input_error(&input.to_string()), "null");
-        assert!(super::PreparedInput::from_json(&input.to_string()).unwrap().facility_counts.harvest_order_items().is_empty());
+        input["facilities"]["Sunlamp"][0]["count"] = 0.into();
+        assert!(super::plan_input_error(&input.to_string()).contains("Sunlamp"));
+        input["harvest_mutation_plots"] = 0.into();
+        input["priorities"] = serde_json::json!(["season_points"]);
+        assert!(super::plan_input_error(&input.to_string()).contains("Whimsy Point"));
     }
 
     // Every crop and tree the web build knows has its Aniimo jobs listed.

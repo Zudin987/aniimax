@@ -211,21 +211,22 @@ try {
     await page.locator('#roster-editor').screenshot({ path: 'test-results/aniimo-family-mobile.png' });
     await page.setViewportSize({ width: 1000, height: 900 });
 
-    // Review explicit conflict, exact 768 cap, unlimited cap and the mandatory order baseline.
+    // Current Wonder Night rules: optional plots, player-set Jelly Bean cap, rotating orders.
     await page.locator('label:has(#aniimo-best)').click();
+    if (!(await page.locator('#season-on').isChecked())) await page.locator('#season-on').check();
     assert.equal(await page.locator('#aniimo-best').isChecked(), true);
     const beforeDetails = await config();
     assert.equal(await page.locator('#season-details p').first().isVisible(), false,
         'crafting details should be collapsed so the setup stays concise');
     await page.locator('#season-info').click();
     assert.equal(await page.locator('#context-help').isVisible(), true);
-    assert.match(await page.locator('#context-help').innerText(), /Sugarcane, Moondew Radish, Waxing Moon Pepper, Apple, Fresh Water and Sea Salt/);
+    assert.match(await page.locator('#context-help').innerText(), /Magic Pumpkin and Memory Lanternfruit cost 4 Weird Jelly Beans each/);
     await page.keyboard.press('Escape');
     assert.deepEqual(await config(), beforeDetails, 'reading help must not change the setup');
-    await page.locator('#season-section').screenshot({ path: 'test-results/harvest-setup-desktop.png' });
+    await page.locator('#season-section').screenshot({ path: 'test-results/wonder-night-setup-desktop.png' });
     await page.setViewportSize({ width: 390, height: 844 });
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), false,
-        'the compact Harvest Moon setup must fit on mobile');
+        'the Magical Wonder Night setup must fit on mobile');
     const budgetInput = await page.locator('#season-wheat-budget').boundingBox();
     const plotLabel = await page.locator('label[for="season-mutation-plots"]').boundingBox();
     const plotInput = await page.locator('#season-mutation-plots').boundingBox();
@@ -234,7 +235,7 @@ try {
         'stacked controls must not keep a desktop flex basis as empty vertical space');
     assert.ok(budgetNote.y - plotInput.y - plotInput.height < 40,
         'the budget summary must sit close to the controls');
-    await page.locator('#season-section').screenshot({ path: 'test-results/harvest-setup-mobile.png' });
+    await page.locator('#season-section').screenshot({ path: 'test-results/wonder-night-setup-mobile.png' });
     // A real touch context verifies tap-to-toggle and viewport-safe positioning.
     const touchContext = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
     const touchPage = await touchContext.newPage();
@@ -261,16 +262,18 @@ try {
     assert.equal(await touchPage.locator('#results-section').isVisible(), false);
     await touchContext.close();
     await page.setViewportSize({ width: 1000, height: 900 });
+    await page.locator('#season-wheat-budget').fill('600');
     await page.locator('#season-mutation-plots').fill('2');
-    assert.match(await page.locator('#season-budget-note').innerText(), /Budget conflict.*768/);
-    await page.locator('#season-wheat-budget').fill('768');
-    assert.match(await page.locator('#season-budget-note').innerText(), /Within budget/);
+    assert.match(await page.locator('#season-budget-note').innerText(), /Budget conflict.*1,024/);
+    await page.locator('#season-wheat-budget').fill('1024');
+    assert.doesNotMatch(await page.locator('#season-budget-note').innerText(), /Budget conflict/);
     await page.locator('#season-wheat-budget').fill('0');
-    assert.match(await page.locator('#season-budget-note').innerText(), /Unlimited seed spend/);
+    assert.match(await page.locator('#season-budget-note').innerText(), /No spending cap set/);
     await page.locator('#season-mutation-plots').fill('0');
-    assert.match(await page.locator('#season-budget-note').innerText(), /Order stock keeps 1 plot per crop/);
-    await page.locator('#season-wheat-budget').fill('383');
-    assert.match(await page.locator('#season-budget-note').innerText(), /Budget conflict.*384/);
+    assert.match(await page.locator('#season-budget-note').innerText(), /No magical crop plots are required/);
+    await page.locator('#season-mutation-plots').fill('1');
+    await page.locator('#season-wheat-budget').fill('511');
+    assert.match(await page.locator('#season-budget-note').innerText(), /Budget conflict.*512/);
     await page.locator('#season-wheat-budget').fill('');
     await page.locator('#season-mutation-plots').fill('');
     await page.locator('#setup-copy-code').click();
@@ -305,6 +308,7 @@ try {
     await page.waitForFunction(() => document.getElementById('setup-share-hint').textContent.includes('Shared setup loaded'));
     assert.equal(await page.locator('#home-level').inputValue(), '10');
     assert.deepEqual(await config(), savedBeforeLink);
+    if (!(await page.locator('#season-on').isChecked())) await page.locator('#season-on').check();
     await page.locator('#season-mutation-plots').fill('2');
     assert.equal(await page.evaluate(() => window.location.hash), '');
     assert.equal((await config())['season-mutation-plots'], '2');
@@ -319,17 +323,11 @@ try {
     await page.waitForFunction(() => document.getElementById('version').textContent.includes('0.16.0'));
     await page.locator('#optimize-btn').click();
     await page.waitForFunction(() => !document.getElementById('optimize-btn').disabled, null, { timeout: 120_000 });
-    assert.equal(await page.locator('#harvest-order-card').isVisible(), true);
-    assert.equal(await page.locator('#harvest-order-stock tbody tr').count(), 6);
-    assert.match(await page.locator('#harvest-order-card').innerText(), /Apple/);
-    assert.match(await page.locator('#harvest-order-card').innerText(), /Fresh Water/);
-    assert.match(await page.locator('#harvest-order-card').innerText(), /Sea Salt/);
-    assert.match(await page.locator('#harvest-order-card').innerText(), /Sugarcane/);
-    await page.locator('#harvest-order-card').screenshot({ path: 'test-results/harvest-order-stock-desktop.png' });
+    assert.equal(await page.locator('#harvest-order-card').isVisible(), false,
+        'rotating Pumpkin God orders must not force historical season raw-stock requirements');
     await page.setViewportSize({ width: 390, height: 844 });
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), false,
-        'the six-item raw stock report must fit on mobile');
-    await page.locator('#harvest-order-card').screenshot({ path: 'test-results/harvest-order-stock-mobile.png' });
+        'the current season results must fit on mobile');
     await page.setViewportSize({ width: 1000, height: 900 });
     assert.equal(await page.locator('#results-content').isVisible(), true, 'real WASM must calculate imported settings');
     assert.equal(await page.locator('#error-message').isVisible(), false);
@@ -341,14 +339,15 @@ try {
     await page.locator('label:has(#aniimo-best)').click();
     assert.equal(await page.locator('#aniimo-best').isChecked(), true);
     assert.equal(await page.locator('#results-section').isVisible(), false);
-    assert.equal(await page.locator('#season-mutation-plots').inputValue(), '1');
+    assert.equal(await page.locator('#season-mutation-plots').inputValue(), '0');
     assert.equal((await config()).goalTarget, 'coins', 'imported goal must replace the previous plan choice');
     assert.deepEqual((await config()).roster, [], 'partial old setup must not merge with recipient roster');
 
     // Both new controls work before solving; RV14 Fill persists the correct cap data.
     await load(encodeSetupCode({ 'home-level': '14', 'mode-simple': true, 'mode-advanced': false,
-        'simple-toolkit-upgrades': false, 'season-on': true, 
+        'simple-toolkit-upgrades': false, 'season-on': true,
         'strategy-level-up': true, 'strategy-priorities': false }));
+    if (!(await page.locator('#season-on').isChecked())) await page.locator('#season-on').check();
     assert.equal(await page.locator('#simple-toolkit-upgrades').isChecked(), false);
     for (const { id } of SIMPLE_MODULE_FIELDS) assert.equal(await page.locator('#' + id).inputValue(), '0',
         'legacy unticked setup restores every Simple module to zero');
@@ -357,7 +356,7 @@ try {
     await page.locator('#festival-batch-amount').fill('3');
     await page.locator('#festival-batch-build').click();
     await page.waitForFunction(() => document.getElementById('festival-batch-result').textContent.includes('Craft in this order'));
-    assert.match(await page.locator('#festival-batch-result').innerText(), /120 Moonray Wheat/);
+    assert.match(await page.locator('#festival-batch-result').innerText(), /144 Weird Jelly Beans/);
     assert.match(await page.locator('#festival-batch-result').innerText(), /Recipe Note not ticked/);
     await page.setViewportSize({ width: 390, height: 844 });
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), false);
@@ -368,7 +367,7 @@ try {
     await page.locator('#festival-batch-amount').fill('2');
     assert.equal(await page.locator('#festival-batch-result').innerText(), '', 'editing setup must clear stale quantities');
     await page.locator('#festival-batch-build').click();
-    await page.waitForFunction(() => document.getElementById('festival-batch-result').textContent.includes('80 Moonray Wheat'));
+    await page.waitForFunction(() => document.getElementById('festival-batch-result').textContent.includes('96 Weird Jelly Beans'));
     await page.locator('#festival-batch summary').click();
 
     // Partial Toolkit ownership is editable directly in Simple, before any plan exists.
@@ -480,7 +479,7 @@ try {
     assert.equal(await page.locator('#home-level').inputValue(), '11');
     assert.match(await page.locator('#setup-share-hint').innerText(), /saving is unavailable/);
     assert.deepEqual(errors, [], 'browser/WASM should not raise uncaught errors');
-    console.log('Setup UI/WASM smoke passed: import/export, Simple module levels and solver payload, family restore and staffing, old codes, shared links, festival stock, budget feedback, RV upgrade timers, desktop/mobile and storage denial.');
+    console.log('Setup UI/WASM smoke passed: import/export, Simple module levels and solver payload, family restore and staffing, old codes, shared links, seasonal Formula Notes, optional Jelly Bean budget feedback, RV upgrade timers, desktop/mobile and storage denial.');
 } catch (error) {
     await mkdir(new URL('../test-results/', import.meta.url), { recursive: true });
     await page.screenshot({ path: 'test-results/setup-failure.png', fullPage: true });

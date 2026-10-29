@@ -3,26 +3,23 @@ import { test } from 'node:test';
 import fs from 'node:fs';
 import { harvestBudgetStatus } from '../web/harvest-budget.js';
 
-test('order stock fits 600/day, two per crop conflicts, and zero Wheat means unlimited', () => {
-    assert.deepEqual(harvestBudgetStatus(1, 600), { needed: 384, spare: 216, conflict: false, watered: true });
+test('Wonder Night has optional seed cap and never reserves historical orders', () => {
+    assert.deepEqual(harvestBudgetStatus(0, 600), { needed: 0, spare: 600, conflict: false, watered: true });
+    assert.equal(harvestBudgetStatus(1, 600).needed, 512);
+    assert.equal(harvestBudgetStatus(2, 600).needed, 1024);
     assert.equal(harvestBudgetStatus(2, 600).conflict, true);
-    assert.equal(harvestBudgetStatus(2, 600).needed, 768);
-    assert.equal(harvestBudgetStatus(2, 768).conflict, false);
+    assert.equal(harvestBudgetStatus(1, 512).conflict, false);
     assert.equal(harvestBudgetStatus(2, null).conflict, false);
-    assert.equal(harvestBudgetStatus(0, 600).needed, 384);
-    assert.equal(harvestBudgetStatus(0, 383).conflict, true);
-    assert.equal(harvestBudgetStatus(0, 0).conflict, true, 'the caller normalizes unlimited to null');
-    assert.equal(harvestBudgetStatus(0, null).conflict, false);
-    assert.equal(harvestBudgetStatus(0, 288, false).needed, 288);
-    assert.equal(harvestBudgetStatus(2, 600, false).needed, 576);
-    assert.equal(harvestBudgetStatus(2, 600, false).conflict, false);
+    assert.equal(harvestBudgetStatus(0, 0).conflict, false);
+    assert.equal(harvestBudgetStatus(1, 511).conflict, true);
+    assert.equal(harvestBudgetStatus(1, 600, false).needed, 384);
 });
 
-test('budget estimate stays in sync with the modeled event seed costs and grow timers', () => {
-    const rows = fs.readFileSync(new URL('../data/harvest_moon_festival.csv', import.meta.url), 'utf8')
-        .split('\n').slice(1).filter(line => /^(moondew_radish|waxing_moon_pepper),/.test(line))
-        .map(line => line.split(',').map(part => part.trim()));
-    assert.equal(rows.length, 2);
-    const wheat = rows.reduce((sum, row) => sum + Number(row[4]) * 86400 / (Number(row[7]) * .75), 0);
-    assert.equal(harvestBudgetStatus(1, null).needed, wheat);
+test('budget estimate agrees with the new event crop costs and cycle times', () => {
+    const crops = fs.readFileSync(new URL('../data/magical_wonder_night.csv', import.meta.url), 'utf8')
+        .trim().split('\n').slice(1).filter(row => /^(magic_pumpkin|memory_lanternfruit),/.test(row))
+        .map(row => row.split(',').map(value => value.trim()));
+    assert.equal(crops.length, 2);
+    const needed = crops.reduce((sum, crop) => sum + Number(crop[4]) * 86400 / (Number(crop[7]) * .75), 0);
+    assert.equal(harvestBudgetStatus(1, null).needed, needed);
 });

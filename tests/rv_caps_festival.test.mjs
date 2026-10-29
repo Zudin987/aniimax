@@ -17,7 +17,7 @@ const recipes = FACILITIES.flatMap(f => {
         facilityLevel: Number(r.facility_level), yieldAmount: Number(r.yield || 1),
         ingredients: r.raw_materials ? r.raw_materials.split(';') : [],
         amounts: r.required_amount ? r.required_amount.split(';').map(Number) : [], season: false }));
-}).concat(csv('harvest_moon_festival.csv').map(r => ({ name: r.name, facility: r.facility,
+}).concat(csv('magical_wonder_night.csv').map(r => ({ name: r.name, facility: r.facility,
     facilityLevel: Number(r.facility_level), yieldAmount: Number(r.yield), season: true,
     seasonSeedCost: Number(r.seed_cost), ingredients: r.raw_materials ? r.raw_materials.split(';') : [],
     amounts: r.required_amount ? r.required_amount.split(';').map(Number) : [] })));
@@ -96,24 +96,27 @@ test('new options round trip while old setup codes inherit conservative defaults
     }
 });
 
-test('real festival checklist keeps every finished target plus ingredients for later dishes', () => {
+test('Wonder Night checklist includes all nine products and both seed crops', () => {
     for (const amount of [1, 3]) {
         const list = festivalCraftChecklist(recipes, amount, simpleSetup(14));
-        assert.equal(list.targets.length, 6);
+        assert.equal(list.targets.length, 9);
         const raw = new Map(list.raw.map(r => [r.name, r.need]));
-        for (const [name, need] of [['moondew_radish', 40], ['waxing_moon_pepper', 40],
-            ['sugarcane', 12], ['fresh_water', 24], ['sea_salt', 69], ['apple', 8]]) assert.equal(raw.get(name), need * amount);
-        assert.equal(list.wheat, 40 * amount);
+        assert.equal(raw.get('magic_pumpkin'), 48 * amount);
+        assert.equal(raw.get('memory_lanternfruit'), 48 * amount);
+        assert.equal(raw.get('sea_salt'), 46 * amount);
+        assert.equal(raw.get('sugarcane'), 12 * amount);
+        assert.equal(list.wheat, 48 * amount, 'seed-token cost for 12 planted batches');
         const steps = new Map(list.steps.map((r, i) => [r.name, { ...r, index: i }]));
-        assert.equal(steps.get('roasted_waxing_moon_pepper').need, 2 * amount);
-        assert.equal(steps.get('moondew_radish_slices').need, 2 * amount);
-        assert.equal(steps.get('rock_candy').need, 2 * amount);
-        assert.ok(steps.get('rock_candy').index < steps.get('moondew_radish_slices').index);
-        assert.ok(steps.get('moondew_radish_slices').index < steps.get('harvest_platter').index);
-        assert.ok(steps.get('cider_vinegar').index < steps.get('umbral_pickle').index);
+        assert.equal(steps.get('sea_salt_roasted_pumpkin').need, 2 * amount);
+        assert.equal(steps.get('candied_lanternfruit').need, 2 * amount);
+        assert.equal(steps.get('magic_pumpkin_lantern').need, 2 * amount);
+        assert.equal(steps.get('memory_lantern').need, 2 * amount);
+        assert.ok(steps.get('candied_lanternfruit').index < steps.get('honey_glazed_pumpkin_cup').index);
+        assert.ok(steps.get('memory_lantern').index < steps.get('glowfruit_lantern_set').index);
     }
-    const low = festivalCraftChecklist(recipes, 1, { ...simpleSetup(10), exclude: ['harvest_platter'] });
-    assert.ok(low.blocked.some(s => s.includes('harvest_platter')));
+    const locked = festivalCraftChecklist(recipes, 1, {
+        ...simpleSetup(14), exclude: ['glowfruit_lantern_set'] });
+    assert.ok(locked.blocked.some(s => s.includes('glowfruit_lantern_set')));
     assert.throws(() => festivalCraftChecklist(recipes, 0));
     assert.throws(() => festivalCraftChecklist(recipes, 1.5));
     assert.throws(() => festivalCraftChecklist(recipes.filter(r => r.name !== 'rock_candy'), 1), /Missing recipe/);

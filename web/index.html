@@ -242,41 +242,38 @@ Verified 120% efficiency band: up to 500 / 660 / 800 / 1000 / 1200 draw.</span><
                     </div>
                 </div>
 
+
                 <div class="season" id="season-section" hidden>
                     <div class="setting-with-help"><label class="priority-switch season-switch">
                         <input type="checkbox" role="switch" id="season-on">
                         <span class="switch-track" aria-hidden="true"></span>
-                        <span class="season-title">Harvest Moon Festival</span>
-                    </label><button type="button" class="info-button" id="season-info" data-help-source="season-details" aria-label="About Harvest Moon Festival" aria-controls="context-help" aria-expanded="false"><span aria-hidden="true">i</span></button></div>
+                        <span class="season-title">Magical Wonder Night</span>
+                    </label><button type="button" class="info-button" id="season-info" data-help-source="season-details" aria-label="About Magical Wonder Night" aria-controls="context-help" aria-expanded="false"><span aria-hidden="true">i</span></button></div>
                     <div id="season-config" hidden>
                         <div class="input-row season-limits">
                             <div class="input-field">
-                                <div class="label-with-help"><label for="season-wheat-budget">Max Moonray Wheat spend / day</label><button type="button" class="info-button" data-help-source="season-budget-help" aria-label="About Max Moonray Wheat spend / day" aria-controls="context-help" aria-expanded="false"><span aria-hidden="true">i</span></button></div>
-                                <input type="number" id="season-wheat-budget" value="600" min="0" step="1" aria-describedby="season-budget-help season-budget-note">
-                                <span id="season-budget-help" hidden>Daily seed-spending cap, not your balance. 0 = unlimited.</span>
+                                <div class="label-with-help"><label for="season-wheat-budget">Max Weird Jelly Beans spend / day</label><button type="button" class="info-button" data-help-source="season-budget-help" aria-label="About Jelly Bean budget" aria-controls="context-help" aria-expanded="false"><span aria-hidden="true">i</span></button></div>
+                                <input type="number" id="season-wheat-budget" value="0" min="0" step="1" aria-describedby="season-budget-help season-budget-note">
+                                <span id="season-budget-help" hidden>Optional seed spending limit: 0 = unlimited. Wonder Dailies pay 200 Jelly Beans per task and Pumpkin God orders can award more. Count only currency you can earn and spend.</span>
                             </div>
                             <div class="input-field">
-                                <div class="label-with-help"><label for="season-mutation-plots">Minimum event plots / crop</label><button type="button" class="info-button" data-help-source="season-mutation-help" aria-label="About Minimum event plots / crop" aria-controls="context-help" aria-expanded="false"><span aria-hidden="true">i</span></button></div>
-                                <input type="number" id="season-mutation-plots" value="1" min="0" max="10" step="1" aria-describedby="season-mutation-help season-budget-note">
-                                <span id="season-mutation-help" hidden>Minimum for each crop. 0 still keeps 1 Radish and 1 Pepper plot for orders.</span>
+                                <div class="label-with-help"><label for="season-mutation-plots">Minimum magical plots / crop</label><button type="button" class="info-button" data-help-source="season-mutation-help" aria-label="About magical crop plots" aria-controls="context-help" aria-expanded="false"><span aria-hidden="true">i</span></button></div>
+                                <input type="number" id="season-mutation-plots" value="0" min="0" max="40" step="1" aria-describedby="season-mutation-help season-budget-note">
+                                <span id="season-mutation-help" hidden>Optional continuously cycling plots of both crops. 0 leaves the optimizer free to choose. Mutations are chance-based.</span>
                             </div>
                         </div>
                         <p class="harvest-mutation-note" id="season-budget-note" role="status" aria-live="polite"></p>
-                        <div class="input-field">
-                            <div class="label-with-help"><label for="season-points-min">Min festival points / day</label><button type="button" class="info-button" data-help="0 means no minimum. Keeps festival points coming even when RV resources or coins have higher priority." aria-label="About Min festival points / day" aria-controls="context-help" aria-expanded="false"><span aria-hidden="true">i</span></button></div>
-                            <input type="number" id="season-points-min" value="0" min="0" step="1">
-                        </div>
+                        <input type="hidden" id="season-points-min" value="0">
                         <div id="season-details" hidden>
-                            <p>Reserves <strong>one production unit each</strong> for Sugarcane, Moondew Radish, Waxing Moon Pepper, Apple, Fresh Water and Sea Salt. Keep this output <strong>raw in Storage</strong>; it earns no income or points in the plan.</p>
-                            <p>Stock covers every festival recipe, even unticked Notes. Rock Candy needs Sugarcane + Fresh Water (Simmering Pot Lv. 3); Cider Vinegar needs Apple (Pickling Jar Lv. 2). Check order quantities and your Recipe Notes before crafting.</p>
-                            <p>Extra plots give more mutation attempts. Outcomes depend on your Plant Research Module and chance. Extra production follows your priorities.</p>
+                            <p>Magical Wonder Night is the current season. Magic Pumpkin and Memory Lanternfruit cost 4 Weird Jelly Beans each. Wonder Dailies and Pumpkin God orders award more Jelly Beans.</p>
+                            <p>Pumpkin God requests change, so this optimizer does not reserve ingredients for unrequested orders. Whimsy Point values appear on cards, but the method of earning them remains unverified and points are not optimized.</p>
                         </div>
-                        <p class="assume-title">Recipe Notes <button type="button" class="info-button" data-help="Tick the Notes you own to allow their recipes in extra production. The raw stock reserved for festival orders also covers recipes whose Notes are unticked." aria-label="About Recipe Notes" aria-controls="context-help" aria-expanded="false"><span aria-hidden="true">i</span></button></p>
+                        <p class="assume-title">Formula Notes <button type="button" class="info-button" data-help="Tick only Formula Notes you own. Locked seasonal recipes will not be recommended." aria-label="About Formula Notes" aria-controls="context-help" aria-expanded="false"><span aria-hidden="true">i</span></button></p>
                         <div class="special-grid" id="season-notes"></div>
                         <details class="explain" id="festival-batch">
                             <summary>Crafting checklist</summary>
                             <div class="input-row">
-                                <div class="input-field"><div class="label-with-help"><label for="festival-batch-amount">Amount of each dish</label><button type="button" class="info-button" data-help="Build a checklist for this amount of each festival dish. Follow the crafting order on shared stations. It calculates ingredients and batches; inventory, workers and completion time are not calculated." aria-label="About Amount of each dish" aria-controls="context-help" aria-expanded="false"><span aria-hidden="true">i</span></button></div><input id="festival-batch-amount" type="number" value="1" min="1" max="100000" step="1"></div>
+                                <div class="input-field"><div class="label-with-help"><label for="festival-batch-amount">Amount of each seasonal product</label><button type="button" class="info-button" data-help="Lists materials for each of the nine crafted items. Not tied to rotating Pumpkin God orders." aria-label="About Crafting checklist" aria-controls="context-help" aria-expanded="false"><span aria-hidden="true">i</span></button></div><input id="festival-batch-amount" type="number" value="1" min="1" max="100000" step="1"></div>
                                 <button type="button" id="festival-batch-build" class="skip-add-btn">Build checklist</button>
                             </div>
                             <div id="festival-batch-result" class="table-wrapper" role="status"></div>
@@ -400,7 +397,7 @@ Verified 120% efficiency band: up to 500 / 660 / 800 / 1000 / 1200 draw.</span><
                     </div>
 
                     <div class="card production-steps" id="harvest-order-card" hidden>
-                        <h2>Harvest Moon Order Stock <button type="button" class="info-button" data-help="Keep this output raw in Storage and craft when orders arrive. Held stock earns no income or points. Daily amounts are planned production, rather than your existing inventory." aria-label="About Harvest Moon Order Stock" aria-controls="context-help" aria-expanded="false"><span aria-hidden="true">i</span></button></h2>
+                        <h2>Season Order Stock <button type="button" class="info-button" data-help="Keep this output raw in Storage and craft when orders arrive. Held stock earns no income or points. Daily amounts are planned production, rather than your existing inventory." aria-label="About Season Order Stock" aria-controls="context-help" aria-expanded="false"><span aria-hidden="true">i</span></button></h2>
                         <div class="table-wrapper" id="harvest-order-stock"></div>
                     </div>
                     <div class="card production-steps">
@@ -495,7 +492,7 @@ Hauling travel time, carry capacity and obstacle pathfinding are not simulated. 
                                             <th>Amount</th>
                                             <th id="product-breakdown-rate-header">Profit</th>
                                             <th>Worth <span class="th-unit">Home Coins</span></th>
-                                            <th id="product-breakdown-points-header" hidden>Harvest Moon Points</th>
+                                            <th id="product-breakdown-points-header" hidden>Whimsy Points</th>
                                         </tr>
                                     </thead>
                                     <tbody id="product-breakdown-tbody"></tbody>
@@ -558,10 +555,10 @@ Hauling travel time, carry capacity and obstacle pathfinding are not simulated. 
                 <h3>The Model</h3>
                 <p>Every plan is one mixed-integer program covering every recipe and facility at once, solved with <a href="https://highs.dev" target="_blank" rel="noopener">HiGHS</a>. Each recipe your facility levels and modules unlock, \(r\), gets a rate \(b_r\) (batches per second) and a whole number of units \(u_r\) set to it: plots for a crop, machines for a processed item.</p>
                 <div class="math-block">\[ \max \ \sum_i p_i \, s_i \;-\; \sum_r c_r \, b_r \]</div>
-                <p>where \(s_i\) is how much of item \(i\) is sold per second at price \(p_i\), and \(c_r\) is a crop's seed cost. During the Harvest Moon Festival, season crops' seeds cost Moonray Wheat instead; when a daily Wheat budget is set, their combined planting rate is constrained to stay within it (0 means unlimited). Subject to:</p>
+                <p>where \(s_i\) is how much of item \(i\) is sold per second at price \(p_i\), and \(c_r\) is a crop's seed cost. During Magical Wonder Night, season crops' seeds cost Weird Jelly Beans; the player can optionally cap daily spending (0 means unlimited). Subject to:</p>
                 <ul>
                     <li><strong>Whole units.</strong> \(b_r \, t_r \le u_r\), with \(u_r\) a whole number and \(t_r\) the time per batch. A unit runs one recipe and is left running.</li>
-                    <li><strong>Item balance.</strong> Everything made covers what other recipes use plus what's sold. Harvest Moon also keeps one raw unit's output of every order ingredient in Storage; held stock earns no income or points. A quick variant makes the same item as the regular one.</li>
+                    <li><strong>Item balance.</strong> Everything made covers what other recipes use plus what's sold. Pumpkin God orders change, so no raw stock is automatically reserved. Quick recipes can make the same base item as normal recipes.</li>
                     <li><strong>What you own.</strong> For every facility and level \(L\), the units on recipes needing level \(L\) or higher add up to at most what you own at that level. A higher-level plot can run a lower-level recipe.</li>
                     <li><strong>Growing environments.</strong> A crop wanting Cool, Warm, Freeze or Scorching grows at full speed on a plot covered by a Heat Furnace or Cooling Unit set to that mode, and more slowly on an uncovered one (see below). An Adequate crop needs a Sunlamp and grows nowhere else.</li>
                 </ul>
@@ -586,7 +583,7 @@ Hauling travel time, carry capacity and obstacle pathfinding are not simulated. 
                 <p>Each tier takes 8 of the tier below (4 for the last), so the Bench and Kiln switch between tiers rather than running one recipe like other processors.</p>
 
                 <h3>Priorities</h3>
-                <p>The plan solves once per ticked priority, in your order. Each solve makes as much of its priority as it can while keeping at least what the earlier ones reached; a last solve then earns as many Home Coins as all of those leave room for. Aniimo EXP, Aniipods and, during the Harvest Moon Festival, Harvest Moon Points count as their own currencies, so the same model handles them like Home Coins.</p>
+                <p>The plan solves once per ticked priority, in your order. Each solve makes as much of its priority as it can while keeping at least what the earlier ones reached; a last solve then earns as many Home Coins as all of those leave room for. Aniimo EXP and Aniipods count as separate priorities. Whimsy Points are not currently modeled, because the actions granting them have not yet been verified.</p>
 
                 <h3>Time to Reach a Goal</h3>
                 <p>Each product starts adding up once its first batch clears its ingredient chain (its lead time), then keeps its steady rate:</p>

@@ -316,59 +316,59 @@ fn independent_check_rejects_recipe_using_a_different_grid_band() {
 }
 
 #[test]
-fn harvest_moon_keeps_two_plots_of_each_mutation_crop_when_unprofitable() {
+fn wonder_night_keeps_two_plots_of_each_mutation_crop_when_unprofitable() {
     let items = vec![
-        item("moondew_radish", "Farmland", 100.0, 0.0),
-        item("waxing_moon_pepper", "Farmland", 100.0, 0.0),
+        item("magic_pumpkin", "Farmland", 100.0, 0.0),
+        item("memory_lanternfruit", "Farmland", 100.0, 0.0),
         item("profitable_crop", "Farmland", 100.0, 1_000.0),
     ];
     let mut counts = FacilityCounts::only(&[("Farmland", 6, 1)]);
     counts.set_season_limits(None, 2);
     let plan = solve(&items, &counts, &ModuleLevels::default());
 
-    assert_eq!(plan.units.get("moondew_radish"), Some(&2));
-    assert_eq!(plan.units.get("waxing_moon_pepper"), Some(&2));
+    assert_eq!(plan.units.get("magic_pumpkin"), Some(&2));
+    assert_eq!(plan.units.get("memory_lanternfruit"), Some(&2));
     assert_eq!(plan.units.get("profitable_crop"), Some(&2));
-    assert!(plan.recipe_rates["moondew_radish"] * 100.0 >= 2.0 - 1e-9);
-    assert!(plan.recipe_rates["waxing_moon_pepper"] * 100.0 >= 2.0 - 1e-9);
+    assert!(plan.recipe_rates["magic_pumpkin"] * 100.0 >= 2.0 - 1e-9);
+    assert!(plan.recipe_rates["memory_lanternfruit"] * 100.0 >= 2.0 - 1e-9);
 }
 
 
 #[test]
-fn harvest_mutation_minimum_is_configurable() {
+fn wonder_mutation_minimum_is_configurable() {
     let items = vec![
-        item("moondew_radish", "Farmland", 100.0, 0.0),
-        item("waxing_moon_pepper", "Farmland", 100.0, 0.0),
+        item("magic_pumpkin", "Farmland", 100.0, 0.0),
+        item("memory_lanternfruit", "Farmland", 100.0, 0.0),
         item("profitable_crop", "Farmland", 100.0, 1_000.0),
     ];
     let mut counts = FacilityCounts::only(&[("Farmland", 7, 1)]);
     counts.set_season_limits(None, 1);
     let plan = solve(&items, &counts, &ModuleLevels::default());
 
-    assert_eq!(plan.units.get("moondew_radish"), Some(&1));
-    assert_eq!(plan.units.get("waxing_moon_pepper"), Some(&1));
+    assert_eq!(plan.units.get("magic_pumpkin"), Some(&1));
+    assert_eq!(plan.units.get("memory_lanternfruit"), Some(&1));
     assert_eq!(plan.units.get("profitable_crop"), Some(&5));
 }
 
 #[test]
-fn harvest_default_reserves_one_plot_per_crop_and_leaves_other_plots_productive() {
+fn wonder_default_reserves_one_plot_per_crop_and_leaves_other_plots_productive() {
     let items = vec![
-        item("moondew_radish", "Farmland", 100.0, 0.0),
-        item("waxing_moon_pepper", "Farmland", 100.0, 0.0),
+        item("magic_pumpkin", "Farmland", 100.0, 0.0),
+        item("memory_lanternfruit", "Farmland", 100.0, 0.0),
         item("profitable_crop", "Farmland", 100.0, 1_000.0),
     ];
     let counts = FacilityCounts::only(&[("Farmland", 6, 1)]);
     let plan = solve(&items, &counts, &ModuleLevels::default());
-    assert_eq!(plan.units.get("moondew_radish"), Some(&1));
-    assert_eq!(plan.units.get("waxing_moon_pepper"), Some(&1));
+    assert_eq!(plan.units.get("magic_pumpkin"), Some(&1));
+    assert_eq!(plan.units.get("memory_lanternfruit"), Some(&1));
     assert_eq!(plan.units.get("profitable_crop"), Some(&4));
 }
 
 #[test]
-fn harvest_mutation_reason_uses_configured_minimum() {
+fn wonder_mutation_reason_uses_configured_minimum() {
     let items = vec![
-        item("moondew_radish", "Farmland", 100.0, 0.0),
-        item("waxing_moon_pepper", "Farmland", 100.0, 0.0),
+        item("magic_pumpkin", "Farmland", 100.0, 0.0),
+        item("memory_lanternfruit", "Farmland", 100.0, 0.0),
         item("profitable_crop", "Farmland", 100.0, 1_000.0),
     ];
     let mut counts = FacilityCounts::only(&[("Farmland", 7, 1)]);
@@ -379,17 +379,17 @@ fn harvest_mutation_reason_uses_configured_minimum() {
     let radish = shown
         .coin_items
         .iter()
-        .find(|step| step.item_name.as_deref() == Some("moondew_radish"))
+        .find(|step| step.item_name.as_deref() == Some("magic_pumpkin"))
         .expect("radish row");
     assert!(radish.reason.contains("at least 1 plot planted"));
     assert!(!radish.reason.contains("at least 2 plots planted"));
 }
 
 #[test]
-fn harvest_moon_wheat_budget_caps_planting_rate() {
-    let mut radish = item("moondew_radish", "Farmland", 100.0, 1_000.0);
+fn wonder_night_seed_budget_caps_planting_rate() {
+    let mut radish = item("magic_pumpkin", "Farmland", 100.0, 1_000.0);
     radish.season = Some(SeasonTerms { points: 1.0, seed_cost: 4.0 });
-    let mut pepper = item("waxing_moon_pepper", "Farmland", 100.0, 900.0);
+    let mut pepper = item("memory_lanternfruit", "Farmland", 100.0, 900.0);
     pepper.season = Some(SeasonTerms { points: 1.0, seed_cost: 4.0 });
     let items = vec![radish, pepper];
 
@@ -410,10 +410,10 @@ fn harvest_moon_wheat_budget_caps_planting_rate() {
 
 #[test]
 fn harvest_budget_fits_the_shown_whole_plots_without_hidden_pauses() {
-    let mut radish = item("moondew_radish", "Farmland", 1_800.0, 1_000.0);
+    let mut radish = item("magic_pumpkin", "Farmland", 1_800.0, 1_000.0);
     radish.season = Some(SeasonTerms { points: 1.0, seed_cost: 4.0 });
     let mut pepper = radish.clone();
-    pepper.name = "waxing_moon_pepper".into();
+    pepper.name = "memory_lanternfruit".into();
     pepper.sell_value = 900.0;
     let items = vec![radish, pepper];
     let mut counts = FacilityCounts::only(&[("Farmland", 10, 1)]);

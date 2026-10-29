@@ -411,6 +411,20 @@ function migrateSavedConfig(data) {
     if (data['resource-detector-level'] === undefined && data['mineral-detector-level'] !== undefined) {
         data['resource-detector-level'] = data['mineral-detector-level'];
     }
+    // A saved Harvest Moon cap, plots or unlocked Notes are not valid settings for
+    // Magical Wonder Night. Keep the user's normal RV setup, roster and priorities.
+    if (data.seasonId !== 'magical_wonder_night') {
+        data['season-on'] = false;
+        data['season-wheat-budget'] = '0';
+        data['season-mutation-plots'] = '0';
+        data['season-points-min'] = '0';
+        const oldNotes = new Set(['harvest_platter', 'umbral_pickle', 'umbral_hot_pot',
+            'umbral_sweet_and_spicy_sauce']);
+        if (Array.isArray(data.unlockedSpecial)) {
+            data.unlockedSpecial = data.unlockedSpecial.filter(name => !oldNotes.has(name));
+        }
+        data.seasonId = 'magical_wonder_night';
+    }
     return data;
 }
 
@@ -436,6 +450,7 @@ function initFacilityTiers(data) {
 function currentConfigData() {
     const data = {
         facilityTiers,
+        seasonId: 'magical_wonder_night',
         levelUpStock,
         skippedRecipes: [...skippedRecipes],
         unlockedSpecial: [...unlockedSpecial],
@@ -613,6 +628,7 @@ function attachSetupShareHandlers() {
 
 function loadInputsFromStorage(data) {
     if (!data) return;
+    data = migrateSavedConfig(data);
     preferredGoalTarget = typeof data.goalTarget === 'string' ? data.goalTarget : '';
     if (data.levelUpStock && typeof data.levelUpStock === 'object') levelUpStock = { ...data.levelUpStock };
     if (Array.isArray(data.skippedRecipes)) skippedRecipes = new Set(data.skippedRecipes.filter(n => typeof n === 'string'));
@@ -2270,9 +2286,9 @@ function renderRosterSummary(plan) {
 }
 
 // --- Season ----------------------------------------------------------------------------
-// The Harvest Moon Festival (see `SEASON`): on the page from RV 10, or always in Advanced mode,
+// The Magical Wonder Night (see `SEASON`): on the page from RV 10, or always in Advanced mode,
 // where there's no RV level to go by. While it's on, plans may use the season's recipes, bar Recipe
-// Notes the player hasn't unlocked, and say how much Moonray Wheat their seeds use.
+// Notes the player hasn't unlocked, and say how much Weird Jelly Beans their seeds use.
 
 function seasonAvailable() {
     return !isSimpleMode() || selectedHomeLevel() >= SEASON.minHomeLevel;
@@ -2295,23 +2311,18 @@ function seasonMutationPlots() {
 function renderSeasonBudgetNote() {
     const note = document.getElementById('season-budget-note');
     if (!note) return;
-    const requested = seasonMutationPlots();
-    const plots = Math.max(1, requested);
+    const plots = seasonMutationPlots();
     const budget = seasonWheatBudget();
     const watered = selectedSetupTab() !== 'custom' || roster.some(a => a.count > 0 && (a.abilities.Water || 0) >= 1);
     const { needed, spare, conflict } = harvestBudgetStatus(plots, budget, watered);
-    const growth = watered ? 'fully watered' : 'no Water worker';
     note.classList.remove('warning');
-
-    const baseline = requested === 0 ? 'Order stock keeps 1 plot per crop. ' : '';
-    const cost = `${plots * 2} event plots need about ${formatNumber(needed)} Wheat/day (${growth}).`;
-    if (budget === null) {
-        note.innerHTML = `<strong>Unlimited seed spend:</strong> ${cost} ${baseline}More plots may be added.`;
+    if (!plots) {
+        note.textContent = 'No magical crop plots are required. The optimizer may still select them when useful. Set a realistic Jelly Bean spending cap, or leave 0 for unlimited.';
     } else if (conflict) {
         note.classList.add('warning');
-        note.innerHTML = `<strong>Budget conflict:</strong> ${cost} ${baseline}Cap: ${formatNumber(budget)}/day. Raise it${plots > 1 ? ' or reduce extra plots' : ''}.`;
+        note.textContent = `Budget conflict: ${plots * 2} plots require about ${formatNumber(needed)} Weird Jelly Beans/day; cap ${formatNumber(budget)}/day. Raise the cap or lower the plot minimum.`;
     } else {
-        note.innerHTML = `<strong>Within budget:</strong> ${cost} ${baseline}${formatNumber(spare)}/day left for more seeds.`;
+        note.textContent = `${plots * 2} plots require about ${formatNumber(needed)} Weird Jelly Beans/day (${watered ? 'with watering' : 'without watering'}). ${budget === null ? 'No spending cap set.' : formatNumber(spare) + ' per day available for other crops.'}`;
     }
 }
 
@@ -2348,7 +2359,7 @@ async function renderFestivalChecklist() {
         const rows = values => values.map(r => `<tr><td>${prettyItem(r.name)}<br><span class="hint small">${r.facility} Lv.${r.facilityLevel}</span></td><td>${r.need}</td><td>${r.produced}<br><span class="hint small">${r.batches} batches</span></td></tr>`).join('');
         const table = values => `<table class="level-up-lines"><thead><tr><th>Item / facility</th><th>Needed</th><th>Produce</th></tr></thead><tbody>${rows(values)}</tbody></table>`;
         result.innerHTML = `${list.blocked.length ? `<p class="warning">Check before crafting: ${list.blocked.map(prettyItem).join('; ')}.</p>` : ''}
-            <p class="hint small">${list.wheat} Moonray Wheat for event seeds. ${infoButton('Checklist seed cost', 'Assumes standard crops. Mutations are not guaranteed.')}</p>
+            <p class="hint small">${list.wheat} ${SEASON.currency} for event seeds. ${infoButton('Checklist seed cost', 'Assumes standard crops. Mutations are not guaranteed.')}</p>
             <p class="assume-title">Gather first</p>${table(list.raw)}
             <p class="assume-title">Craft in this order</p>${table(list.steps)}`;
     } catch (error) { result.textContent = error.message; }
@@ -2573,7 +2584,7 @@ const PRIORITY_TARGETS = [
     { id: 'aniipods', label: 'Aniipods' },
     { id: 'Wood Blocks', label: 'Wood Blocks' },
     { id: 'Mineral Sand', label: 'Mineral Sand' },
-    { id: 'season_points', label: SEASON.points, season: true },
+    // Whimsy Points are deliberately not an optimization objective until earning is verified.
 ];
 
 // Drawn arrows rather than the ↑/↓ characters, which some systems render as colored emoji.
@@ -2589,7 +2600,8 @@ function isPriorityStrategy() {
 // The priorities on the page: season points only while the season is on.
 function shownPriorities() {
     const season = seasonActive();
-    return priorityOrder.filter(p => season || !PRIORITY_TARGETS.find(t => t.id === p.target)?.season);
+    return priorityOrder.filter(p => PRIORITY_TARGETS.some(t => t.id === p.target)
+        && (season || !PRIORITY_TARGETS.find(t => t.id === p.target)?.season));
 }
 
 // The ticked priorities, best first; none for the level-up strategy.
@@ -2991,7 +3003,7 @@ function getPlanInputValues() {
             currency: 'coins',
             priorities: activePriorities(),
             prioritize_byproducts: false,
-            season_points_per_day: seasonActive() ? Math.max(0, floatOrDefault(document.getElementById('season-points-min').value, 0)) : 0,
+            season_points_per_day: 0,
             level_up: levelUpInput(),
             exclude: excludedRecipes(),
             season: seasonActive(),
@@ -3022,7 +3034,7 @@ function getPlanInputValues() {
         currency: 'coins',
         priorities: activePriorities(),
         prioritize_byproducts: false,
-        season_points_per_day: seasonActive() ? Math.max(0, floatOrDefault(document.getElementById('season-points-min').value, 0)) : 0,
+        season_points_per_day: 0,
         level_up: levelUpInput(),
         exclude: excludedRecipes(),
         season: seasonActive(),
@@ -3142,7 +3154,7 @@ function renderProductBreakdown(goalResult) {
     const { multiplier, suffix } = RATE_UNIT_SECONDS[unit] || RATE_UNIT_SECONDS.second;
     document.getElementById('product-breakdown-rate-header').innerHTML = `Profit <span class="th-unit">Home Coins${suffix}</span>`;
     // During the season, what each item counts toward the season's points.
-    const season = lastPlan?.season_points != null;
+    const season = SEASON.pointsVerified && lastPlan?.season_points != null;
     const pointsEach = new Map((lastPlan?.income_streams || []).map(s => [s.item_name, s.points || 0]));
     document.getElementById('product-breakdown-points-header').hidden = !season;
     const pointsCell = amount => season ? `<td>${amount > 0 ? formatNumber(amount) : '&mdash;'}</td>` : '';
@@ -4126,8 +4138,8 @@ function priorityRows(plan) {
     if (!rows.some(r => r.target === 'coins')) {
         rows.push({ rank: null, target: 'coins', label: rows.length ? "Home Coins, from what's left" : 'Home Coins', perSecond: plan.rate_per_second, items: [], missing: null });
     }
-    // During the season, points come with every season item sold, ranked or not.
-    if (plan.season_points != null && !rows.some(r => r.target === 'season_points')) {
+    // Do not claim sale-based Whimsy Points until the earning mechanism is verified.
+    if (SEASON.pointsVerified && plan.season_points != null && !rows.some(r => r.target === 'season_points')) {
         rows.push({ rank: null, target: 'season_points', label: SEASON.points, perSecond: plan.season_points, items: [], missing: null });
     }
     return rows;
