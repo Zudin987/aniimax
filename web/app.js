@@ -3314,7 +3314,7 @@ function facilityPlanTable(rows) {
 // rows follow a band naming it, so the column headers are written once.
 function facilityPlanTableOf(groups) {
     const body = groups
-        .map(group => (group.label ? `<tr class="facility-plan-group"><td colspan="5">${group.label}</td></tr>` : '') + planRows(group.rows))
+        .map(group => (group.label ? `<tr class="facility-plan-group"><td colspan="6">${group.label}</td></tr>` : '') + planRows(group.rows))
         .join('');
     return `
         <div class="table-wrapper">
@@ -3323,6 +3323,7 @@ function facilityPlanTableOf(groups) {
                     <tr>
                         <th>Facility</th>
                         <th>Count</th>
+                        <th>Minimum level</th>
                         <th>Producing</th>
                         <th>Aniimo</th>
                         <th>Why</th>
@@ -3339,6 +3340,7 @@ function planRows(rows) {
                     <tr class="status-${step.status}">
                         <td data-label="Facility">${step.facility}</td>
                         <td data-label="Count">${step.facility_count}</td>
+                        <td data-label="Minimum level">${step.minimum_facility_level != null ? `Lv. ${step.minimum_facility_level}+` : '—'}</td>
                         <td data-label="Producing">${step.item_name ? prettyItem(step.item_name) : '-'}${isElectricItem(step.item_name) ? '<span class="tag emode" title="Powered by E-Mode; no production Aniimo needed">⚡ E-Mode</span>' : ''}${unverifiedRowKeys.has(`${step.facility}|${basePlanItem(step.item_name)}`) ? '<span class="tag unverified" title="Not yet checked in game">unverified</span>' : ''}${step.item_name && step.status === 'producing' ? `<button type="button" class="skip-row" data-skip="${basePlanItem(step.item_name)}" title="Can't make this? Skip it and plan again" aria-label="Skip ${prettyItem(step.item_name)} and plan again">✕</button>` : ''}</td>
                         <td data-label="Aniimo">${aniimoLabel(step)}</td>
                         <td data-label="Why">${prettyReason(step.reason)}</td>
@@ -4058,7 +4060,13 @@ function renderFacilityPlan(plan) {
         `;
     }).join('');
 
-    container.innerHTML = environmentSections + categorySections;
+    const poweredTiers = (plan.powered_facility_tiers || []).flatMap(([facility, tiers]) =>
+        tiers.map(([level, count]) => `${count} × Lv. ${level} ${facility}`));
+    const levelNote = '<p class="hint small">Minimum level is the lowest facility level that can make each product; higher levels also work. Rows for recipes that take turns can share a facility.</p>';
+    const poweredNote = poweredTiers.length
+        ? `<p class="hint small">E-Mode levels used for this plan: ${poweredTiers.join(', ')}. Actual levels determine power use.</p>`
+        : '';
+    container.innerHTML = levelNote + poweredNote + environmentSections + categorySections;
 }
 
 // Re-renders "Your Rate" from `lastPlan` at whichever unit is currently selected in the
