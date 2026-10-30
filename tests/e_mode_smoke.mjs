@@ -68,3 +68,18 @@ test('roster planning respects the family required by each hammock product', asy
         assert.ok(!made.some(name => name === other || name.startsWith(other + '__')), `${family}: ${made}`);
     }
 });
+
+test('mixed tiers report recipe minimums instead of owned facility levels', async () => {
+    const input = { currency: 'coins', aniimo: 'minimum', prioritize_byproducts: false,
+        modules: { power_module: 0 }, exclude: ['clay', 'shell'],
+        facilities: { ...none, Mine: [{ count: 1, level: 3 }, { count: 2, level: 5 }] } };
+    const result = JSON.parse(await plan(pkg, JSON.stringify(input)));
+    checkPlan(result);
+    const rows = result.coin_items.filter(row => row.facility === 'Mine' && row.status === 'producing');
+    const rock = rows.find(row => row.item_name === 'rock');
+    const quartz = rows.find(row => row.item_name === 'quartz_ore');
+    assert.equal(rock?.facility_count, 1);
+    assert.equal(rock?.minimum_facility_level, 1);
+    assert.equal(quartz?.facility_count, 2);
+    assert.equal(quartz?.minimum_facility_level, 5);
+});
