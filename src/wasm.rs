@@ -2029,6 +2029,7 @@ impl PreparedInput {
             season_points,
             harvest_order_stock: Vec::new(),
             power_used: 0,
+            powered_facility_tiers: Vec::new(),
             power_capacity: crate::models::grid_power_capacity(&self.facility_counts, &self.module_levels),
             generators_used: 0,
             generator_tiers: Vec::new(),
