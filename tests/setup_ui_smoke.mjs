@@ -309,6 +309,10 @@ try {
     assert.equal(await page.locator('#home-level').inputValue(), '10');
     assert.deepEqual(await config(), savedBeforeLink);
     if (!(await page.locator('#season-on').isChecked())) await page.locator('#season-on').check();
+    await page.locator('#season-sugarcane-stock').uncheck();
+    assert.equal((await config())['season-sugarcane-stock'], false, 'Sugarcane choice is saved');
+    await page.locator('#season-sugarcane-stock').check();
+    assert.equal((await config())['season-sugarcane-stock'], true);
     await page.locator('#season-mutation-plots').fill('2');
     assert.equal(await page.evaluate(() => window.location.hash), '');
     assert.equal((await config())['season-mutation-plots'], '2');
@@ -323,8 +327,10 @@ try {
     await page.waitForFunction(() => document.getElementById('version').textContent.includes('0.16.0'));
     await page.locator('#optimize-btn').click();
     await page.waitForFunction(() => !document.getElementById('optimize-btn').disabled, null, { timeout: 120_000 });
-    assert.equal(await page.locator('#harvest-order-card').isVisible(), false,
-        'rotating Pumpkin God orders must not force historical season raw-stock requirements');
+    assert.equal(await page.locator('#season-sugarcane-stock').isChecked(), true, 'Sugarcane stock defaults on');
+    assert.equal(await page.locator('#harvest-order-card').isVisible(), true);
+    assert.match(await page.locator('#harvest-order-stock').innerText(), /Sugarcane/);
+    assert.doesNotMatch(await page.locator('#harvest-order-stock').innerText(), /Moondew|Waxing Moon/);
     await page.setViewportSize({ width: 390, height: 844 });
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), false,
         'the current season results must fit on mobile');

@@ -377,7 +377,7 @@ function getPersistedFieldIds() {
         ...SIMPLE_MODULE_FIELDS.map(field => field.id),
         'ecological-module-level', 'kitchen-module-level',
         'resource-detector-level', 'crafting-module-level', 'power-module-level',
-        'rate-unit', 'season-on', 'season-wheat-budget', 'season-mutation-plots', 'season-points-min', 'festival-batch-amount',
+        'rate-unit', 'season-on', 'season-wheat-budget', 'season-mutation-plots', 'season-sugarcane-stock', 'season-points-min', 'festival-batch-amount',
         'layout-sim-on', 'layout-storage-count', 'layout-power-gap', 'layout-whole',
         'aniimo-best', 'aniimo-minimum', 'aniimo-custom'
     ];
@@ -3009,6 +3009,7 @@ function getPlanInputValues() {
             season: seasonActive(),
             season_currency_per_day: seasonActive() ? seasonWheatBudget() : null,
             harvest_mutation_plots: seasonActive() ? seasonMutationPlots() : 0,
+            reserve_season_sugarcane: seasonActive() && document.getElementById('season-sugarcane-stock').checked,
             facilities,
             modules
         };
@@ -3040,6 +3041,7 @@ function getPlanInputValues() {
         season: seasonActive(),
         season_currency_per_day: seasonActive() ? seasonWheatBudget() : null,
         harvest_mutation_plots: seasonActive() ? seasonMutationPlots() : 0,
+            reserve_season_sugarcane: seasonActive() && document.getElementById('season-sugarcane-stock').checked,
         facilities,
         modules
     };

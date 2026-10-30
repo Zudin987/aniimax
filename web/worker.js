@@ -303,7 +303,7 @@ self.onmessage = async (event) => {
                 if (error?.noFallback) {
                     result = JSON.stringify({ success: false, error: fallbackReason });
                 } else if (JSON.parse(payload).season) {
-                    result = JSON.stringify({ success: false, error: `No Harvest Moon plan found: ${fallbackReason}. Check the required raw facilities and Aniimo team, Wheat cap and event plots, then calculate again. The backup planner cannot preserve order stock.` });
+                    result = JSON.stringify({ success: false, error: `No Magical Wonder Night plan found: ${fallbackReason}. Check the Sugarcane reserve, facilities, Aniimo team, Jelly Bean cap and magical plots, then calculate again. The backup planner cannot preserve reserved stock.` });
                 } else if (JSON.parse(payload).aniimo?.startsWith('roster')) {
                     console.warn('Exact planner failed on a roster:', error);
                     result = JSON.stringify({ success: false, error: `No plan found with these Aniimo: ${fallbackReason}.` });

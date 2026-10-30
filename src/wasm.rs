@@ -770,6 +770,9 @@ pub struct JsPlanInput {
     /// Minimum plots of each event crop kept continuously cycling for mutation attempts.
     #[serde(default = "default_harvest_mutation_plots")]
     pub harvest_mutation_plots: u32,
+    /// Reserve the output of one Sugarcane plot for manual seasonal crafting.
+    #[serde(default)]
+    pub reserve_season_sugarcane: bool,
 }
 
 /// The player's Aniimo, and what the page knows of the facilities they work (see
@@ -1792,9 +1795,10 @@ impl PreparedInput {
         if input.season {
             items.extend(embedded_season_items());
         }
-        // Pumpkin God orders rotate, so do not reserve every seasonal recipe's raw
-        // ingredients, including items which the player was never asked to deliver.
-        let harvest_raw = Vec::new();
+        // The optional Sugarcane reserve is for manual crafting, not a prediction of orders.
+        let harvest_raw = if input.season && input.reserve_season_sugarcane {
+            vec!["sugarcane".to_string()]
+        } else { Vec::new() };
         if module_levels.power_module > 0 && facility_counts.get_count("Crackle Generator") > 0 {
             crate::data::add_e_mode_variants(&mut items, include_str!("../data/e_mode.csv"))
                 .map_err(|e| serde_json::to_string(&empty_production_plan(false, Some(format!("Invalid E-Mode data: {e}")))).unwrap_or_default())?;
@@ -1824,6 +1828,14 @@ impl PreparedInput {
             if facility_counts.get_count("Sunlamp") == 0 {
                 return Err(serde_json::to_string(&empty_production_plan(false,
                     Some("Magic Pumpkin and Memory Lanternfruit require Adequate sunlight; add a Sunlamp or set the minimum plots to 0.".into())))
+                    .unwrap_or_default());
+            }
+        }
+        if input.season && input.reserve_season_sugarcane {
+            let needed = input.harvest_mutation_plots.saturating_mul(2).saturating_add(1);
+            if facility_counts.capacity_at_level("Farmland", 5) < needed {
+                return Err(serde_json::to_string(&empty_production_plan(false,
+                    Some(format!("Sugarcane stock and the selected magical crop minimum need {needed} Farmland Lv.5+ plots. Add plots, reduce the magical crop minimum, or turn off Sugarcane stock."))))
                     .unwrap_or_default());
             }
         }
@@ -1893,7 +1905,7 @@ impl PreparedInput {
                 .min_by_key(|item| item.facility_level);
             let Some(recipe) = available else {
                 return Err(serde_json::to_string(&empty_production_plan(false, Some(format!(
-                    "Harvest Moon needs one unit producing raw {} for orders. Check facilities/levels, skipped raw recipes, available workers, and E-Mode power/Lightning staffing (Sea Salt needs a Susuta-family Leisure worker).", raw.replace('_', " "),
+                    "The selected Sugarcane stock needs a Farmland Lv.5+ plot and available growing workers. Check facility levels and skipped recipes, or turn off Sugarcane stock. Missing: {}.", raw.replace('_', " "),
                 )))).unwrap_or_default());
             };
             let units = if matches!(raw.as_str(), "moondew_radish" | "waxing_moon_pepper") {
@@ -1907,7 +1919,7 @@ impl PreparedInput {
                     .fold(0u32, |total, (_, units)| total.saturating_add(*units));
                 if facility_counts.capacity_at_level(facility, level) < need {
                     return Err(serde_json::to_string(&empty_production_plan(false, Some(format!(
-                        "Harvest Moon order stock needs at least {need} {facility} units at level {level} or higher. Increase the owned count/levels or turn off Harvest Moon.",
+                        "Season stock needs at least {need} {facility} units at level {level} or higher. Increase the owned count/levels or turn off Sugarcane stock.",
                     )))).unwrap_or_default());
                 }
             }

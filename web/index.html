@@ -267,10 +267,14 @@ Verified 120% efficiency band: up to 500 / 660 / 800 / 1000 / 1200 draw.</span><
                             </div>
                         </div>
                         <p class="harvest-mutation-note" id="season-budget-note" role="status" aria-live="polite"></p>
+                        <div class="setting-with-help">
+                            <label class="special-option"><input type="checkbox" id="season-sugarcane-stock" checked> Keep one Sugarcane plot for seasonal crafting</label>
+                            <button type="button" class="info-button" data-help="One Farmland Lv.5+ plot grows Sugarcane continuously and keeps its output for manual crafting. Sugarcane makes Rock Candy for Candied Lanternfruit. This is a preparation choice, not a fixed Pumpkin God order. Turn it off to prioritize other production." aria-label="About Sugarcane stock" aria-controls="context-help" aria-expanded="false"><span aria-hidden="true">i</span></button>
+                        </div>
                         <input type="hidden" id="season-points-min" value="0">
                         <div id="season-details" hidden>
                             <p>Magical Wonder Night is the current season. Magic Pumpkin and Memory Lanternfruit cost 4 Weird Jelly Beans each. Wonder Dailies and Pumpkin God orders award more Jelly Beans.</p>
-                            <p>Pumpkin God requests change, so this optimizer does not reserve ingredients for unrequested orders. Whimsy Point values appear on cards, but the method of earning them remains unverified and points are not optimized.</p>
+                            <p>Pumpkin God requests change. The optional Sugarcane stock is preparation for manual crafting, not a predicted order. Whimsy Point values appear on cards, but the method of earning them remains unverified and points are not optimized.</p>
                         </div>
                         <p class="assume-title">Formula Notes <button type="button" class="info-button" data-help="Tick only Formula Notes you own. Locked seasonal recipes will not be recommended." aria-label="About Formula Notes" aria-controls="context-help" aria-expanded="false"><span aria-hidden="true">i</span></button></p>
                         <div class="special-grid" id="season-notes"></div>
@@ -401,7 +405,7 @@ Verified 120% efficiency band: up to 500 / 660 / 800 / 1000 / 1200 draw.</span><
                     </div>
 
                     <div class="card production-steps" id="harvest-order-card" hidden>
-                        <h2>Season Order Stock <button type="button" class="info-button" data-help="Keep this output raw in Storage and craft when orders arrive. Held stock earns no income or points. Daily amounts are planned production, rather than your existing inventory." aria-label="About Season Order Stock" aria-controls="context-help" aria-expanded="false"><span aria-hidden="true">i</span></button></h2>
+                        <h2>Season Crafting Stock <button type="button" class="info-button" data-help="Keep this output raw in Storage for manual seasonal crafting. Held stock earns no income or points. Daily amounts are planned production, rather than your existing inventory." aria-label="About Season Crafting Stock" aria-controls="context-help" aria-expanded="false"><span aria-hidden="true">i</span></button></h2>
                         <div class="table-wrapper" id="harvest-order-stock"></div>
                     </div>
                     <div class="card production-steps">
@@ -562,7 +566,7 @@ Hauling travel time, carry capacity and obstacle pathfinding are not simulated. 
                 <p>where \(s_i\) is how much of item \(i\) is sold per second at price \(p_i\), and \(c_r\) is a crop's seed cost. During Magical Wonder Night, season crops' seeds cost Weird Jelly Beans; the player can optionally cap daily spending (0 means unlimited). Subject to:</p>
                 <ul>
                     <li><strong>Whole units.</strong> \(b_r \, t_r \le u_r\), with \(u_r\) a whole number and \(t_r\) the time per batch. A unit runs one recipe and is left running.</li>
-                    <li><strong>Item balance.</strong> Everything made covers what other recipes use plus what's sold. Pumpkin God orders change, so no raw stock is automatically reserved. Quick recipes can make the same base item as normal recipes.</li>
+                    <li><strong>Item balance.</strong> Everything made covers what other recipes use plus what's sold. With Sugarcane stock on, one plot's output is kept for manual seasonal crafting rather than consumed or sold. Quick recipes can make the same base item as normal recipes.</li>
                     <li><strong>What you own.</strong> For every facility and level \(L\), the units on recipes needing level \(L\) or higher add up to at most what you own at that level. A higher-level plot can run a lower-level recipe.</li>
                     <li><strong>Growing environments.</strong> A crop wanting Cool, Warm, Freeze or Scorching grows at full speed on a plot covered by a Heat Furnace or Cooling Unit set to that mode, and more slowly on an uncovered one (see below). An Adequate crop needs a Sunlamp and grows nowhere else.</li>
                 </ul>
