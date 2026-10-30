@@ -44,7 +44,10 @@ test('a Lightning-only roster can power a Mine without an Earth production worke
     assert.ok(result.rate_per_second > 0);
     assert.equal(result.generators_used, 1);
     assert.ok(result.power_used > 0);
-    assert.ok(result.coin_items.some(row => row.item_name?.startsWith('rock__electric')));
+    const rock = result.coin_items.find(row => row.item_name?.startsWith('rock__electric'));
+    assert.ok(rock);
+    assert.equal(rock.minimum_facility_level, 1);
+    assert.deepEqual(result.powered_facility_tiers, [['Mine', [[1, 1]]]]);
 });
 
 test('roster planning respects the family required by each hammock product', async () => {
@@ -57,7 +60,10 @@ test('roster planning respects the family required by each hammock product', asy
                 environment: { 'Heat Furnace': 'Fire', 'Cooling Unit': 'Ice' }, residents: [] } };
         const result = JSON.parse(await plan(pkg, JSON.stringify(input)));
         checkPlan(result);
-        const made = result.coin_items.filter(row => row.status === 'producing').map(row => row.item_name);
+        const rows = result.coin_items.filter(row => row.status === 'producing');
+        const hammock = rows.find(row => row.facility === 'Starfall Hammock');
+        assert.equal(hammock.minimum_facility_level, family === 'Coinwisp' ? 2 : 1);
+        const made = rows.map(row => row.item_name);
         assert.ok(made.some(name => name === expected || name.startsWith(expected + '__')), `${family}: ${made}`);
         assert.ok(!made.some(name => name === other || name.startsWith(other + '__')), `${family}: ${made}`);
     }

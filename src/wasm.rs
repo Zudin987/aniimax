@@ -844,6 +844,9 @@ pub struct JsPlanStep {
     pub item_name: Option<String>,
     pub facility: String,
     pub facility_count: u32,
+    /// Minimum level needed for this row's recipe, when known.
+    #[serde(default)]
+    pub minimum_facility_level: Option<u32>,
     /// One of "producing", "nothing_available", "not_needed", "idle".
     pub status: String,
     pub reason: String,
@@ -1021,6 +1024,7 @@ impl From<crate::models::PlanStep> for JsPlanStep {
             item_name: s.item_name,
             facility: s.facility,
             facility_count: s.facility_count,
+            minimum_facility_level: None,
             status: status_str(s.status).to_string(),
             reason: s.reason,
             is_grower: s.is_grower,
@@ -1243,6 +1247,9 @@ pub struct JsProductionPlan {
     /// Full-power E-Mode draw and configured grid capacity.
     #[serde(default)]
     pub power_used: u32,
+    /// Actual powered machine tiers used to calculate power, grouped by facility.
+    #[serde(default)]
+    pub powered_facility_tiers: Vec<(String, Vec<(u32, u32)>)>,
     #[serde(default)]
     pub power_capacity: u32,
     #[serde(default)]
@@ -1335,6 +1342,7 @@ fn empty_production_plan(success: bool, error: Option<String>) -> JsProductionPl
         season_points: None,
         harvest_order_stock: Vec::new(),
         power_used: 0,
+        powered_facility_tiers: Vec::new(),
         power_capacity: 0,
         generators_used: 0,
         generator_tiers: Vec::new(),
@@ -1624,6 +1632,8 @@ pub fn exact_plan(input_json: &str, stage_json: &str, solution_json: &str) -> St
     js.staffing = exact.staffing.clone();
     js.grower_staffing = exact.grower_staffing.clone();
     js.power_used = exact.power_used;
+    js.powered_facility_tiers = exact.electric_machines.iter()
+        .map(|(facility, tiers)| (facility.clone(), tiers.clone())).collect();
     js.power_capacity = exact.power_capacity;
     js.generators_used = exact.generators_used;
     js.generator_tiers = exact.generators.clone();
@@ -1976,7 +1986,18 @@ impl PreparedInput {
                     .as_ref()
                     .map(|setup| aniimo_tasks_for(&step, setup, &self.requirements, &self.grower_steps))
                     .unwrap_or_default() };
-                JsPlanStep { aniimo, aniimo_tasks, ..step.into() }
+                let minimum_facility_level = if step.status == crate::models::PlanStepStatus::Producing {
+                    step.item_name.as_deref().and_then(|name| {
+                        let base = crate::models::base_item_name(name);
+                        self.items.iter()
+                            .filter(|item| item.facility == step.facility
+                                && crate::models::base_item_name(&item.name) == base
+                                && item.facility_level != u32::MAX)
+                            .map(|item| item.facility_level)
+                            .min()
+                    })
+                } else { None };
+                JsPlanStep { aniimo, aniimo_tasks, minimum_facility_level, ..step.into() }
             })
             .collect();
         let income_streams: Vec<JsPlanProduct> = plan

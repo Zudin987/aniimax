@@ -330,6 +330,11 @@ try {
         'the current season results must fit on mobile');
     await page.setViewportSize({ width: 1000, height: 900 });
     assert.equal(await page.locator('#results-content').isVisible(), true, 'real WASM must calculate imported settings');
+    const producingLevels = page.locator('#facility-plan-container tr.status-producing td[data-label="Minimum level"]');
+    assert.ok(await producingLevels.count() > 0, 'the real plan shows producing facility levels');
+    for (const label of await producingLevels.allTextContents()) {
+        assert.match(label, /^Lv\. \d+\+$/, 'each producing recipe shows its minimum level');
+    }
     assert.equal(await page.locator('#error-message').isVisible(), false);
     // Import another setup after a solve, then switch modes: no old plan may reappear.
     await load(encodeSetupCode({ facilityTiers: {}, 'home-level': '1', 'mode-simple': true, 'mode-advanced': false,
