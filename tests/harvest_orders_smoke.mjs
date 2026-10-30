@@ -38,6 +38,29 @@ assert.equal(zero.success, true, zero.error);
 assert.deepEqual(zero.harvest_order_stock, [], 'unrequested Pumpkin God orders are never reserved');
 assert.equal(zero.season_points, 0, 'unverified sale-based Whimsy scoring must be disabled');
 
+// Reserve an entire plot's output for manual use rather than letting it be sold or consumed.
+const sugarInput = { ...input, reserve_season_sugarcane: true, harvest_mutation_plots: 1 };
+const withSugar = JSON.parse(await plan(pkg, JSON.stringify(sugarInput)));
+assert.equal(withSugar.success, true, withSugar.error);
+assert.equal(withSugar.harvest_order_stock.length, 1);
+const stock = withSugar.harvest_order_stock[0];
+assert.equal(stock.item_name, 'sugarcane');
+assert.equal(stock.facility, 'Farmland');
+assert.equal(stock.units, 1);
+assert.ok(stock.units_per_second > 0);
+assert.ok(withSugar.coin_items.some(row => row.status === 'producing' && row.item_name?.startsWith('sugarcane')));
+const disabledSugar = JSON.parse(await plan(pkg, JSON.stringify({ ...sugarInput, season: false })));
+assert.equal(disabledSugar.success, true, disabledSugar.error);
+assert.deepEqual(disabledSugar.harvest_order_stock, []);
+const tooFew = JSON.parse(pkg.plan_input_error(JSON.stringify({
+    ...sugarInput, facilities: { ...input.facilities, Farmland: [{ count: 2, level: 5 }] },
+})));
+assert.match(tooFew, /3 Farmland Lv\.5\+ plots/);
+const skippedSugar = JSON.parse(pkg.plan_input_error(JSON.stringify({
+    ...sugarInput, exclude: [...input.exclude, 'sugarcane'],
+})));
+assert.match(skippedSugar, /Sugarcane stock.*Missing: sugarcane/);
+
 const limited = JSON.parse(await plan(pkg, JSON.stringify({ ...input, harvest_mutation_plots: 1 })));
 assert.equal(limited.success, true, limited.error);
 assert.deepEqual(limited.harvest_order_stock, []);
